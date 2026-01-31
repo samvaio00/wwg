@@ -378,6 +378,17 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async getEffectivePriceForCart(cartId: string, productId: string, basePrice: string): Promise<string> {
+    const [cart] = await db.select().from(carts).where(eq(carts.id, cartId)).limit(1);
+    if (!cart) return basePrice;
+    
+    const user = await this.getUser(cart.userId);
+    if (!user?.priceListId) return basePrice;
+    
+    const customerPrices = await this.getCustomerPricesForProducts(user.priceListId, [productId]);
+    return customerPrices[productId] || basePrice;
+  }
+
   async addToCart(cartId: string, productId: string, quantity: number): Promise<CartItem> {
     const product = await this.getProductInternal(productId);
     if (!product) throw new Error('Product not found');
@@ -391,6 +402,9 @@ export class DatabaseStorage implements IStorage {
     if (stockQty <= 0) {
       throw new Error(`Product "${product.name}" is out of stock`);
     }
+    
+    // Get effective price (customer price if available, otherwise base price)
+    const effectivePrice = await this.getEffectivePriceForCart(cartId, productId, product.basePrice);
     
     // Check if item already exists in cart
     const [existingItem] = await db.select()
@@ -407,20 +421,20 @@ export class DatabaseStorage implements IStorage {
     let cartItem: CartItem;
     
     if (existingItem) {
-      const lineTotal = (parseFloat(product.basePrice) * newQuantity).toFixed(2);
+      const lineTotal = (parseFloat(effectivePrice) * newQuantity).toFixed(2);
       const [updated] = await db.update(cartItems)
-        .set({ quantity: newQuantity, lineTotal, updatedAt: new Date() })
+        .set({ quantity: newQuantity, unitPrice: effectivePrice, lineTotal, updatedAt: new Date() })
         .where(eq(cartItems.id, existingItem.id))
         .returning();
       cartItem = updated;
     } else {
-      const lineTotal = (parseFloat(product.basePrice) * quantity).toFixed(2);
+      const lineTotal = (parseFloat(effectivePrice) * quantity).toFixed(2);
       const [newItem] = await db.insert(cartItems)
         .values({
           cartId,
           productId,
           quantity,
-          unitPrice: product.basePrice,
+          unitPrice: effectivePrice,
           lineTotal
         })
         .returning();
@@ -452,9 +466,12 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Only ${stockQty} units of "${product.name}" available in stock`);
     }
     
-    const lineTotal = (parseFloat(product.basePrice) * quantity).toFixed(2);
+    // Get effective price (customer price if available, otherwise base price)
+    const effectivePrice = await this.getEffectivePriceForCart(item.cartId, item.productId, product.basePrice);
+    
+    const lineTotal = (parseFloat(effectivePrice) * quantity).toFixed(2);
     const [updated] = await db.update(cartItems)
-      .set({ quantity, lineTotal, updatedAt: new Date() })
+      .set({ quantity, unitPrice: effectivePrice, lineTotal, updatedAt: new Date() })
       .where(eq(cartItems.id, cartItemId))
       .returning();
     

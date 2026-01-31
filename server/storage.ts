@@ -38,7 +38,7 @@ import {
   type JobStatusValue
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, ne, ilike, or, asc, sql, lte } from "drizzle-orm";
+import { eq, desc, and, ne, ilike, or, asc, sql, lte, gte } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 12;
@@ -229,6 +229,7 @@ export class DatabaseStorage implements IStorage {
     sortBy?: string; 
     sortOrder?: string; 
     includeOffline?: boolean;
+    includeNegativeStock?: boolean;
     limit?: number;
     offset?: number;
   }): Promise<{ products: Product[]; totalCount: number }> {
@@ -237,6 +238,11 @@ export class DatabaseStorage implements IStorage {
     // Belt-and-suspenders: Always filter by isOnline=true for storefront unless explicitly requested
     if (!options?.includeOffline) {
       conditions.push(eq(products.isOnline, true));
+    }
+    
+    // Hide products with negative stock (oversold/backordered) unless explicitly requested
+    if (!options?.includeNegativeStock) {
+      conditions.push(gte(products.stockQuantity, 0));
     }
     
     if (options?.category) {

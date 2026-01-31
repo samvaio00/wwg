@@ -378,7 +378,7 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
               )}
 
               {!isGroupedProduct && isOutOfStock && (
-                <Button disabled className="w-full h-10" variant="secondary">
+                <Button disabled className="w-full h-10" variant="destructive">
                   <Package className="h-4 w-4 mr-2" />
                   Out of Stock
                 </Button>

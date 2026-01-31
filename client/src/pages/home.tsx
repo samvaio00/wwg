@@ -169,11 +169,14 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
               size="sm"
               onClick={handleAddToCart}
               disabled={isAddingToCart || isOutOfStock}
-              variant={isOutOfStock ? "secondary" : "default"}
+              variant={isOutOfStock ? "destructive" : "default"}
               data-testid={`button-add-to-cart-${product.id}`}
             >
               {isOutOfStock ? (
-                <Package className="h-3 w-3" />
+                <>
+                  <Package className="h-3 w-3 mr-1" />
+                  Out of Stock
+                </>
               ) : justAdded ? (
                 <Check className="h-3 w-3" />
               ) : (

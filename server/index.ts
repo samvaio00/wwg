@@ -1,7 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import connectPgSimple from "connect-pg-simple";
+import pg from "pg";
 
 const app = express();
 const httpServer = createServer(app);
@@ -9,6 +12,13 @@ const httpServer = createServer(app);
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
+  }
+}
+
+// Session type augmentation
+declare module "express-session" {
+  interface SessionData {
+    userId?: string;
   }
 }
 
@@ -21,6 +31,36 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Session setup with PostgreSQL store
+const PgSession = connectPgSimple(session);
+
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+if (!process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET environment variable is required");
+}
+
+app.use(
+  session({
+    store: new PgSession({
+      pool,
+      tableName: "session",
+      createTableIfMissing: true,
+    }),
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      sameSite: "strict",
+    },
+  })
+);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

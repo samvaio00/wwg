@@ -17,7 +17,7 @@ import { db } from "./db";
 import { users, products, orders } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
-import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage } from "./zoho-service";
+import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, syncItemGroupsFromZoho } from "./zoho-service";
 import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, type ZohoLineItem } from "./zoho-books-service";
 import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
@@ -1200,6 +1200,24 @@ export async function registerRoutes(
         skipped: 0, 
         total: 0,
         errors: [error instanceof Error ? error.message : "Unknown sync error"] 
+      });
+    }
+  });
+
+  // Sync item groups from Zoho Inventory (updates products with group IDs)
+  app.post("/api/admin/zoho/item-groups/sync", requireAdmin, async (_req, res) => {
+    try {
+      const result = await syncItemGroupsFromZoho();
+      res.json({
+        success: true,
+        ...result,
+        message: `Synced ${result.synced} item groups, updated ${result.updated} products`,
+      });
+    } catch (error) {
+      console.error("Item groups sync error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown sync error",
       });
     }
   });

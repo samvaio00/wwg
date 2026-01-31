@@ -786,6 +786,153 @@ export async function getCustomerPriceForProduct(
 }
 
 // Fetch product image from Zoho Inventory
+interface ZohoItemGroupsResponse {
+  code: number;
+  message: string;
+  item_groups?: Array<{
+    group_id: string;
+    group_name: string;
+    status: string;
+    items?: Array<{
+      item_id: string;
+      name: string;
+      sku?: string;
+    }>;
+  }>;
+  page_context?: {
+    page: number;
+    per_page: number;
+    has_more_page: boolean;
+  };
+}
+
+async function fetchZohoItemGroups(page: number = 1): Promise<ZohoItemGroupsResponse> {
+  const accessToken = await getAccessToken();
+  const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
+
+  if (!organizationId) {
+    throw new Error("Zoho organization ID not configured");
+  }
+
+  const url = `https://www.zohoapis.com/inventory/v1/itemgroups?organization_id=${organizationId}&page=${page}&per_page=200`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch Zoho item groups: ${errorText}`);
+  }
+
+  return response.json();
+}
+
+async function fetchZohoItemGroupDetail(groupId: string): Promise<{
+  code: number;
+  message: string;
+  item_group?: {
+    group_id: string;
+    group_name: string;
+    status: string;
+    items?: Array<{
+      item_id: string;
+      name: string;
+      sku?: string;
+    }>;
+  };
+}> {
+  const accessToken = await getAccessToken();
+  const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
+
+  if (!organizationId) {
+    throw new Error("Zoho organization ID not configured");
+  }
+
+  const url = `https://www.zohoapis.com/inventory/v1/itemgroups/${groupId}?organization_id=${organizationId}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch Zoho item group ${groupId}: ${errorText}`);
+  }
+
+  return response.json();
+}
+
+export async function syncItemGroupsFromZoho(): Promise<{ synced: number; updated: number; errors: string[] }> {
+  console.log("[Zoho Item Groups Sync] Starting item groups sync...");
+  const result = { synced: 0, updated: 0, errors: [] as string[] };
+
+  try {
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = await fetchZohoItemGroups(page);
+      const itemGroups = response.item_groups || [];
+
+      console.log(`[Zoho Item Groups Sync] Processing page ${page}, found ${itemGroups.length} groups`);
+
+      for (const group of itemGroups) {
+        if (group.status !== "active") {
+          continue;
+        }
+
+        try {
+          // Fetch full group details to get all items
+          const detailResponse = await fetchZohoItemGroupDetail(group.group_id);
+          const groupDetail = detailResponse.item_group;
+
+          if (!groupDetail || !groupDetail.items || groupDetail.items.length === 0) {
+            continue;
+          }
+
+          // Update all products that belong to this group
+          for (const item of groupDetail.items) {
+            const updateResult = await db
+              .update(products)
+              .set({
+                zohoGroupId: groupDetail.group_id,
+                zohoGroupName: groupDetail.group_name,
+                updatedAt: new Date(),
+              })
+              .where(eq(products.zohoItemId, item.item_id));
+
+            if (updateResult.rowCount && updateResult.rowCount > 0) {
+              result.updated++;
+            }
+          }
+
+          result.synced++;
+        } catch (err) {
+          const errorMsg = `Failed to sync group ${group.group_name}: ${err instanceof Error ? err.message : 'Unknown error'}`;
+          console.error(`[Zoho Item Groups Sync] ${errorMsg}`);
+          result.errors.push(errorMsg);
+        }
+      }
+
+      hasMore = response.page_context?.has_more_page ?? false;
+      page++;
+    }
+
+    console.log(`[Zoho Item Groups Sync] Completed - synced ${result.synced} groups, updated ${result.updated} products`);
+  } catch (err) {
+    const errorMsg = `Item groups sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`;
+    console.error(`[Zoho Item Groups Sync] ${errorMsg}`);
+    result.errors.push(errorMsg);
+  }
+
+  return result;
+}
+
 export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data: Buffer; contentType: string } | null> {
   try {
     const accessToken = await getAccessToken();

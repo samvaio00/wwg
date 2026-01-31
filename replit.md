@@ -36,9 +36,24 @@ The platform integrates with Zoho Inventory and Zoho Books for inventory managem
 ├── shared/                 # Shared types and schemas
 │   └── schema.ts           # Drizzle schema + Zod validation
 ├── docs/                   # Documentation
-│   └── design.md           # Design system documentation
+│   ├── design.md           # Design system documentation
+│   ├── zoho-mapping.md     # Zoho integration field mapping
+│   └── ai.md               # AI features and cost control
 └── drizzle.config.ts       # Drizzle configuration
 ```
+
+## Database Schema
+
+### Core Tables
+- **users** - User accounts with roles (admin, customer, pending) and status
+- **products** - Product catalog with Zoho mapping fields
+- **carts** / **cart_items** - Shopping cart functionality
+- **orders** / **order_items** - Order management with approval workflow
+
+### AI Tables
+- **product_embeddings** - Vector embeddings for semantic search
+- **ai_cache** - Cached AI responses for cost control
+- **ai_events** - AI usage logging and analytics
 
 ## User Roles
 
@@ -53,6 +68,19 @@ The platform integrates with Zoho Inventory and Zoho Books for inventory managem
 - **rejected**: Application denied
 - **suspended**: Account temporarily disabled
 
+## Order Status Flow
+
+`pending_approval` → `approved` → `processing` → `shipped` → `delivered`
+                  ↘ `rejected` / `cancelled`
+
+## Product Categories
+
+- `sunglasses` - Sunglasses, eyewear
+- `cellular` - Phone accessories, cables, cases
+- `caps` - Headwear, baseball caps, beanies
+- `perfumes` - Fragrances, body mists
+- `novelty` - Impulse items, keychains, air fresheners
+
 ## API Endpoints
 
 ### Authentication
@@ -62,7 +90,7 @@ The platform integrates with Zoho Inventory and Zoho Books for inventory managem
 - `GET /api/auth/me` - Get current user
 
 ### Admin
-- `POST /api/admin/setup` - Create initial admin (only works if no admins exist)
+- `POST /api/admin/setup` - Create initial admin (requires ALLOW_ADMIN_SETUP=true)
 
 ## Development
 
@@ -78,23 +106,29 @@ npm run db:push
 
 ## Build Phases
 
-### Phase 1 (Current) - Foundation & Design Base
+### Phase 1 (Complete) - Foundation & Design Base
 - Design system with professional B2B theme
 - Authentication with email/password
 - Admin role support
 - Basic layout with sidebar navigation
 
-### Phase 2 (Planned) - Database Models
-- Product schema with Zoho mapping
-- AI tables (embeddings, cache, events)
-- Order and cart schemas
+### Phase 2 (Complete) - Database Models
+- Product schema with Zoho mapping fields
+- AI tables (product_embeddings, ai_cache, ai_events)
+- Order and cart schemas with approval workflow
+- Seed data for all product categories
+- Documentation: zoho-mapping.md, ai.md
 
-### Phase 3+ (Planned) - Full Features
-- Signup flow with admin approvals
-- Product discovery with search
+### Phase 3 (Planned) - Signup Flow + Admin Approvals
+- Email-first signup with Zoho customer verification
+- Multi-step business intake for new retailers
+- Admin portal: intake review and approval
+
+### Phase 4+ (Planned) - Full Features
+- Product discovery with search and filters
 - Cart and checkout
 - Zoho integration
-- AI features
+- AI features (search, cart builder, admin tools)
 
 ## Design Principles
 
@@ -107,4 +141,4 @@ Inspired by: Amazon Business, McMaster-Carr, Shopify Plus B2B, Stripe, Apple Bus
 
 ---
 
-*Last updated: Phase 1 completion*
+*Last updated: Phase 2 completion*

@@ -71,6 +71,8 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
   
   const stockQty = product.stockQuantity || 0;
   const isOutOfStock = stockQty <= 0;
+  const isLowStock = stockQty > 0 && stockQty <= (product.lowStockThreshold || 10);
+  const isGroupedProduct = !!product.zohoGroupId;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -90,87 +92,99 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
 
   const decrementQuantity = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const newQty = quantity - (product.casePackSize || 1);
-    if (newQty >= (product.minOrderQuantity || 1)) {
-      setQuantity(newQty);
-    }
+    setQuantity(prev => Math.max(product.minOrderQuantity || 1, prev - (product.casePackSize || 1)));
   };
 
   return (
     <Card 
-      className={`overflow-hidden h-full flex flex-col cursor-pointer ${isOutOfStock ? "opacity-75" : "hover-elevate"}`} 
-      data-testid={`product-card-${product.id}`}
+      className={`overflow-hidden cursor-pointer ${isOutOfStock ? "opacity-60" : "hover-elevate"}`} 
+      data-testid={`card-product-${product.id}`}
       onClick={() => onProductClick(product)}
     >
-      <div className="relative h-32 bg-muted flex items-center justify-center overflow-hidden p-2">
+      <div className="h-32 relative bg-muted overflow-hidden">
         <ProductImage product={product} isOutOfStock={isOutOfStock} />
-        {isOutOfStock && (
-          <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
-            <Badge variant="secondary" className="text-xs">Out of Stock</Badge>
-          </div>
+        {isOutOfStock ? (
+          <Badge className="absolute top-2 right-2" variant="destructive" data-testid={`badge-out-of-stock-${product.id}`}>
+            Out of Stock
+          </Badge>
+        ) : isLowStock && (
+          <Badge className="absolute top-2 right-2" variant="destructive">
+            Low Stock
+          </Badge>
         )}
       </div>
-      
-      <CardContent className="p-3 flex-1 flex flex-col">
-        <div className="flex-1 min-h-0">
-          <p className="text-xs text-muted-foreground mb-0.5">{product.sku}</p>
-          <h3 className="font-medium text-xs leading-tight line-clamp-2 mb-1" title={product.name}>
+      <CardContent className="p-3 space-y-2">
+        <div>
+          <p className="text-xs text-muted-foreground font-mono">{product.sku}</p>
+          <h3 className="font-semibold text-sm line-clamp-2" data-testid={`text-product-name-${product.id}`}>
             {product.name}
           </h3>
         </div>
-        
-        <div className="mt-auto space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-primary">${product.basePrice}</span>
-            {!isOutOfStock && stockQty <= 10 && (
-              <span className="text-xs text-amber-600">{stockQty} left</span>
-            )}
-          </div>
-          
-          {!isOutOfStock && (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center border rounded h-7">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 rounded-r-none"
-                  onClick={decrementQuantity}
-                  disabled={quantity <= (product.minOrderQuantity || 1)}
-                  data-testid={`button-decrease-${product.id}`}
-                >
-                  <Minus className="h-3 w-3" />
-                </Button>
-                <span className="w-8 text-center text-xs font-medium">{quantity}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 rounded-l-none"
-                  onClick={incrementQuantity}
-                  disabled={quantity >= stockQty}
-                  data-testid={`button-increase-${product.id}`}
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
-              </div>
-              <Button
-                size="sm"
-                className="flex-1 h-7"
-                onClick={handleAddToCart}
-                disabled={isAddingToCart || justAdded}
-                data-testid={`button-add-to-cart-${product.id}`}
-              >
-                {justAdded ? (
-                  <Check className="h-3 w-3" />
-                ) : (
-                  <>
-                    <ShoppingCart className="h-3 w-3 mr-1" />
-                    Add
-                  </>
-                )}
-              </Button>
-            </div>
+
+        <div className="flex items-baseline gap-2">
+          <span className="text-lg font-bold" data-testid={`text-product-price-${product.id}`}>
+            ${product.basePrice}
+          </span>
+          {product.compareAtPrice && (
+            <span className="text-xs text-muted-foreground line-through">
+              ${product.compareAtPrice}
+            </span>
           )}
         </div>
+
+        <div className="text-xs text-muted-foreground flex gap-3">
+          <span>Pack: {product.casePackSize || 1}</span>
+          <span>Stock: {stockQty}</span>
+        </div>
+
+        {!isGroupedProduct && (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border rounded h-7">
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="h-7 w-7 rounded-r-none"
+                onClick={decrementQuantity}
+                disabled={isOutOfStock || quantity <= (product.minOrderQuantity || 1)}
+                data-testid={`button-decrease-qty-${product.id}`}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="w-8 text-center text-xs font-medium" data-testid={`text-quantity-${product.id}`}>
+                {quantity}
+              </span>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="h-7 w-7 rounded-l-none"
+                onClick={incrementQuantity}
+                disabled={isOutOfStock || quantity >= stockQty}
+                data-testid={`button-increase-qty-${product.id}`}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+            <Button 
+              className="h-7 flex-1"
+              size="sm"
+              onClick={handleAddToCart}
+              disabled={isAddingToCart || isOutOfStock}
+              variant={isOutOfStock ? "secondary" : "default"}
+              data-testid={`button-add-to-cart-${product.id}`}
+            >
+              {isOutOfStock ? (
+                <Package className="h-3 w-3" />
+              ) : justAdded ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                <>
+                  <ShoppingCart className="h-3 w-3 mr-1" />
+                  Add
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -260,7 +274,7 @@ function CustomerHomePage() {
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 12 }).map((_, i) => (
             <Card key={i} className="overflow-hidden">
               <Skeleton className="h-32 w-full" />
@@ -273,7 +287,7 @@ function CustomerHomePage() {
           ))}
         </div>
       ) : displayProducts.length > 0 ? (
-        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {displayProducts.filter(p => p.isOnline).map((product) => (
             <ProductCard
               key={product.id}

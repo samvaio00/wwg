@@ -89,6 +89,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
   const stockQty = product.stockQuantity || 0;
   const isOutOfStock = stockQty <= 0;
   const isLowStock = stockQty > 0 && stockQty <= (product.lowStockThreshold || 10);
+  const isGroupedProduct = !!product.zohoGroupId;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -156,52 +157,54 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
           <span>Stock: {product.stockQuantity || 0}</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center border rounded h-7">
+        {!isGroupedProduct && (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border rounded h-7">
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="h-7 w-7 rounded-r-none"
+                onClick={decrementQuantity}
+                disabled={isOutOfStock || quantity <= (product.minOrderQuantity || 1)}
+                data-testid={`button-decrease-qty-${product.id}`}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="w-8 text-center text-xs font-medium" data-testid={`text-quantity-${product.id}`}>
+                {quantity}
+              </span>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="h-7 w-7 rounded-l-none"
+                onClick={incrementQuantity}
+                disabled={isOutOfStock || quantity >= stockQty}
+                data-testid={`button-increase-qty-${product.id}`}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
             <Button 
-              variant="ghost" 
-              size="icon"
-              className="h-7 w-7 rounded-r-none"
-              onClick={decrementQuantity}
-              disabled={isOutOfStock || quantity <= (product.minOrderQuantity || 1)}
-              data-testid={`button-decrease-qty-${product.id}`}
+              className="h-7 flex-1"
+              size="sm"
+              onClick={handleAddToCart}
+              disabled={isAddingToCart || isOutOfStock}
+              variant={isOutOfStock ? "secondary" : "default"}
+              data-testid={`button-add-to-cart-${product.id}`}
             >
-              <Minus className="h-3 w-3" />
-            </Button>
-            <span className="w-8 text-center text-xs font-medium" data-testid={`text-quantity-${product.id}`}>
-              {quantity}
-            </span>
-            <Button 
-              variant="ghost" 
-              size="icon"
-              className="h-7 w-7 rounded-l-none"
-              onClick={incrementQuantity}
-              disabled={isOutOfStock || quantity >= stockQty}
-              data-testid={`button-increase-qty-${product.id}`}
-            >
-              <Plus className="h-3 w-3" />
+              {isOutOfStock ? (
+                <Package className="h-3 w-3" />
+              ) : justAdded ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                <>
+                  <ShoppingCart className="h-3 w-3 mr-1" />
+                  Add
+                </>
+              )}
             </Button>
           </div>
-          <Button 
-            className="h-7 flex-1"
-            size="sm"
-            onClick={handleAddToCart}
-            disabled={isAddingToCart || isOutOfStock}
-            variant={isOutOfStock ? "secondary" : "default"}
-            data-testid={`button-add-to-cart-${product.id}`}
-          >
-            {isOutOfStock ? (
-              <Package className="h-3 w-3" />
-            ) : justAdded ? (
-              <Check className="h-3 w-3" />
-            ) : (
-              <>
-                <ShoppingCart className="h-3 w-3 mr-1" />
-                Add
-              </>
-            )}
-          </Button>
-        </div>
+        )}
       </CardContent>
     </Card>
   );

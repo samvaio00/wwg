@@ -8,9 +8,19 @@ import { ThemeProvider } from "@/lib/theme";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/app-sidebar";
+import { AICartBuilder } from "@/components/ai-cart-builder";
+import { BulkImportDialog } from "@/components/bulk-import-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ShoppingCart, User, LogOut, Settings } from "lucide-react";
 
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
@@ -58,6 +68,65 @@ function CartButton() {
   );
 }
 
+function HeaderUserMenu() {
+  const { user, logout } = useAuth();
+
+  const getInitials = () => {
+    if (user?.contactName) {
+      return user.contactName
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2);
+    }
+    if (user?.businessName) {
+      return user.businessName.slice(0, 2).toUpperCase();
+    }
+    return "U";
+  };
+
+  const handleLogout = async () => {
+    await logout();
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" data-testid="button-user-menu">
+          <Avatar className="h-7 w-7">
+            <AvatarFallback className="text-xs">
+              {getInitials()}
+            </AvatarFallback>
+          </Avatar>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <div className="px-2 py-1.5">
+          <p className="text-sm font-medium">{user?.contactName || user?.businessName}</p>
+          <p className="text-xs text-muted-foreground">{user?.email}</p>
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/orders" className="cursor-pointer">
+            <ShoppingCart className="mr-2 h-4 w-4" />
+            My Orders
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={handleLogout}
+          className="cursor-pointer text-destructive focus:text-destructive"
+          data-testid="button-logout"
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const style = {
     "--sidebar-width": "16rem",
@@ -72,6 +141,9 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
           <header className="sticky top-0 z-50 flex h-14 items-center justify-between gap-4 border-b bg-background px-4">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex items-center gap-2">
+              <AICartBuilder />
+              <BulkImportDialog />
+              <HeaderUserMenu />
               <ThemeToggle />
               <CartButton />
             </div>

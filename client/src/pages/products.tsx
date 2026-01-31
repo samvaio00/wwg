@@ -8,8 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { AICartBuilder } from "@/components/ai-cart-builder";
-import { BulkImportDialog } from "@/components/bulk-import-dialog";
 import { 
   Search, 
   ShoppingCart, 
@@ -346,10 +344,6 @@ export default function ProductsPage() {
           <p className="text-muted-foreground">
             Browse our wholesale catalog
           </p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <AICartBuilder />
-          <BulkImportDialog />
         </div>
       </div>
 

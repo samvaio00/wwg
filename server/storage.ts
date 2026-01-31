@@ -34,6 +34,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser, zohoCustomerId?: string): Promise<SafeUser>;
+  createUserAutoApproved(user: { email: string; password: string; businessName?: string; contactName?: string }, zohoCustomerId: string): Promise<SafeUser>;
   updateUserLastLogin(id: string): Promise<void>;
   
   // Admin user operations
@@ -99,6 +100,25 @@ export class DatabaseStorage implements IStorage {
       role: UserRole.PENDING,
       status: UserStatus.PENDING,
       zohoCustomerId: zohoCustomerId || null,
+    }).returning();
+    
+    return toSafeUser(user);
+  }
+
+  async createUserAutoApproved(
+    userData: { email: string; password: string; businessName?: string; contactName?: string },
+    zohoCustomerId: string
+  ): Promise<SafeUser> {
+    const hashedPassword = await this.hashPassword(userData.password);
+    
+    const [user] = await db.insert(users).values({
+      email: userData.email.toLowerCase(),
+      password: hashedPassword,
+      businessName: userData.businessName || null,
+      contactName: userData.contactName || null,
+      role: UserRole.CUSTOMER,
+      status: UserStatus.APPROVED,
+      zohoCustomerId: zohoCustomerId,
     }).returning();
     
     return toSafeUser(user);

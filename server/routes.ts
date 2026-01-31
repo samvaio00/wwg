@@ -52,7 +52,105 @@ export async function registerRoutes(
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  // Register new user
+  // Check customer status by email (for registration flow)
+  app.post("/api/auth/check-customer", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      // Check if email already registered
+      const existing = await storage.getUserByEmail(email);
+      if (existing) {
+        return res.status(400).json({ message: "Email already registered", alreadyRegistered: true });
+      }
+      
+      // Check Zoho Books for customer status
+      try {
+        const zohoResult = await checkZohoCustomerByEmail(email);
+        
+        return res.json({
+          found: zohoResult.found,
+          active: zohoResult.active,
+          customerId: zohoResult.customerId,
+          customerName: zohoResult.customerName,
+          companyName: zohoResult.companyName,
+        });
+      } catch (zohoError) {
+        console.error("Zoho Books check failed:", zohoError);
+        return res.status(503).json({ 
+          message: "Unable to verify customer account. Please try again later.",
+          zohoError: true
+        });
+      }
+    } catch (error) {
+      console.error("Check customer error:", error);
+      res.status(500).json({ message: "Failed to check customer status" });
+    }
+  });
+
+  // Register existing Zoho customer (auto-approved)
+  app.post("/api/auth/register-existing", async (req, res) => {
+    try {
+      const { email, password, zohoCustomerId: providedCustomerId } = req.body;
+      
+      if (!email || !password || !providedCustomerId) {
+        return res.status(400).json({ message: "Email, password, and customer ID are required" });
+      }
+      
+      if (password.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+      
+      // Check if email already exists
+      const existing = await storage.getUserByEmail(email);
+      if (existing) {
+        return res.status(400).json({ message: "Email already registered" });
+      }
+      
+      // Verify with Zoho Books
+      let zohoResult;
+      try {
+        zohoResult = await checkZohoCustomerByEmail(email);
+        
+        if (!zohoResult.found) {
+          return res.status(403).json({ message: "Customer not found in our system" });
+        }
+        
+        if (!zohoResult.active) {
+          return res.status(403).json({ message: "Customer account is inactive" });
+        }
+        
+        // Verify the provided customer ID matches
+        if (zohoResult.customerId !== providedCustomerId) {
+          return res.status(403).json({ message: "Customer ID does not match our records" });
+        }
+      } catch (zohoError) {
+        console.error("Zoho Books check failed:", zohoError);
+        return res.status(503).json({ message: "Unable to verify customer account" });
+      }
+      
+      // Create user with auto-approval (verified Zoho customer)
+      const user = await storage.createUserAutoApproved({
+        email,
+        password,
+        businessName: zohoResult.companyName || zohoResult.customerName,
+        contactName: zohoResult.customerName,
+      }, zohoResult.customerId!);
+      
+      // Set session
+      req.session.userId = user.id;
+      
+      res.status(201).json({ user, autoApproved: true });
+    } catch (error) {
+      console.error("Register existing customer error:", error);
+      res.status(500).json({ message: "Registration failed" });
+    }
+  });
+
+  // Register new user (pending approval)
   app.post("/api/auth/register", async (req, res) => {
     try {
       const data = insertUserSchema.parse(req.body);
@@ -63,41 +161,13 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Email already registered" });
       }
       
-      // Check Zoho Books for customer status
-      let zohoCustomerId: string | undefined;
-      try {
-        const zohoResult = await checkZohoCustomerByEmail(data.email);
-        
-        if (!zohoResult.found) {
-          return res.status(403).json({ 
-            message: "No customer account found with this email in our system. Please contact us to set up a wholesale account.",
-            zohoError: true
-          });
-        }
-        
-        if (!zohoResult.active) {
-          return res.status(403).json({ 
-            message: "Your customer account is inactive. Please contact support to reactivate your account.",
-            zohoError: true
-          });
-        }
-        
-        zohoCustomerId = zohoResult.customerId;
-      } catch (zohoError) {
-        console.error("Zoho Books check failed:", zohoError);
-        return res.status(503).json({ 
-          message: "Unable to verify customer account. Please try again later or contact support.",
-          zohoError: true
-        });
-      }
-      
-      // Create user with Zoho customer ID
-      const user = await storage.createUser(data, zohoCustomerId);
+      // Create user as pending (requires admin approval)
+      const user = await storage.createUser(data);
       
       // Set session
       req.session.userId = user.id;
       
-      res.status(201).json({ user });
+      res.status(201).json({ user, pendingApproval: true });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ 

@@ -19,6 +19,10 @@ interface RegisterData {
   businessName?: string;
   contactName?: string;
   phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

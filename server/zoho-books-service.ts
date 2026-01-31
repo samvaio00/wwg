@@ -83,6 +83,8 @@ export async function checkZohoCustomerByEmail(email: string): Promise<ZohoCusto
 
     // Search for customer by email in Zoho Books
     const searchEmail = encodeURIComponent(email.toLowerCase());
+    console.log(`[Zoho Books] Searching for customer with email: ${email}`);
+    
     const response = await fetch(
       `https://www.zohoapis.com/books/v3/contacts?organization_id=${organizationId}&email=${searchEmail}`,
       {
@@ -100,13 +102,19 @@ export async function checkZohoCustomerByEmail(email: string): Promise<ZohoCusto
 
     const data: ZohoContactsResponse = await response.json();
     const contacts = data.contacts || [];
+    
+    console.log(`[Zoho Books] Found ${contacts.length} contacts for email ${email}`);
+    contacts.forEach((c, i) => {
+      console.log(`[Zoho Books] Contact ${i}: email=${c.email}, type=${c.contact_type}, status=${c.status}, name=${c.contact_name}`);
+    });
 
-    // Find customer contact matching email
-    const customer = contacts.find(
-      (c) => c.email?.toLowerCase() === email.toLowerCase() && c.contact_type === "customer"
+    // Find contact matching email (accept any contact type, will validate customer separately)
+    const matchingContact = contacts.find(
+      (c) => c.email?.toLowerCase() === email.toLowerCase()
     );
 
-    if (!customer) {
+    if (!matchingContact) {
+      console.log(`[Zoho Books] No matching contact found for email: ${email}`);
       return {
         found: false,
         active: false,
@@ -114,14 +122,25 @@ export async function checkZohoCustomerByEmail(email: string): Promise<ZohoCusto
       };
     }
 
-    const isActive = customer.status === "active";
+    // Check if it's a customer type contact
+    if (matchingContact.contact_type !== "customer") {
+      console.log(`[Zoho Books] Contact found but type is ${matchingContact.contact_type}, not customer`);
+      return {
+        found: false,
+        active: false,
+        message: "No customer account found with this email in our system. Please contact us to set up a wholesale account.",
+      };
+    }
+
+    const isActive = matchingContact.status === "active";
+    console.log(`[Zoho Books] Customer found: ${matchingContact.contact_name}, active=${isActive}`);
 
     return {
       found: true,
       active: isActive,
-      customerId: customer.contact_id,
-      customerName: customer.contact_name,
-      companyName: customer.company_name,
+      customerId: matchingContact.contact_id,
+      customerName: matchingContact.contact_name,
+      companyName: matchingContact.company_name,
       message: isActive
         ? "Customer account verified"
         : "Your customer account is inactive. Please contact support to reactivate your account.",

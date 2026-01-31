@@ -69,8 +69,8 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
           <header className="sticky top-0 z-50 flex h-14 items-center justify-between gap-4 border-b bg-background px-4">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex items-center gap-2">
-              <CartButton />
               <ThemeToggle />
+              <CartButton />
             </div>
           </header>
           <main className="flex-1 overflow-auto p-6">

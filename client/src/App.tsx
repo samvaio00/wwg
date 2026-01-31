@@ -139,10 +139,12 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
           <header className="sticky top-0 z-50 flex h-14 items-center justify-between gap-4 border-b bg-background px-4">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex items-center gap-2">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
               <AICartBuilder />
               <BulkImportDialog />
+            </div>
+            <div className="flex items-center gap-2">
               <HeaderUserMenu />
               <ThemeToggle />
               <CartButton />

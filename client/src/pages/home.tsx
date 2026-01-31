@@ -1,8 +1,13 @@
-import { useEffect } from "react";
-import { useLocation } from "wouter";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Package, 
   ShoppingCart, 
@@ -10,19 +15,273 @@ import {
   TrendingUp,
   Clock,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Star,
+  Plus,
+  Minus,
+  Check
 } from "lucide-react";
+import type { Product, Category } from "@shared/schema";
 
-export default function HomePage() {
-  const { user } = useAuth();
-  const [, setLocation] = useLocation();
+function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  
+  const imageUrl = product.zohoItemId 
+    ? `/api/products/${product.id}/image`
+    : product.imageUrl;
+  
+  if (!imageUrl || imageError) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Package className="h-12 w-12 text-muted-foreground" />
+      </div>
+    );
+  }
+  
+  return (
+    <>
+      {!imageLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Package className="h-12 w-12 text-muted-foreground animate-pulse" />
+        </div>
+      )}
+      <img 
+        src={imageUrl} 
+        alt={product.name}
+        className={`object-contain w-full h-full ${isOutOfStock ? "grayscale" : ""} ${imageLoaded ? "" : "opacity-0"}`}
+        loading="lazy"
+        onError={() => setImageError(true)}
+        onLoad={() => setImageLoaded(true)}
+      />
+    </>
+  );
+}
 
-  // Redirect customers to products page - dashboard is for admins only
-  useEffect(() => {
-    if (user && user.role !== "admin") {
-      setLocation("/products");
+function ProductCard({ product, onAddToCart, isAddingToCart }: { 
+  product: Product; 
+  onAddToCart: (productId: string, quantity: number) => void;
+  isAddingToCart: boolean;
+}) {
+  const [quantity, setQuantity] = useState(product.minOrderQuantity || 1);
+  const [justAdded, setJustAdded] = useState(false);
+  
+  const stockQty = product.stockQuantity || 0;
+  const isOutOfStock = stockQty <= 0;
+
+  const handleAddToCart = () => {
+    if (isOutOfStock) return;
+    onAddToCart(product.id, quantity);
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 2000);
+  };
+
+  const incrementQuantity = () => {
+    const newQty = quantity + (product.casePackSize || 1);
+    if (newQty <= stockQty) {
+      setQuantity(newQty);
     }
-  }, [user, setLocation]);
+  };
+
+  const decrementQuantity = () => {
+    const newQty = quantity - (product.casePackSize || 1);
+    if (newQty >= (product.minOrderQuantity || 1)) {
+      setQuantity(newQty);
+    }
+  };
+
+  return (
+    <Card className={`overflow-hidden h-full flex flex-col ${isOutOfStock ? "opacity-75" : ""}`} data-testid={`product-card-${product.id}`}>
+      <div className="relative h-32 bg-muted flex items-center justify-center overflow-hidden p-2">
+        <ProductImage product={product} isOutOfStock={isOutOfStock} />
+        {isOutOfStock && (
+          <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
+            <Badge variant="secondary" className="text-xs">Out of Stock</Badge>
+          </div>
+        )}
+      </div>
+      
+      <CardContent className="p-3 flex-1 flex flex-col">
+        <div className="flex-1 min-h-0">
+          <p className="text-xs text-muted-foreground mb-0.5">{product.sku}</p>
+          <h3 className="font-medium text-xs leading-tight line-clamp-2 mb-1" title={product.name}>
+            {product.name}
+          </h3>
+        </div>
+        
+        <div className="mt-auto space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-primary">${product.basePrice}</span>
+            {!isOutOfStock && stockQty <= 10 && (
+              <span className="text-xs text-amber-600">{stockQty} left</span>
+            )}
+          </div>
+          
+          {!isOutOfStock && (
+            <div className="flex items-center gap-1">
+              <div className="flex items-center border rounded">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-r-none"
+                  onClick={decrementQuantity}
+                  disabled={quantity <= (product.minOrderQuantity || 1)}
+                  data-testid={`button-decrease-${product.id}`}
+                >
+                  <Minus className="h-3 w-3" />
+                </Button>
+                <span className="w-8 text-center text-xs font-medium">{quantity}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-l-none"
+                  onClick={incrementQuantity}
+                  disabled={quantity >= stockQty}
+                  data-testid={`button-increase-${product.id}`}
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+              <Button
+                size="sm"
+                className="flex-1 h-7 text-xs w-14"
+                onClick={handleAddToCart}
+                disabled={isAddingToCart || justAdded}
+                data-testid={`button-add-to-cart-${product.id}`}
+              >
+                {justAdded ? (
+                  <Check className="h-3 w-3" />
+                ) : (
+                  "Add"
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CustomerHomePage() {
+  const { toast } = useToast();
+  
+  // Fetch highlighted products
+  const { data: highlightedData, isLoading: highlightedLoading } = useQuery<{ products: Product[] }>({
+    queryKey: ["/api/highlighted-products"],
+  });
+
+  // Fetch categories to get Warner category slug
+  const { data: categoriesData } = useQuery<{ categories: Category[] }>({
+    queryKey: ["/api/categories"],
+  });
+
+  // Find Warner category
+  const warnerCategory = categoriesData?.categories?.find(
+    (c) => c.name.toLowerCase() === "warner" || c.slug === "warner"
+  );
+
+  // Fetch Warner products if no highlighted products
+  const shouldFetchWarner = !highlightedLoading && (!highlightedData?.products || highlightedData.products.length === 0) && warnerCategory;
+  const { data: warnerData, isLoading: warnerLoading } = useQuery<{ products: Product[] }>({
+    queryKey: ["/api/products", { category: warnerCategory?.slug, limit: 24 }],
+    enabled: !!shouldFetchWarner,
+  });
+
+  const addToCartMutation = useMutation({
+    mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
+      const res = await apiRequest("POST", "/api/cart/items", { productId, quantity });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      toast({
+        title: "Added to cart",
+        description: "Product has been added to your cart",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to add product to cart",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAddToCart = (productId: string, quantity: number) => {
+    addToCartMutation.mutate({ productId, quantity });
+  };
+
+  // Determine which products to show
+  const displayProducts = highlightedData?.products?.length 
+    ? highlightedData.products 
+    : warnerData?.products || [];
+  
+  const isHighlighted = highlightedData?.products && highlightedData.products.length > 0;
+  const isLoading = highlightedLoading || (shouldFetchWarner && warnerLoading);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-2">
+        <Star className="h-5 w-5 text-amber-500" />
+        <h2 className="text-xl font-semibold">
+          {isHighlighted ? "Featured Products" : "Warner Collection"}
+        </h2>
+      </div>
+
+      {isLoading ? (
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <Card key={i} className="overflow-hidden">
+              <Skeleton className="h-32 w-full" />
+              <CardContent className="p-3 space-y-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-5 w-12" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : displayProducts.length > 0 ? (
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          {displayProducts.filter(p => p.isOnline).map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              onAddToCart={handleAddToCart}
+              isAddingToCart={addToCartMutation.isPending}
+            />
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Package className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium mb-2">No Products Available</h3>
+            <p className="text-muted-foreground text-center mb-4">
+              Browse our full catalog to find products
+            </p>
+            <Button asChild data-testid="button-browse-products">
+              <Link href="/products">Browse Products</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {displayProducts.length > 0 && (
+        <div className="flex justify-center">
+          <Button variant="outline" asChild data-testid="button-view-all-products">
+            <Link href="/products">View All Products</Link>
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminDashboard() {
+  const { user } = useAuth();
 
   const getStatusBadge = () => {
     if (!user) return null;
@@ -150,4 +409,15 @@ export default function HomePage() {
       </div>
     </div>
   );
+}
+
+export default function HomePage() {
+  const { user } = useAuth();
+  
+  // Show admin dashboard for admins, customer homepage for customers
+  if (user?.role === "admin") {
+    return <AdminDashboard />;
+  }
+  
+  return <CustomerHomePage />;
 }

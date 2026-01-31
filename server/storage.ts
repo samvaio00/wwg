@@ -90,6 +90,8 @@ export interface IStorage {
   updateOrderZohoInfo(id: string, zohoSalesOrderId: string): Promise<Order | undefined>;
   
   // Admin visibility operations
+  getHighlightedProducts(): Promise<Product[]>;
+  setProductHighlight(productId: string, isHighlighted: boolean): Promise<Product | undefined>;
   getHiddenProducts(): Promise<Product[]>;
   getOutOfStockProducts(): Promise<Product[]>;
   getInactiveCustomers(): Promise<SafeUser[]>;
@@ -660,6 +662,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Admin visibility queries
+  async getHighlightedProducts(): Promise<Product[]> {
+    return db.select()
+      .from(products)
+      .where(and(eq(products.isHighlighted, true), eq(products.isOnline, true)))
+      .orderBy(desc(products.updatedAt));
+  }
+
+  async setProductHighlight(productId: string, isHighlighted: boolean): Promise<Product | undefined> {
+    const [updated] = await db.update(products)
+      .set({ isHighlighted, updatedAt: new Date() })
+      .where(eq(products.id, productId))
+      .returning();
+    return updated;
+  }
+
   async getHiddenProducts(): Promise<Product[]> {
     return db.select()
       .from(products)

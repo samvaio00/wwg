@@ -140,6 +140,9 @@ export const products = pgTable("products", {
   // When Zoho sync runs, set isOnline from Zoho; de-list by setting isOnline=false (do not delete)
   isOnline: boolean("is_online").default(false),
   
+  // Highlighted products (for homepage display)
+  isHighlighted: boolean("is_highlighted").default(false),
+  
   // Media
   imageUrl: text("image_url"),
   imageUrls: text("image_urls").array(), // Multiple images

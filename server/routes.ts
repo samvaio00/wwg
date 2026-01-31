@@ -1093,6 +1093,54 @@ export async function registerRoutes(
   });
 
   // ================================================================
+  // HIGHLIGHTED PRODUCTS MANAGEMENT
+  // ================================================================
+
+  // Get highlighted products
+  app.get("/api/admin/highlighted-products", requireAdmin, async (req, res) => {
+    try {
+      const highlighted = await storage.getHighlightedProducts();
+      res.json({ products: highlighted });
+    } catch (error) {
+      console.error("Get highlighted products error:", error);
+      res.status(500).json({ message: "Failed to get highlighted products" });
+    }
+  });
+
+  // Get highlighted products (public endpoint for homepage)
+  app.get("/api/highlighted-products", async (req, res) => {
+    try {
+      const highlighted = await storage.getHighlightedProducts();
+      res.json({ products: highlighted });
+    } catch (error) {
+      console.error("Get highlighted products error:", error);
+      res.status(500).json({ message: "Failed to get highlighted products" });
+    }
+  });
+
+  // Toggle product highlight status
+  app.post("/api/admin/products/:id/highlight", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isHighlighted } = req.body;
+      
+      if (typeof isHighlighted !== "boolean") {
+        return res.status(400).json({ message: "isHighlighted must be a boolean" });
+      }
+      
+      const updated = await storage.setProductHighlight(id, isHighlighted);
+      if (!updated) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      
+      res.json({ product: updated });
+    } catch (error) {
+      console.error("Toggle product highlight error:", error);
+      res.status(500).json({ message: "Failed to update product highlight status" });
+    }
+  });
+
+  // ================================================================
   // ZOHO INTEGRATION
   // ================================================================
 

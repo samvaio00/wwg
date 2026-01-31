@@ -16,27 +16,12 @@ import {
 import {
   Package,
   LayoutDashboard,
-  ShoppingCart,
   Users,
   Settings,
   Tag,
   BarChart3,
 } from "lucide-react";
 import type { Category } from "@shared/schema";
-
-const customerNavItems = [
-  {
-    title: "Products",
-    url: "/products",
-    icon: Package,
-  },
-  {
-    title: "Cart",
-    url: "/cart",
-    icon: ShoppingCart,
-  },
-];
-
 
 const adminNavItems = [
   {
@@ -90,28 +75,6 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {customerNavItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === item.url}
-                    data-testid={`nav-${item.title.toLowerCase()}`}
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
         <SidebarGroup>
           <SidebarGroupLabel>Categories</SidebarGroupLabel>
           <SidebarGroupContent>

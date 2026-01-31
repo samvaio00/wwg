@@ -187,9 +187,10 @@ function CustomerHomePage() {
 
   // Fetch Warner products if we don't have at least 12 highlighted products
   const shouldFetchWarner = !highlightedLoading && !hasEnoughHighlighted && warnerCategory;
+  const warnerQueryUrl = warnerCategory ? `/api/products?category=${warnerCategory.slug}&limit=24` : null;
   const { data: warnerData, isLoading: warnerLoading } = useQuery<{ products: Product[] }>({
-    queryKey: ["/api/products", { category: warnerCategory?.slug, limit: 24 }],
-    enabled: !!shouldFetchWarner,
+    queryKey: [warnerQueryUrl],
+    enabled: !!shouldFetchWarner && !!warnerQueryUrl,
   });
 
   const addToCartMutation = useMutation({
@@ -227,12 +228,12 @@ function CustomerHomePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Star className="h-5 w-5 text-amber-500" />
-        <h2 className="text-xl font-semibold">
-          {showingHighlighted ? "Featured Products" : "Warner Collection"}
-        </h2>
-      </div>
+      {showingHighlighted && (
+        <div className="flex items-center gap-2">
+          <Star className="h-5 w-5 text-amber-500" />
+          <h2 className="text-xl font-semibold">Featured Products</h2>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">

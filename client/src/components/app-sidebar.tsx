@@ -35,12 +35,7 @@ import {
 } from "lucide-react";
 import type { Category } from "@shared/schema";
 
-const mainNavItems = [
-  {
-    title: "Dashboard",
-    url: "/",
-    icon: LayoutDashboard,
-  },
+const customerNavItems = [
   {
     title: "Products",
     url: "/products",
@@ -55,6 +50,11 @@ const mainNavItems = [
 
 
 const adminNavItems = [
+  {
+    title: "Dashboard",
+    url: "/",
+    icon: LayoutDashboard,
+  },
   {
     title: "User Management",
     url: "/admin/users",
@@ -124,7 +124,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavItems.map((item) => (
+              {customerNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild

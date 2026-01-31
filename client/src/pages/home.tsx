@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +15,14 @@ import {
 
 export default function HomePage() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
+
+  // Redirect customers to products page - dashboard is for admins only
+  useEffect(() => {
+    if (user && user.role !== "admin") {
+      setLocation("/products");
+    }
+  }, [user, setLocation]);
 
   const getStatusBadge = () => {
     if (!user) return null;

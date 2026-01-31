@@ -211,6 +211,38 @@ npm run db:push
   - GET /api/admin/sync/history - View sync run logs
 - **Sync Run Logging**: All sync operations logged to `sync_runs` table with timing, counts, errors
 
+### Phase 7 Patch (Complete) - Admin-Gated Zoho Operations with Retry Infrastructure
+- **Jobs Table for Retryable Zoho Operations**:
+  - New `jobs` table in schema for tracking failed Zoho API calls
+  - Job types: `create_zoho_customer`, `push_order_to_zoho`
+  - Status tracking: pending → processing → completed/failed
+  - Max 3 attempts with error logging
+- **Admin-Gated Customer Creation in Zoho**:
+  - NEW customers (without Zoho ID) are created in Zoho Books during admin approval
+  - Existing Zoho customers (who self-registered) skip creation
+  - Failed creations queue a retry job
+  - Backend: `server/zoho-books-service.ts` → `createZohoCustomer()`
+- **Order Push with Retry Queue**:
+  - Orders approved but failed to push to Zoho create retry jobs
+  - Order status set to "processing" when Zoho push fails (not "approved")
+  - Full payload stored in job for later retry
+- **Admin Retry UI** (Settings page):
+  - View pending and failed jobs
+  - "Process Pending Jobs" button for manual processing
+  - "Retry" button on individual failed jobs
+  - Backend endpoints:
+    - GET /api/admin/jobs - View pending/failed jobs
+    - POST /api/admin/jobs/:id/retry - Queue job for retry
+    - POST /api/admin/jobs/process - Process all pending jobs
+- **Dynamic Sync Scheduler**:
+  - Business hours (8AM-6PM weekdays): 2-hour sync interval
+  - Off-hours/weekends: 6-hour sync interval
+  - Scheduler automatically adjusts intervals based on time
+- **Job Worker** (`server/job-worker.ts`):
+  - Processes pending jobs with full retry logic
+  - Updates user's zohoCustomerId on successful customer creation
+  - Updates order's zohoSalesOrderId on successful order push
+
 ### Phase 8+ (Future)
 - True vector embeddings with dedicated OpenAI API key
 - Order tracking and shipment notifications
@@ -229,12 +261,6 @@ This maps to Zoho Inventory's "Show in Online Store" toggle.
 2. API level: `getProduct()` and `getProductBySku()` return 404 for offline products
 3. UI level: Products page also filters results by `isOnline === true`
 
-### Phase 7 TODO: Zoho Sync for isOnline
-- Sync `products.isOnline` from Zoho Inventory's native "Show in Online Store" toggle
-- Only products with Zoho's "Show in Online Store" = true should have `isOnline=true`
-- De-list products by setting `isOnline=false` (do NOT delete from database)
-- This allows products to be re-listed without losing order history
-
 ## Design Principles
 
 - Professional and trustworthy (enterprise-grade)
@@ -246,4 +272,4 @@ Inspired by: Amazon Business, McMaster-Carr, Shopify Plus B2B, Stripe, Apple Bus
 
 ---
 
-*Last updated: Phase 7 completion*
+*Last updated: Phase 7 Patch completion*

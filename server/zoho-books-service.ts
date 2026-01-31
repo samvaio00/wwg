@@ -500,3 +500,104 @@ export async function createZohoSalesOrder(input: ZohoSalesOrderInput): Promise<
     };
   }
 }
+
+// ================================================================
+// CREATE ZOHO CUSTOMER (Contact)
+// ================================================================
+
+export interface ZohoCustomerInput {
+  email: string;
+  contactName: string;
+  companyName?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+}
+
+export interface ZohoCustomerCreateResult {
+  success: boolean;
+  customerId?: string;
+  message: string;
+}
+
+export async function createZohoCustomer(input: ZohoCustomerInput): Promise<ZohoCustomerCreateResult> {
+  try {
+    const accessToken = await getAccessToken();
+    const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
+
+    if (!organizationId) {
+      throw new Error("Zoho organization ID not configured");
+    }
+
+    console.log(`[Zoho Books] Creating customer for ${input.email}`);
+
+    // Build the contact payload for Zoho Books
+    const contactData: Record<string, unknown> = {
+      contact_name: input.companyName || input.contactName,
+      company_name: input.companyName,
+      contact_type: "customer",
+      status: "active",
+      contact_persons: [
+        {
+          first_name: input.contactName?.split(" ")[0] || "",
+          last_name: input.contactName?.split(" ").slice(1).join(" ") || "",
+          email: input.email,
+          phone: input.phone,
+          is_primary_contact: true,
+        }
+      ]
+    };
+
+    // Add billing address if provided
+    if (input.address || input.city || input.state || input.zipCode) {
+      contactData.billing_address = {
+        address: input.address,
+        city: input.city,
+        state: input.state,
+        zip: input.zipCode,
+        country: "USA"
+      };
+    }
+
+    console.log(`[Zoho Books] Customer payload:`, JSON.stringify(contactData, null, 2));
+
+    const response = await fetch(
+      `https://www.zohoapis.com/books/v3/contacts?organization_id=${organizationId}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Zoho-oauthtoken ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(contactData),
+      }
+    );
+
+    const responseData = await response.json();
+
+    if (!response.ok || responseData.code !== 0) {
+      console.error("[Zoho Books] Customer creation failed:", responseData);
+      return {
+        success: false,
+        message: responseData.message || "Failed to create customer in Zoho Books",
+      };
+    }
+
+    const contact = responseData.contact;
+    console.log(`[Zoho Books] Customer created: ${contact.contact_id} (${contact.contact_name})`);
+
+    return {
+      success: true,
+      customerId: contact.contact_id,
+      message: "Customer created successfully in Zoho Books",
+    };
+  } catch (err) {
+    console.error("Error creating Zoho customer:", err);
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to create customer",
+    };
+  }
+}

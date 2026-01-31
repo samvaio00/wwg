@@ -18,7 +18,8 @@ import { users, products } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
 import { syncProductsFromZoho, testZohoConnection } from "./zoho-service";
-import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, type ZohoLineItem } from "./zoho-books-service";
+import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, type ZohoLineItem } from "./zoho-books-service";
+import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
 
 // Middleware to check if user is authenticated
@@ -294,6 +295,8 @@ export async function registerRoutes(
   });
 
   // Admin: Approve user
+  // For NEW customers without Zoho ID: creates customer in Zoho Books first
+  // For existing Zoho customers: just approves (they already have zohoCustomerId)
   app.post("/api/admin/users/:id/approve", requireAdmin, async (req, res) => {
     try {
       const id = req.params.id as string;
@@ -307,6 +310,52 @@ export async function registerRoutes(
         return res.status(400).json({ message: "User is already approved" });
       }
       
+      // If user doesn't have a Zoho customer ID, create them in Zoho Books
+      if (!user.zohoCustomerId) {
+        console.log(`[Admin Approve] Creating new customer in Zoho Books for user ${id}`);
+        
+        const zohoResult = await createZohoCustomer({
+          email: user.email,
+          contactName: user.contactName || user.businessName || user.email,
+          companyName: user.businessName || undefined,
+          phone: user.phone || undefined,
+          address: user.address || undefined,
+          city: user.city || undefined,
+          state: user.state || undefined,
+          zipCode: user.zipCode || undefined,
+        });
+        
+        if (!zohoResult.success) {
+          console.error(`[Admin Approve] Failed to create Zoho customer: ${zohoResult.message}`);
+          
+          // Create a retry job
+          await storage.createJob({
+            jobType: JobType.CREATE_ZOHO_CUSTOMER,
+            userId: id,
+            payload: JSON.stringify({ 
+              email: user.email,
+              contactName: user.contactName,
+              companyName: user.businessName,
+              phone: user.phone,
+              address: user.address,
+              city: user.city,
+              state: user.state,
+              zipCode: user.zipCode
+            })
+          });
+          
+          return res.status(500).json({ 
+            message: `Failed to create customer in Zoho Books: ${zohoResult.message}. A retry job has been created.`,
+            zohoError: true
+          });
+        }
+        
+        // Save the Zoho customer ID
+        await storage.updateUserZohoCustomerId(id, zohoResult.customerId!);
+        console.log(`[Admin Approve] Zoho customer created: ${zohoResult.customerId}`);
+      }
+      
+      // Approve the user
       const updatedUser = await storage.updateUserStatus(id, UserStatus.APPROVED, UserRole.CUSTOMER);
       res.json({ user: updatedUser, message: "User approved successfully" });
     } catch (error) {
@@ -727,7 +776,32 @@ export async function registerRoutes(
         });
       } else {
         console.error(`[Order Approve] Failed to push to Zoho: ${zohoResult.message}`);
-        res.json({ order, message: `Order approved but Zoho push failed: ${zohoResult.message}` });
+        
+        // Create a retry job for the failed Zoho push
+        await storage.createJob({
+          jobType: JobType.PUSH_ORDER_TO_ZOHO,
+          orderId: order.id,
+          userId: customer.id,
+          payload: JSON.stringify({
+            customerId: customer.zohoCustomerId,
+            orderNumber: order.orderNumber,
+            lineItems,
+            shippingAddress: order.shippingAddress,
+            shippingCity: order.shippingCity,
+            shippingState: order.shippingState,
+            shippingZipCode: order.shippingZipCode,
+            notes: `Web order from ${customer.businessName || customer.email}`,
+          })
+        });
+        
+        // Update order status to indicate Zoho push failed
+        await storage.updateOrderStatus(order.id, OrderStatus.PROCESSING, req.session.userId!);
+        
+        res.json({ 
+          order, 
+          message: `Order approved but Zoho push failed: ${zohoResult.message}. A retry job has been created.`,
+          zohoError: true
+        });
       }
     } catch (error) {
       console.error("Error approving order:", error);
@@ -972,6 +1046,65 @@ export async function registerRoutes(
         success: false, 
         message: error instanceof Error ? error.message : "Sync failed" 
       });
+    }
+  });
+
+  // ================================================================
+  // ADMIN JOBS ENDPOINTS (Retry Failed Zoho Operations)
+  // ================================================================
+
+  // Get pending/failed jobs
+  app.get("/api/admin/jobs", requireAdmin, async (_req, res) => {
+    try {
+      const pendingJobs = await storage.getPendingJobs();
+      const failedJobs = await storage.getFailedJobs();
+      res.json({ 
+        pending: pendingJobs, 
+        failed: failedJobs,
+        totalPending: pendingJobs.length,
+        totalFailed: failedJobs.length
+      });
+    } catch (error) {
+      console.error("Error fetching jobs:", error);
+      res.status(500).json({ message: "Failed to fetch jobs" });
+    }
+  });
+
+  // Retry a specific job
+  app.post("/api/admin/jobs/:id/retry", requireAdmin, async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.id as string);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+      
+      if (job.status === 'completed') {
+        return res.status(400).json({ message: "Job is already completed" });
+      }
+
+      // Reset job to pending for retry
+      const updatedJob = await storage.updateJob(job.id, {
+        status: 'pending',
+        attempts: 0,
+        errorMessage: null
+      });
+      
+      res.json({ job: updatedJob, message: "Job queued for retry" });
+    } catch (error) {
+      console.error("Error retrying job:", error);
+      res.status(500).json({ message: "Failed to retry job" });
+    }
+  });
+
+  // Process pending jobs (manual trigger)
+  app.post("/api/admin/jobs/process", requireAdmin, async (_req, res) => {
+    try {
+      const { processJobQueue } = await import("./job-worker");
+      const results = await processJobQueue();
+      res.json({ success: true, results });
+    } catch (error) {
+      console.error("Error processing jobs:", error);
+      res.status(500).json({ message: "Failed to process jobs" });
     }
   });
 

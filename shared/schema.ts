@@ -390,6 +390,61 @@ export const syncRuns = pgTable("sync_runs", {
 }));
 
 // ================================================================
+// JOBS TABLE (for retryable Zoho operations)
+// ================================================================
+
+export const JobType = {
+  CREATE_ZOHO_CUSTOMER: "create_zoho_customer",
+  PUSH_ORDER_TO_ZOHO: "push_order_to_zoho",
+} as const;
+
+export const JobStatus = {
+  PENDING: "pending",
+  PROCESSING: "processing",
+  COMPLETED: "completed",
+  FAILED: "failed",
+} as const;
+
+export type JobTypeValue = (typeof JobType)[keyof typeof JobType];
+export type JobStatusValue = (typeof JobStatus)[keyof typeof JobStatus];
+
+export const jobs = pgTable("jobs", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Job type: create_zoho_customer, push_order_to_zoho
+  jobType: text("job_type").notNull(),
+  
+  // Status: pending, processing, completed, failed
+  status: text("status").notNull().default(JobStatus.PENDING),
+  
+  // Reference to related entity
+  userId: varchar("user_id", { length: 36 }).references(() => users.id),
+  orderId: varchar("order_id", { length: 36 }).references(() => orders.id),
+  
+  // Payload (JSON with job-specific data)
+  payload: text("payload"),
+  
+  // Error tracking
+  errorMessage: text("error_message"),
+  attempts: integer("attempts").default(0),
+  maxAttempts: integer("max_attempts").default(3),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  lastAttemptAt: timestamp("last_attempt_at"),
+  completedAt: timestamp("completed_at"),
+}, (table) => ({
+  jobTypeIdx: index("jobs_type_idx").on(table.jobType),
+  statusIdx: index("jobs_status_idx").on(table.status),
+  userIdIdx: index("jobs_user_id_idx").on(table.userId),
+  orderIdIdx: index("jobs_order_id_idx").on(table.orderId),
+}));
+
+export type Job = typeof jobs.$inferSelect;
+export type InsertJob = typeof jobs.$inferInsert;
+
+// ================================================================
 // ZOD SCHEMAS & TYPES
 // ================================================================
 

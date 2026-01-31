@@ -9,6 +9,8 @@ import {
   type Order,
   type OrderItem,
   type SyncRun,
+  type Job,
+  type InsertJob,
   users,
   products,
   carts,
@@ -16,14 +18,19 @@ import {
   orders,
   orderItems,
   syncRuns,
+  jobs,
   toSafeUser,
   UserRole,
   UserStatus,
   OrderStatus,
+  JobStatus,
+  JobType,
   generateOrderNumber,
   type UserStatusType,
   type UserRoleType,
-  type OrderStatusType
+  type OrderStatusType,
+  type JobTypeValue,
+  type JobStatusValue
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ne, ilike, or, asc, sql, lte } from "drizzle-orm";
@@ -80,12 +87,24 @@ export interface IStorage {
   getOutOfStockProducts(): Promise<Product[]>;
   getInactiveCustomers(): Promise<SafeUser[]>;
   getSyncHistory(limit?: number): Promise<SyncRun[]>;
-  createSyncRun(syncType: SyncType, triggeredBy: string): Promise<SyncRun>;
+  createSyncRun(syncType: string, triggeredBy: string): Promise<SyncRun>;
   updateSyncRun(id: string, updates: Partial<SyncRun>): Promise<SyncRun | undefined>;
   
   // User Zoho status operations
   updateUserZohoStatus(id: string, isActive: boolean): Promise<SafeUser | undefined>;
+  updateUserZohoCustomerId(id: string, zohoCustomerId: string): Promise<SafeUser | undefined>;
   getUsersWithZohoCustomerId(): Promise<User[]>;
+  
+  // Job operations (for retryable Zoho operations)
+  createJob(job: { jobType: JobTypeValue; userId?: string; orderId?: string; payload?: string }): Promise<Job>;
+  getJob(id: string): Promise<Job | undefined>;
+  getPendingJobs(): Promise<Job[]>;
+  getJobsByUser(userId: string): Promise<Job[]>;
+  getJobsByOrder(orderId: string): Promise<Job[]>;
+  updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined>;
+  markJobProcessing(id: string): Promise<Job | undefined>;
+  markJobCompleted(id: string): Promise<Job | undefined>;
+  markJobFailed(id: string, errorMessage: string): Promise<Job | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -601,6 +620,153 @@ export class DatabaseStorage implements IStorage {
       .from(syncRuns)
       .orderBy(desc(syncRuns.startedAt))
       .limit(limit);
+  }
+  
+  async createSyncRun(syncType: string, triggeredBy: string): Promise<SyncRun> {
+    const [run] = await db.insert(syncRuns)
+      .values({ syncType, triggeredBy })
+      .returning();
+    return run;
+  }
+  
+  async updateSyncRun(id: string, updates: Partial<SyncRun>): Promise<SyncRun | undefined> {
+    const [updated] = await db.update(syncRuns)
+      .set(updates)
+      .where(eq(syncRuns.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async updateUserZohoStatus(id: string, isActive: boolean): Promise<SafeUser | undefined> {
+    const newStatus = isActive ? UserStatus.APPROVED : UserStatus.SUSPENDED;
+    const [updated] = await db.update(users)
+      .set({
+        zohoIsActive: isActive,
+        zohoLastCheckedAt: new Date(),
+        status: newStatus,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, id))
+      .returning();
+    return updated ? toSafeUser(updated) : undefined;
+  }
+  
+  async updateUserZohoCustomerId(id: string, zohoCustomerId: string): Promise<SafeUser | undefined> {
+    const [updated] = await db.update(users)
+      .set({
+        zohoCustomerId,
+        zohoIsActive: true,
+        zohoLastCheckedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, id))
+      .returning();
+    return updated ? toSafeUser(updated) : undefined;
+  }
+  
+  async getUsersWithZohoCustomerId(): Promise<User[]> {
+    return db.select()
+      .from(users)
+      .where(and(
+        sql`${users.zohoCustomerId} IS NOT NULL`,
+        ne(users.zohoCustomerId, '')
+      ));
+  }
+  
+  // Job operations for retryable Zoho operations
+  async createJob(job: { jobType: JobTypeValue; userId?: string; orderId?: string; payload?: string }): Promise<Job> {
+    const [newJob] = await db.insert(jobs)
+      .values({
+        jobType: job.jobType,
+        userId: job.userId,
+        orderId: job.orderId,
+        payload: job.payload,
+        status: JobStatus.PENDING
+      })
+      .returning();
+    return newJob;
+  }
+  
+  async getJob(id: string): Promise<Job | undefined> {
+    const [job] = await db.select().from(jobs).where(eq(jobs.id, id));
+    return job;
+  }
+  
+  async getPendingJobs(): Promise<Job[]> {
+    return db.select()
+      .from(jobs)
+      .where(eq(jobs.status, JobStatus.PENDING))
+      .orderBy(asc(jobs.createdAt));
+  }
+  
+  async getJobsByUser(userId: string): Promise<Job[]> {
+    return db.select()
+      .from(jobs)
+      .where(eq(jobs.userId, userId))
+      .orderBy(desc(jobs.createdAt));
+  }
+  
+  async getJobsByOrder(orderId: string): Promise<Job[]> {
+    return db.select()
+      .from(jobs)
+      .where(eq(jobs.orderId, orderId))
+      .orderBy(desc(jobs.createdAt));
+  }
+  
+  async updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined> {
+    const [updated] = await db.update(jobs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(jobs.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async markJobProcessing(id: string): Promise<Job | undefined> {
+    const [job] = await db.select().from(jobs).where(eq(jobs.id, id));
+    if (!job) return undefined;
+    
+    const [updated] = await db.update(jobs)
+      .set({
+        status: JobStatus.PROCESSING,
+        attempts: (job.attempts || 0) + 1,
+        lastAttemptAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(jobs.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async markJobCompleted(id: string): Promise<Job | undefined> {
+    const [updated] = await db.update(jobs)
+      .set({
+        status: JobStatus.COMPLETED,
+        completedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(jobs.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async markJobFailed(id: string, errorMessage: string): Promise<Job | undefined> {
+    const [job] = await db.select().from(jobs).where(eq(jobs.id, id));
+    if (!job) return undefined;
+    
+    // If max attempts reached, mark as failed permanently
+    const newStatus = (job.attempts || 0) >= (job.maxAttempts || 3) 
+      ? JobStatus.FAILED 
+      : JobStatus.PENDING;
+    
+    const [updated] = await db.update(jobs)
+      .set({
+        status: newStatus,
+        errorMessage,
+        updatedAt: new Date()
+      })
+      .where(eq(jobs.id, id))
+      .returning();
+    return updated;
   }
 }
 

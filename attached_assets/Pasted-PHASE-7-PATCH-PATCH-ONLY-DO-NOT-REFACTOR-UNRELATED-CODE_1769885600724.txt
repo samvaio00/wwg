@@ -1,0 +1,136 @@
+PHASE 7 PATCH (PATCH-ONLY — DO NOT REFACTOR UNRELATED CODE)
+
+Context: Phase 7 sync workers already exist. Apply ONLY the changes below.
+Do NOT redesign the architecture. Do NOT rewrite files not related to these requirements.
+Keep all existing behavior unless explicitly changed here.
+
+GOAL:
+- New customers and new orders must first be PENDING in Admin.
+- Only when Admin changes status to APPROVED do we push to Zoho Books.
+- Existing Zoho customers (active) can self-activate immediately after customer_id verification.
+- Maintain online-only items, active-only customers, and inventory buyability rules.
+
+PATCH SCOPE (ONLY THESE AREAS)
+A) Admin approval flow for NEW customers (business intake)
+B) Admin approval flow for NEW orders
+C) Zoho Books push logic triggered ONLY on approval transitions
+D) Retryable job queue for failed Zoho pushes
+E) Inventory buyability enforcement (qty <= 0 not buyable)
+F) Sync schedule update (2h business / 6h off-hours) ONLY if your scheduler exists; otherwise add a TODO.
+
+---------------------------------------
+1) CUSTOMER FLOW PATCH (Admin-gated creation in Zoho Books)
+---------------------------------------
+Current desired behavior:
+- If email exists in Zoho Books AND customer is ACTIVE:
+  - allow signup by verifying Zoho customer_id and set password
+  - user becomes ACTIVE immediately (no admin approval)
+- If email does NOT exist in Zoho Books:
+  - create pending user + business intake
+  - user cannot see prices or checkout
+  - intake appears in Admin “Pending Customers”
+
+PATCH IMPLEMENTATION:
+- Update admin “Approve Intake” action to:
+  (a) Transition intake status SUBMITTED -> APPROVED
+  (b) Immediately call Zoho Books Contacts CREATE to create the customer
+  (c) On success:
+      - save zoho_books_customer_id returned by Zoho
+      - set customers.is_active=true
+      - set users.status='active'
+      - mark business_intakes.status='converted_to_zoho' (or equivalent)
+  (d) On failure:
+      - do NOT activate user
+      - set intake status to 'zoho_create_failed' (or equivalent)
+      - create a retryable job in jobs table: job_type='create_zoho_customer', payload includes intake_id/user_id
+      - show Admin UI button: “Retry Create in Zoho”
+
+- Add admin “Reject Intake” action:
+  - set business_intakes.status='rejected'
+  - set users.status='suspended' or 'rejected'
+  - store admin_notes
+
+---------------------------------------
+2) ORDER FLOW PATCH (Admin-gated push to Zoho Books)
+---------------------------------------
+Current desired behavior:
+- On checkout submit:
+  - create local order with status='pending_approval'
+  - DO NOT push to Zoho yet
+  - show customer “Order submitted for approval”
+- In Admin “Pending Orders”:
+  - Approve changes status PENDING_APPROVAL -> APPROVED
+  - Only at this moment push to Zoho Books (Sales Order preferred; or Invoice DRAFT if used)
+  - Store zoho_books_doc_id on local order
+  - If Zoho push fails: keep retryable state + allow retry from Admin
+
+PATCH IMPLEMENTATION:
+- Update checkout handler to ensure:
+  - creates local order status='pending_approval'
+  - no Zoho Books call occurs at checkout time
+- Update admin “Approve Order” action to:
+  (a) Transition order status PENDING_APPROVAL -> APPROVED
+  (b) Call Zoho Books API to create the order document (Sales Order preferred)
+  (c) On success:
+      - store zoho_books_salesorder_id (or invoice_id) on order
+      - set order status='submitted_to_zoho' (or keep 'approved' but must store Zoho ID)
+  (d) On failure:
+      - set order status='zoho_push_failed'
+      - enqueue retry job: job_type='push_order_to_zoho', payload includes order_id
+      - show Admin “Retry push to Zoho” button
+
+- Update admin “Reject Order” action:
+  - set order status='rejected'
+  - since Zoho doc was never created before approval, no Zoho cancellation needed
+
+---------------------------------------
+3) INVENTORY BUYABILITY PATCH (qty <= 0 not buyable)
+---------------------------------------
+- Ensure BUYABLE definition is enforced:
+  BUYABLE iff products.is_online=true AND quantity_available > 0
+- API enforcement:
+  - Add-to-cart endpoint must reject if qty <= 0
+  - Checkout must revalidate before creating order; reject and show unavailable SKUs if qty <= 0
+- UI enforcement:
+  - Grey out tiles where qty <= 0, show “Out of stock”
+  - Disable add-to-cart buttons accordingly
+
+---------------------------------------
+4) SYNC SCHEDULE PATCH (only if scheduler exists)
+---------------------------------------
+If you already have scheduled jobs:
+- Change cadence to:
+  - Every 2 hours during 09:00–19:00 local time
+  - Every 6 hours otherwise
+If scheduler is not implemented yet:
+- Add TODO in docs/operations.md describing this schedule.
+Do NOT build a brand new scheduling system in this patch unless already present.
+
+---------------------------------------
+5) REQUIRED GUARDS (confirm / add minimally)
+---------------------------------------
+- Storefront listing APIs must always filter products.is_online=true
+- Product detail must 404 if is_online!=true
+- Customers sync: active-only
+- Inactive Zoho customers must suspend linked users and block login
+
+---------------------------------------
+OUTPUT REQUIREMENTS
+---------------------------------------
+- Implement minimal code changes only in:
+  - admin approval handlers/routes
+  - checkout handler
+  - Zoho Books client module (create customer + create sales order)
+  - job worker for retries
+  - buyability checks in cart/checkout endpoints and UI components
+- Add/adjust DB fields only if required:
+  - business_intakes.status variants
+  - orders.status variants
+  - orders.zoho_books_doc_id
+- Update Admin UI:
+  - show status + error messages
+  - provide “Retry” buttons for failed Zoho operations
+
+STOP after applying this patch.
+Summarize exactly which files were changed and what new statuses were added.
+Ask whether to proceed.

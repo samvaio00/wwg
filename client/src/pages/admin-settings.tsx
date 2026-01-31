@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { RefreshCw, CheckCircle, XCircle, Loader2, Package, AlertTriangle } from "lucide-react";
+import { RefreshCw, CheckCircle, XCircle, Loader2, Package, AlertTriangle, Clock, RotateCcw, Play } from "lucide-react";
 
 interface SyncResult {
   created: number;
@@ -20,10 +20,78 @@ interface TestResult {
   message: string;
 }
 
+interface Job {
+  id: string;
+  jobType: string;
+  status: string;
+  userId: string | null;
+  orderId: string | null;
+  attempts: number | null;
+  maxAttempts: number | null;
+  errorMessage: string | null;
+  createdAt: string;
+  lastAttemptAt: string | null;
+}
+
+interface JobsResponse {
+  pending: Job[];
+  failed: Job[];
+  totalPending: number;
+  totalFailed: number;
+}
+
 export default function AdminSettingsPage() {
   const { toast } = useToast();
   const [lastSyncResult, setLastSyncResult] = useState<SyncResult | null>(null);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
+
+  const { data: jobsData, isLoading: jobsLoading } = useQuery<JobsResponse>({
+    queryKey: ["/api/admin/jobs"],
+  });
+
+  const retryJobMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      const res = await apiRequest("POST", `/api/admin/jobs/${jobId}/retry`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/jobs"] });
+      toast({
+        title: "Job Queued",
+        description: "The job has been queued for retry",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to retry job",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const processJobsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/jobs/process", {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/jobs"] });
+      const successCount = data.results?.filter((r: { success: boolean }) => r.success).length || 0;
+      const failCount = data.results?.length - successCount || 0;
+      toast({
+        title: "Jobs Processed",
+        description: `${successCount} succeeded, ${failCount} failed`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to process jobs",
+        variant: "destructive",
+      });
+    },
+  });
 
   const testMutation = useMutation({
     mutationFn: async () => {
@@ -190,6 +258,149 @@ export default function AdminSettingsPage() {
                 </div>
               )}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Failed Zoho Jobs */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Zoho Sync Jobs
+          </CardTitle>
+          <CardDescription>
+            View and retry failed Zoho operations (customer creation, order push)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <Button
+              onClick={() => processJobsMutation.mutate()}
+              disabled={processJobsMutation.isPending || !jobsData?.totalPending}
+              data-testid="button-process-jobs"
+            >
+              {processJobsMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Process Pending Jobs ({jobsData?.totalPending || 0})
+                </>
+              )}
+            </Button>
+          </div>
+
+          {jobsLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading jobs...
+            </div>
+          ) : (
+            <>
+              {/* Summary badges */}
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">
+                  Pending: {jobsData?.totalPending || 0}
+                </Badge>
+                {(jobsData?.totalFailed || 0) > 0 && (
+                  <Badge variant="destructive">
+                    Failed: {jobsData?.totalFailed || 0}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Pending jobs list */}
+              {jobsData?.pending && jobsData.pending.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Pending Jobs</h4>
+                  <div className="space-y-2">
+                    {jobsData.pending.map((job) => (
+                      <div
+                        key={job.id}
+                        className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
+                        data-testid={`job-pending-${job.id}`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {job.jobType === "create_zoho_customer" ? "Create Customer" : "Push Order"}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              Attempts: {job.attempts || 0}/{job.maxAttempts || 3}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Created: {new Date(job.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Failed jobs list */}
+              {jobsData?.failed && jobsData.failed.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                    Failed Jobs
+                  </h4>
+                  <div className="space-y-2">
+                    {jobsData.failed.map((job) => (
+                      <div
+                        key={job.id}
+                        className="p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950"
+                        data-testid={`job-failed-${job.id}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="destructive" className="text-xs">
+                                {job.jobType === "create_zoho_customer" ? "Create Customer" : "Push Order"}
+                              </Badge>
+                              <span className="text-xs text-red-600 dark:text-red-400">
+                                Failed after {job.attempts || 0} attempts
+                              </span>
+                            </div>
+                            {job.errorMessage && (
+                              <p className="text-xs text-red-700 dark:text-red-300">
+                                {job.errorMessage}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              Last attempt: {job.lastAttemptAt ? new Date(job.lastAttemptAt).toLocaleString() : 'N/A'}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => retryJobMutation.mutate(job.id)}
+                            disabled={retryJobMutation.isPending}
+                            data-testid={`button-retry-job-${job.id}`}
+                          >
+                            <RotateCcw className="h-3 w-3 mr-1" />
+                            Retry
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* No jobs message */}
+              {!jobsData?.pending?.length && !jobsData?.failed?.length && (
+                <div className="text-center py-4 text-muted-foreground">
+                  <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                  <p className="text-sm">All Zoho operations are up to date</p>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

@@ -7,6 +7,11 @@ interface SchedulerConfig {
   customerSyncIntervalMinutes: number;
   embeddingsUpdateIntervalMinutes: number;
   enabled: boolean;
+  useBusinessHours: boolean;
+  businessHoursIntervalMinutes: number;
+  offHoursIntervalMinutes: number;
+  businessStartHour: number;
+  businessEndHour: number;
 }
 
 const DEFAULT_CONFIG: SchedulerConfig = {
@@ -14,7 +19,30 @@ const DEFAULT_CONFIG: SchedulerConfig = {
   customerSyncIntervalMinutes: 60,
   embeddingsUpdateIntervalMinutes: 120,
   enabled: true,
+  useBusinessHours: true,
+  businessHoursIntervalMinutes: 120,
+  offHoursIntervalMinutes: 360,
+  businessStartHour: 8,
+  businessEndHour: 18,
 };
+
+function isBusinessHours(): boolean {
+  const now = new Date();
+  const hour = now.getHours();
+  const day = now.getDay();
+  const isWeekend = day === 0 || day === 6;
+  if (isWeekend) return false;
+  return hour >= config.businessStartHour && hour < config.businessEndHour;
+}
+
+function getCurrentSyncInterval(): number {
+  if (!config.useBusinessHours) {
+    return config.zohoSyncIntervalMinutes;
+  }
+  return isBusinessHours()
+    ? config.businessHoursIntervalMinutes
+    : config.offHoursIntervalMinutes;
+}
 
 let config = { ...DEFAULT_CONFIG };
 let zohoSyncInterval: NodeJS.Timeout | null = null;
@@ -25,13 +53,19 @@ let lastCustomerSync: Date | null = null;
 let lastEmbeddingsUpdate: Date | null = null;
 
 export function getSchedulerStatus() {
+  const currentInterval = getCurrentSyncInterval();
   return {
     enabled: config.enabled,
+    useBusinessHours: config.useBusinessHours,
+    isBusinessHours: isBusinessHours(),
+    currentIntervalMinutes: currentInterval,
+    businessHoursIntervalMinutes: config.businessHoursIntervalMinutes,
+    offHoursIntervalMinutes: config.offHoursIntervalMinutes,
     zohoSync: {
-      intervalMinutes: config.zohoSyncIntervalMinutes,
+      intervalMinutes: currentInterval,
       lastRun: lastZohoSync,
       nextRun: lastZohoSync && config.enabled
-        ? new Date(lastZohoSync.getTime() + config.zohoSyncIntervalMinutes * 60 * 1000)
+        ? new Date(lastZohoSync.getTime() + currentInterval * 60 * 1000)
         : null,
       running: zohoSyncInterval !== null,
     },
@@ -93,6 +127,21 @@ async function runEmbeddingsUpdate() {
   }
 }
 
+function scheduleNextZohoSync() {
+  const interval = getCurrentSyncInterval();
+  console.log(`[Scheduler] Next Zoho sync in ${interval} minutes (${isBusinessHours() ? 'business hours' : 'off-hours'})`);
+  
+  zohoSyncInterval = setTimeout(async () => {
+    try {
+      await runZohoSync();
+    } catch (error) {
+      console.error("[Scheduler] Zoho sync failed, will retry on next interval:", error);
+    } finally {
+      scheduleNextZohoSync();
+    }
+  }, interval * 60 * 1000);
+}
+
 export function startScheduler(newConfig?: Partial<SchedulerConfig>) {
   if (newConfig) {
     config = { ...config, ...newConfig };
@@ -105,14 +154,17 @@ export function startScheduler(newConfig?: Partial<SchedulerConfig>) {
 
   stopScheduler();
 
-  console.log(`[Scheduler] Starting scheduler with Zoho sync every ${config.zohoSyncIntervalMinutes} minutes`);
+  if (config.useBusinessHours) {
+    console.log(`[Scheduler] Starting scheduler with dynamic intervals:`);
+    console.log(`[Scheduler]   Business hours (${config.businessStartHour}:00-${config.businessEndHour}:00): ${config.businessHoursIntervalMinutes} minutes`);
+    console.log(`[Scheduler]   Off-hours/weekends: ${config.offHoursIntervalMinutes} minutes`);
+  } else {
+    console.log(`[Scheduler] Starting scheduler with Zoho sync every ${config.zohoSyncIntervalMinutes} minutes`);
+  }
   console.log(`[Scheduler] Customer sync every ${config.customerSyncIntervalMinutes} minutes`);
   console.log(`[Scheduler] Embeddings update every ${config.embeddingsUpdateIntervalMinutes} minutes`);
 
-  zohoSyncInterval = setInterval(
-    runZohoSync,
-    config.zohoSyncIntervalMinutes * 60 * 1000
-  );
+  scheduleNextZohoSync();
 
   customerSyncInterval = setInterval(
     runCustomerSync,
@@ -135,9 +187,9 @@ export function startScheduler(newConfig?: Partial<SchedulerConfig>) {
 
 export function stopScheduler() {
   if (zohoSyncInterval) {
-    clearInterval(zohoSyncInterval);
+    clearTimeout(zohoSyncInterval);
     zohoSyncInterval = null;
-    console.log("[Scheduler] Zoho sync interval stopped");
+    console.log("[Scheduler] Zoho sync stopped");
   }
   if (customerSyncInterval) {
     clearInterval(customerSyncInterval);

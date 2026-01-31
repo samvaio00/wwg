@@ -50,6 +50,42 @@ const sortOptions = [
   { value: "name-desc", label: "Name: Z to A" },
 ];
 
+function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  
+  // Use Zoho proxy endpoint if product has zohoItemId, otherwise fall back to stored imageUrl
+  const imageUrl = product.zohoItemId 
+    ? `/api/products/${product.id}/image`
+    : product.imageUrl;
+  
+  if (!imageUrl || imageError) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Package className="h-16 w-16 text-muted-foreground" />
+      </div>
+    );
+  }
+  
+  return (
+    <>
+      {!imageLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Package className="h-16 w-16 text-muted-foreground animate-pulse" />
+        </div>
+      )}
+      <img 
+        src={imageUrl} 
+        alt={product.name}
+        className={`object-cover w-full h-full ${isOutOfStock ? "grayscale" : ""} ${imageLoaded ? "" : "opacity-0"}`}
+        loading="lazy"
+        onError={() => setImageError(true)}
+        onLoad={() => setImageLoaded(true)}
+      />
+    </>
+  );
+}
+
 function ProductCard({ product, onAddToCart, isAddingToCart }: { 
   product: Product; 
   onAddToCart: (productId: string, quantity: number) => void;
@@ -86,18 +122,10 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
       data-testid={`card-product-${product.id}`}
     >
       <div className="aspect-square relative bg-muted">
-        {product.imageUrl ? (
-          <img 
-            src={product.imageUrl} 
-            alt={product.name}
-            className={`object-cover w-full h-full ${isOutOfStock ? "grayscale" : ""}`}
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <Package className="h-16 w-16 text-muted-foreground" />
-          </div>
-        )}
+        <ProductImage 
+          product={product} 
+          isOutOfStock={isOutOfStock}
+        />
         <Badge className="absolute top-2 left-2" variant="secondary">
           {product.category}
         </Badge>

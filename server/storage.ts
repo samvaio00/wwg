@@ -60,6 +60,7 @@ export interface IStorage {
   // Product operations
   getProducts(options?: { category?: string; search?: string; sortBy?: string; sortOrder?: string; includeOffline?: boolean; limit?: number; offset?: number }): Promise<{ products: Product[]; totalCount: number }>;
   getProduct(id: string): Promise<Product | undefined>;
+  getProductInternal(id: string): Promise<Product | undefined>;
   getProductBySku(sku: string): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product | undefined>;

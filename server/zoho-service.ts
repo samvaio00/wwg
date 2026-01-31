@@ -672,3 +672,52 @@ export async function getCustomerPriceForProduct(
 
   return price?.customPrice || null;
 }
+
+// Fetch product image from Zoho Inventory
+export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data: Buffer; contentType: string } | null> {
+  try {
+    const accessToken = await getAccessToken();
+    const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
+
+    if (!organizationId) {
+      console.error("[Zoho Image] Organization ID not configured");
+      return null;
+    }
+
+    // Use zohoapis.com domain consistent with other API calls
+    const url = `https://www.zohoapis.com/inventory/v1/items/${zohoItemId}/image?organization_id=${organizationId}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      // Handle 404 or 400 with "Attachment not found" as no image available
+      if (response.status === 404) {
+        return null;
+      }
+      
+      const errorText = await response.text().catch(() => '');
+      
+      // Zoho returns 400 with "Attachment not found" when there's no image
+      if (response.status === 400 && errorText.includes('Attachment not found')) {
+        return null;
+      }
+      
+      // Log other errors for debugging
+      console.error(`[Zoho Image] Error fetching image for ${zohoItemId}: ${response.status} - ${errorText.substring(0, 200)}`);
+      return null;
+    }
+
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+    const arrayBuffer = await response.arrayBuffer();
+    const data = Buffer.from(arrayBuffer);
+
+    return { data, contentType };
+  } catch (error) {
+    console.error(`[Zoho Image] Error fetching image for ${zohoItemId}:`, error);
+    return null;
+  }
+}

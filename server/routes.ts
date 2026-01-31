@@ -17,7 +17,7 @@ import { db } from "./db";
 import { users, products, orders } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
-import { syncProductsFromZoho, testZohoConnection } from "./zoho-service";
+import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage } from "./zoho-service";
 import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, type ZohoLineItem } from "./zoho-books-service";
 import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
@@ -553,6 +553,38 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching product:", error);
       res.status(500).json({ message: "Failed to fetch product" });
+    }
+  });
+
+  // Get product image from Zoho (proxy endpoint)
+  app.get("/api/products/:id/image", async (req, res) => {
+    try {
+      // Use getProductInternal to include offline products for images
+      const product = await storage.getProductInternal(req.params.id);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      
+      if (!product.zohoItemId) {
+        return res.status(404).json({ message: "No Zoho item linked" });
+      }
+      
+      const imageData = await fetchZohoProductImage(product.zohoItemId);
+      if (!imageData) {
+        return res.status(404).json({ message: "No image available" });
+      }
+      
+      // Set caching headers for 1 hour
+      res.set({
+        "Content-Type": imageData.contentType,
+        "Cache-Control": "public, max-age=3600",
+        "ETag": `"${product.zohoItemId}"`,
+      });
+      
+      res.send(imageData.data);
+    } catch (error) {
+      console.error("Error fetching product image:", error);
+      res.status(500).json({ message: "Failed to fetch product image" });
     }
   });
 

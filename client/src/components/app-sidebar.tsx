@@ -104,7 +104,7 @@ export function AppSidebar() {
         <Link href="/" className="flex items-center gap-2 text-sidebar-foreground">
           <Package className="h-8 w-8" />
           <div className="flex flex-col">
-            <span className="text-lg font-bold">WholesaleHub</span>
+            <span className="text-lg font-bold">Warner Wireless Gears</span>
             <span className="text-xs text-sidebar-foreground/70">B2B Commerce</span>
           </div>
         </Link>

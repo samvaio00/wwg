@@ -75,7 +75,7 @@ export default function RegisterPage() {
         <div className="flex flex-col items-center space-y-2 text-center">
           <div className="flex items-center gap-2 text-primary">
             <Package className="h-10 w-10" />
-            <span className="text-2xl font-bold">WholesaleHub</span>
+            <span className="text-2xl font-bold">Warner Wireless Gears</span>
           </div>
           <p className="text-muted-foreground">B2B Wholesale Commerce Platform</p>
         </div>

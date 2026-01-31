@@ -133,6 +133,9 @@ npm run db:push
   - On login: Check Zoho Books status; if inactive, suspend user and block login
   - Backend service: `server/zoho-books-service.ts`
   - Users table stores `zohoCustomerId` for linked Zoho Books customers
+  - **Email Search**: Checks both main contact email AND contact persons' emails simultaneously
+    - Uses parallel API calls to `/contacts` and `/contacts/contactpersons` endpoints
+    - A match in either email field identifies the customer
 
 ### Phase 4 (Complete) - Shopping Experience
 - Product catalog with responsive grid layout

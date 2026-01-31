@@ -100,12 +100,11 @@ async function getAccessToken(): Promise<string> {
 
 async function fetchZohoItems(page: number = 1): Promise<ZohoItemsResponse> {
   const accessToken = await getAccessToken();
-  const organizationId = process.env.ZOHO_ORGANIZATION_ID;
+  const organizationId = process.env.ZOHO_ORGANIZATION_ID || process.env.ZOHO_ORG_ID;
 
   if (!organizationId) {
     throw new Error("Zoho organization ID not configured");
   }
-
   const response = await fetch(
     `https://www.zohoapis.com/inventory/v1/items?organization_id=${organizationId}&page=${page}&per_page=100`,
     {

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { AICartBuilder } from "@/components/ai-cart-builder";
 import { 
   Search, 
   ShoppingCart, 
@@ -290,9 +291,12 @@ export default function ProductsPage() {
             Browse our wholesale catalog
           </p>
         </div>
-        <Badge variant="secondary" className="w-fit">
-          {isLoading ? "..." : products.length} products
-        </Badge>
+        <div className="flex items-center gap-3 flex-wrap">
+          <AICartBuilder />
+          <Badge variant="secondary" className="w-fit">
+            {isLoading ? "..." : products.length} products
+          </Badge>
+        </div>
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">

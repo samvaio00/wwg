@@ -461,3 +461,9 @@ export function generateAICacheKey(
   }
   return `${feature}_${Math.abs(hash).toString(36)}`;
 }
+
+// ================================================================
+// AI CHAT MODELS (for Replit AI Integrations)
+// ================================================================
+
+export * from "./models/chat";

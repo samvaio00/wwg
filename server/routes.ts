@@ -16,6 +16,7 @@ import { z } from "zod";
 import { db } from "./db";
 import { users, products } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { aiCartBuilder, aiEnhancedSearch } from "./ai-service";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -623,6 +624,48 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error seeding products:", error);
       res.status(500).json({ message: "Failed to seed products" });
+    }
+  });
+
+  // ================================================================
+  // AI FEATURES
+  // ================================================================
+
+  // AI Cart Builder - build a cart from natural language
+  app.post("/api/ai/cart-builder", requireAuth, async (req, res) => {
+    try {
+      const { prompt } = req.body;
+      
+      if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+        return res.status(400).json({ message: "Please provide a description of what you're looking for" });
+      }
+
+      const userId = req.session.userId || null;
+      const result = await aiCartBuilder(userId, prompt.trim());
+      
+      res.json(result);
+    } catch (error) {
+      console.error("AI Cart Builder error:", error);
+      res.status(500).json({ message: "AI assistant is temporarily unavailable. Please try again." });
+    }
+  });
+
+  // AI Enhanced Search - semantic product search
+  app.post("/api/ai/search", requireAuth, async (req, res) => {
+    try {
+      const { query, category } = req.body;
+      
+      if (!query || typeof query !== 'string' || query.trim().length === 0) {
+        return res.status(400).json({ message: "Please provide a search query" });
+      }
+
+      const userId = req.session.userId || null;
+      const result = await aiEnhancedSearch(userId, query.trim(), category);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("AI Search error:", error);
+      res.status(500).json({ message: "AI search is temporarily unavailable. Please try again." });
     }
   });
 

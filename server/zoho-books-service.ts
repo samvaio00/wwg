@@ -72,6 +72,19 @@ export interface ZohoCustomerResult {
   message: string;
 }
 
+interface ZohoContactPerson {
+  contact_id: string;
+  contact_name: string;
+  contact_person_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+}
+
+interface ZohoContactPersonsResponse {
+  contact_persons: ZohoContactPerson[];
+}
+
 export async function checkZohoCustomerByEmail(email: string): Promise<ZohoCustomerResult> {
   try {
     const accessToken = await getAccessToken();
@@ -81,12 +94,12 @@ export async function checkZohoCustomerByEmail(email: string): Promise<ZohoCusto
       throw new Error("Zoho organization ID not configured");
     }
 
-    // Search for customer by email in Zoho Books
     const searchEmail = encodeURIComponent(email.toLowerCase());
-    console.log(`[Zoho Books] Searching for customer with email: ${email}`);
+    console.log(`[Zoho Books] Searching for contact person with email: ${email}`);
     
-    const response = await fetch(
-      `https://www.zohoapis.com/books/v3/contacts?organization_id=${organizationId}&email=${searchEmail}`,
+    // Search contact persons by email (this searches all email fields)
+    const cpResponse = await fetch(
+      `https://www.zohoapis.com/books/v3/contacts/contactpersons?organization_id=${organizationId}&email=${searchEmail}`,
       {
         headers: {
           Authorization: `Zoho-oauthtoken ${accessToken}`,
@@ -94,37 +107,94 @@ export async function checkZohoCustomerByEmail(email: string): Promise<ZohoCusto
       }
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    if (!cpResponse.ok) {
+      const errorText = await cpResponse.text();
       console.error("Zoho Books API error:", errorText);
       throw new Error(`Failed to check Zoho Books customer: ${errorText}`);
     }
 
-    const data: ZohoContactsResponse = await response.json();
-    const contacts = data.contacts || [];
+    const cpData: ZohoContactPersonsResponse = await cpResponse.json();
+    const contactPersons = cpData.contact_persons || [];
     
-    console.log(`[Zoho Books] Found ${contacts.length} contacts for email ${email}`);
-    contacts.forEach((c, i) => {
-      console.log(`[Zoho Books] Contact ${i}: email=${c.email}, type=${c.contact_type}, status=${c.status}, name=${c.contact_name}`);
-    });
+    console.log(`[Zoho Books] Found ${contactPersons.length} contact persons for email ${email}`);
 
-    // Find contact matching email (accept any contact type, will validate customer separately)
-    const matchingContact = contacts.find(
-      (c) => c.email?.toLowerCase() === email.toLowerCase()
-    );
+    if (contactPersons.length === 0) {
+      // Also check main contact email as fallback
+      console.log(`[Zoho Books] No contact persons found, checking main contacts...`);
+      const contactResponse = await fetch(
+        `https://www.zohoapis.com/books/v3/contacts?organization_id=${organizationId}&email=${searchEmail}`,
+        {
+          headers: {
+            Authorization: `Zoho-oauthtoken ${accessToken}`,
+          },
+        }
+      );
 
-    if (!matchingContact) {
-      console.log(`[Zoho Books] No matching contact found for email: ${email}`);
+      if (contactResponse.ok) {
+        const contactData: ZohoContactsResponse = await contactResponse.json();
+        const contacts = contactData.contacts || [];
+        const matchingContact = contacts.find(
+          (c) => c.email?.toLowerCase() === email.toLowerCase() && c.contact_type === "customer"
+        );
+        
+        if (matchingContact) {
+          const isActive = matchingContact.status === "active";
+          console.log(`[Zoho Books] Customer found via main email: ${matchingContact.contact_name}, active=${isActive}`);
+          return {
+            found: true,
+            active: isActive,
+            customerId: matchingContact.contact_id,
+            customerName: matchingContact.contact_name,
+            companyName: matchingContact.company_name,
+            message: isActive
+              ? "Customer account verified"
+              : "Your customer account is inactive. Please contact support to reactivate your account.",
+          };
+        }
+      }
+
+      console.log(`[Zoho Books] No matching customer found for email: ${email}`);
       return {
         found: false,
         active: false,
         message: "No customer account found with this email in our system. Please contact us to set up a wholesale account.",
+      };
+    }
+
+    // Found contact person - get the parent contact details
+    const contactPerson = contactPersons[0];
+    console.log(`[Zoho Books] Contact person found: ${contactPerson.first_name} ${contactPerson.last_name}, contact: ${contactPerson.contact_name}`);
+    
+    // Get the full contact details to check type and status
+    const contactResponse = await fetch(
+      `https://www.zohoapis.com/books/v3/contacts/${contactPerson.contact_id}?organization_id=${organizationId}`,
+      {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${accessToken}`,
+        },
+      }
+    );
+
+    if (!contactResponse.ok) {
+      const errorText = await contactResponse.text();
+      console.error("Zoho Books API error getting contact:", errorText);
+      throw new Error(`Failed to get Zoho Books contact: ${errorText}`);
+    }
+
+    const contactData = await contactResponse.json();
+    const contact = contactData.contact;
+
+    if (!contact) {
+      return {
+        found: false,
+        active: false,
+        message: "Customer account not found.",
       };
     }
 
     // Check if it's a customer type contact
-    if (matchingContact.contact_type !== "customer") {
-      console.log(`[Zoho Books] Contact found but type is ${matchingContact.contact_type}, not customer`);
+    if (contact.contact_type !== "customer") {
+      console.log(`[Zoho Books] Contact found but type is ${contact.contact_type}, not customer`);
       return {
         found: false,
         active: false,
@@ -132,15 +202,15 @@ export async function checkZohoCustomerByEmail(email: string): Promise<ZohoCusto
       };
     }
 
-    const isActive = matchingContact.status === "active";
-    console.log(`[Zoho Books] Customer found: ${matchingContact.contact_name}, active=${isActive}`);
+    const isActive = contact.status === "active";
+    console.log(`[Zoho Books] Customer verified: ${contact.contact_name}, active=${isActive}`);
 
     return {
       found: true,
       active: isActive,
-      customerId: matchingContact.contact_id,
-      customerName: matchingContact.contact_name,
-      companyName: matchingContact.company_name,
+      customerId: contact.contact_id,
+      customerName: contact.contact_name,
+      companyName: contact.company_name,
       message: isActive
         ? "Customer account verified"
         : "Your customer account is inactive. Please contact support to reactivate your account.",

@@ -1108,9 +1108,11 @@ export async function registerRoutes(
   });
 
   // Sync products from Zoho Inventory
+  // Use ?full=true to force a full sync instead of incremental
   app.post("/api/admin/zoho/sync", requireAdmin, async (req, res) => {
     try {
-      const result = await syncProductsFromZoho();
+      const forceFullSync = req.query.full === "true";
+      const result = await syncProductsFromZoho("admin", forceFullSync);
       res.json(result);
     } catch (error) {
       console.error("Zoho sync error:", error);

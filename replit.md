@@ -32,7 +32,7 @@ The platform is built with a modern web stack:
 
 ## External Dependencies
 
-- **Zoho Inventory**: Integrated for product synchronization, online store visibility (via `isOnline` field), and inventory management.
+- **Zoho Inventory**: Integrated for product synchronization, online store visibility (via `isOnline` field), inventory management, and dynamic category synchronization. Categories are synced directly from Zoho with products automatically mapped to their Zoho categories. Products without a Zoho category are placed in "Other Items".
 - **Zoho Books**: Utilized for customer validation during signup, syncing customer active/inactive status, pushing approved sales orders, syncing price lists, and creating new customer records during admin approval.
 - **Replit AI Integrations**: Used for AI Cart Builder and AI Enhanced Search functionalities (specifically `gpt-4o-mini`).
 - **OpenAI API**: Optionally integrated for true vector embeddings in semantic search (text-embedding-3-small model) if an API key is provided.

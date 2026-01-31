@@ -271,11 +271,11 @@ export interface SyncResult {
   syncRunId?: string;
 }
 
-export async function syncProductsFromZoho(triggeredBy: string = "manual"): Promise<SyncResult> {
+export async function syncProductsFromZoho(triggeredBy: string = "manual", forceFullSync: boolean = false): Promise<SyncResult> {
   const startTime = Date.now();
   
-  // Get last successful sync time for incremental sync
-  const lastSyncTime = await getLastSuccessfulSyncTime(SyncType.ZOHO_INVENTORY);
+  // Get last successful sync time for incremental sync (unless forced full sync)
+  const lastSyncTime = forceFullSync ? null : await getLastSuccessfulSyncTime(SyncType.ZOHO_INVENTORY);
   const isIncremental = lastSyncTime !== null;
   
   const [syncRunRecord] = await db.insert(syncRuns).values({
@@ -352,9 +352,10 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual"): Prom
             const lowStockThreshold = showInOnlineStore ? (item.reorder_level || 10) : (existingProduct.length > 0 ? existingProduct[0].lowStockThreshold : 10);
             
             // Use Zoho category directly as slug (create slug from category name)
+            // Products without a category go to "other-items"
             const categorySlug = item.category_name 
               ? createCategorySlug(item.category_name) 
-              : "uncategorized";
+              : "other-items";
 
             if (existingProduct.length > 0) {
               await db

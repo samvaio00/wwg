@@ -20,6 +20,7 @@ import {
   Settings,
   Tag,
   BarChart3,
+  Home,
 } from "lucide-react";
 import type { Category } from "@shared/schema";
 
@@ -76,13 +77,26 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Categories</SidebarGroupLabel>
+          <SidebarGroupLabel>Browse</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location === "/"}
+                  data-testid="nav-home"
+                >
+                  <Link href="/">
+                    <Home className="h-4 w-4" />
+                    <span>Home</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               {categories.map((category) => (
                 <SidebarMenuItem key={category.id}>
                   <SidebarMenuButton
                     asChild
+                    isActive={location === `/products?category=${category.slug}`}
                     data-testid={`nav-category-${category.slug}`}
                   >
                     <Link href={`/products?category=${category.slug}`}>

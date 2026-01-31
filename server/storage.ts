@@ -95,6 +95,7 @@ export interface IStorage {
   setProductHighlight(productId: string, isHighlighted: boolean): Promise<Product | undefined>;
   getHiddenProducts(): Promise<Product[]>;
   getOutOfStockProducts(): Promise<Product[]>;
+  getLatestProductsOrGroups(limit?: number): Promise<Product[]>;
   getInactiveCustomers(): Promise<SafeUser[]>;
   getSyncHistory(limit?: number): Promise<SyncRun[]>;
   createSyncRun(syncType: string, triggeredBy: string): Promise<SyncRun>;
@@ -706,6 +707,39 @@ export class DatabaseStorage implements IStorage {
       .from(products)
       .where(and(eq(products.isOnline, true), lte(products.stockQuantity, 0)))
       .orderBy(desc(products.updatedAt));
+  }
+
+  async getLatestProductsOrGroups(limit: number = 12): Promise<Product[]> {
+    // Get all online products with non-negative stock, sorted by createdAt descending
+    const allProducts = await db.select()
+      .from(products)
+      .where(and(
+        eq(products.isOnline, true),
+        eq(products.isActive, true),
+        gte(products.stockQuantity, 0)
+      ))
+      .orderBy(desc(products.createdAt));
+    
+    // Deduplicate by group - keep only the first (newest) product per group
+    const seenGroups = new Set<string>();
+    const result: Product[] = [];
+    
+    for (const product of allProducts) {
+      if (result.length >= limit) break;
+      
+      if (product.zohoGroupId) {
+        // For grouped products, only include one per group
+        if (!seenGroups.has(product.zohoGroupId)) {
+          seenGroups.add(product.zohoGroupId);
+          result.push(product);
+        }
+      } else {
+        // Non-grouped products are counted individually
+        result.push(product);
+      }
+    }
+    
+    return result;
   }
 
   async getInactiveCustomers(): Promise<SafeUser[]> {

@@ -1148,6 +1148,18 @@ export async function registerRoutes(
     }
   });
 
+  // Get latest products/groups for What's New page
+  app.get("/api/latest-products", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 12;
+      const latest = await storage.getLatestProductsOrGroups(limit);
+      res.json({ products: latest });
+    } catch (error) {
+      console.error("Get latest products error:", error);
+      res.status(500).json({ message: "Failed to get latest products" });
+    }
+  });
+
   // Toggle product highlight status
   app.post("/api/admin/products/:id/highlight", requireAdmin, async (req, res) => {
     try {

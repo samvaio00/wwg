@@ -26,6 +26,7 @@ import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import HomePage from "@/pages/home";
+import WhatsNewPage from "@/pages/whats-new";
 import ProductsPage from "@/pages/products";
 import CartPage from "@/pages/cart";
 import CheckoutPage from "@/pages/checkout";
@@ -185,6 +186,7 @@ function AppRouter() {
     <AuthenticatedLayout>
       <Switch>
         <Route path="/" component={HomePage} />
+        <Route path="/whats-new" component={WhatsNewPage} />
         <Route path="/products" component={ProductsPage} />
         <Route path="/cart" component={CartPage} />
         <Route path="/checkout" component={CheckoutPage} />

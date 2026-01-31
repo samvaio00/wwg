@@ -21,6 +21,7 @@ import {
   Tag,
   BarChart3,
   Home,
+  Sparkles,
 } from "lucide-react";
 import type { Category } from "@shared/schema";
 
@@ -89,6 +90,18 @@ export function AppSidebar() {
                   <Link href="/">
                     <Home className="h-4 w-4" />
                     <span>Home</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location === "/whats-new"}
+                  data-testid="nav-whats-new"
+                >
+                  <Link href="/whats-new">
+                    <Sparkles className="h-4 w-4" />
+                    <span>What's New</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

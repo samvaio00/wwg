@@ -21,7 +21,8 @@ import {
   Plus,
   Minus,
   Check,
-  Tag
+  Tag,
+  Eye
 } from "lucide-react";
 import type { Product, Category } from "@shared/schema";
 
@@ -137,7 +138,21 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
           <span>Stock: {stockQty}</span>
         </div>
 
-        {!isGroupedProduct && (
+        {isGroupedProduct ? (
+          <Button 
+            className="w-full h-7"
+            size="sm"
+            variant="outline"
+            onClick={(e) => {
+              e.stopPropagation();
+              onProductClick(product);
+            }}
+            data-testid={`button-view-variants-${product.id}`}
+          >
+            <Eye className="h-3 w-3 mr-1" />
+            View Variants
+          </Button>
+        ) : (
           <div className="flex items-center gap-2">
             <div className="flex items-center border rounded h-7">
               <Button 

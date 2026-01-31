@@ -71,6 +71,7 @@ export interface IStorage {
   getUserOrders(userId: string): Promise<Order[]>;
   getAllOrders(): Promise<(Order & { user: SafeUser })[]>;
   updateOrderStatus(id: string, status: OrderStatusType, adminId?: string, reason?: string): Promise<Order | undefined>;
+  updateOrderZohoInfo(id: string, zohoSalesOrderId: string): Promise<Order | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -456,6 +457,19 @@ export class DatabaseStorage implements IStorage {
     
     const [updated] = await db.update(orders)
       .set(updateData)
+      .where(eq(orders.id, id))
+      .returning();
+    
+    return updated;
+  }
+
+  async updateOrderZohoInfo(id: string, zohoSalesOrderId: string): Promise<Order | undefined> {
+    const [updated] = await db.update(orders)
+      .set({
+        zohoSalesOrderId,
+        zohoPushedAt: new Date(),
+        updatedAt: new Date()
+      })
       .where(eq(orders.id, id))
       .returning();
     

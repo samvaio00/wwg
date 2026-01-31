@@ -16,9 +16,10 @@ import { z } from "zod";
 import { db } from "./db";
 import { users, products } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { aiCartBuilder, aiEnhancedSearch } from "./ai-service";
+import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
 import { syncProductsFromZoho, testZohoConnection } from "./zoho-service";
-import { checkZohoCustomerByEmail, checkZohoCustomerById } from "./zoho-books-service";
+import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, type ZohoLineItem } from "./zoho-books-service";
+import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -644,11 +645,70 @@ export async function registerRoutes(
   // Approve order
   app.post("/api/admin/orders/:id/approve", requireAdmin, async (req, res) => {
     try {
+      // Get order with items
+      const orderData = await storage.getOrderWithItems(req.params.id as string);
+      if (!orderData) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      // Update order status first
       const order = await storage.updateOrderStatus(req.params.id as string, OrderStatus.APPROVED, req.session.userId!);
       if (!order) {
         return res.status(404).json({ message: "Order not found" });
       }
-      res.json({ order, message: "Order approved" });
+
+      // Get customer to check for Zoho customer ID
+      const customer = await storage.getUser(order.userId);
+      if (!customer?.zohoCustomerId) {
+        console.log(`[Order Approve] Customer ${order.userId} has no Zoho customer ID, skipping Zoho push`);
+        return res.json({ order, message: "Order approved (not pushed to Zoho - no customer ID)" });
+      }
+
+      // Build line items for Zoho
+      const lineItems: ZohoLineItem[] = [];
+      for (const item of orderData.items) {
+        if (!item.product.zohoItemId) {
+          console.log(`[Order Approve] Product ${item.product.sku} has no Zoho item ID, skipping`);
+          continue;
+        }
+        lineItems.push({
+          item_id: item.product.zohoItemId,
+          quantity: item.quantity,
+          rate: parseFloat(item.unitPrice),
+          name: item.productName,
+          sku: item.sku,
+        });
+      }
+
+      if (lineItems.length === 0) {
+        console.log(`[Order Approve] No valid Zoho items found, skipping Zoho push`);
+        return res.json({ order, message: "Order approved (not pushed to Zoho - no mapped products)" });
+      }
+
+      // Push to Zoho Books
+      const zohoResult = await createZohoSalesOrder({
+        customerId: customer.zohoCustomerId,
+        orderNumber: order.orderNumber,
+        lineItems,
+        shippingAddress: order.shippingAddress || undefined,
+        shippingCity: order.shippingCity || undefined,
+        shippingState: order.shippingState || undefined,
+        shippingZipCode: order.shippingZipCode || undefined,
+        notes: `Web order from ${customer.businessName || customer.email}`,
+      });
+
+      if (zohoResult.success && zohoResult.salesOrderId) {
+        await storage.updateOrderZohoInfo(order.id, zohoResult.salesOrderId);
+        console.log(`[Order Approve] Order ${order.orderNumber} pushed to Zoho as ${zohoResult.salesOrderNumber}`);
+        res.json({ 
+          order: { ...order, zohoSalesOrderId: zohoResult.salesOrderId }, 
+          zohoSalesOrderNumber: zohoResult.salesOrderNumber,
+          message: "Order approved and pushed to Zoho Books" 
+        });
+      } else {
+        console.error(`[Order Approve] Failed to push to Zoho: ${zohoResult.message}`);
+        res.json({ order, message: `Order approved but Zoho push failed: ${zohoResult.message}` });
+      }
     } catch (error) {
       console.error("Error approving order:", error);
       res.status(500).json({ message: "Failed to approve order" });
@@ -818,6 +878,79 @@ export async function registerRoutes(
         skipped: 0, 
         total: 0,
         errors: [error instanceof Error ? error.message : "Unknown sync error"] 
+      });
+    }
+  });
+
+  // ================================================================
+  // AI EMBEDDINGS (Admin)
+  // ================================================================
+
+  // Generate product embeddings for semantic search
+  app.post("/api/admin/embeddings/generate", requireAdmin, async (_req, res) => {
+    try {
+      console.log("[Embeddings] Starting embedding generation...");
+      const result = await generateProductEmbeddings();
+      res.json({
+        success: true,
+        ...result,
+        message: `Processed ${result.processed} products: ${result.created} created, ${result.updated} updated, ${result.errors} errors`,
+      });
+    } catch (error) {
+      console.error("Embedding generation error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // ================================================================
+  // SCHEDULER (Admin)
+  // ================================================================
+
+  // Get scheduler status
+  app.get("/api/admin/scheduler/status", requireAdmin, async (_req, res) => {
+    try {
+      const status = getSchedulerStatus();
+      res.json(status);
+    } catch (error) {
+      console.error("Scheduler status error:", error);
+      res.status(500).json({ message: "Failed to get scheduler status" });
+    }
+  });
+
+  // Update scheduler configuration
+  app.patch("/api/admin/scheduler/config", requireAdmin, async (req, res) => {
+    try {
+      const { enabled, zohoSyncIntervalMinutes, embeddingsUpdateIntervalMinutes } = req.body;
+      updateSchedulerConfig({
+        ...(typeof enabled === "boolean" ? { enabled } : {}),
+        ...(typeof zohoSyncIntervalMinutes === "number" ? { zohoSyncIntervalMinutes } : {}),
+        ...(typeof embeddingsUpdateIntervalMinutes === "number" ? { embeddingsUpdateIntervalMinutes } : {}),
+      });
+      const status = getSchedulerStatus();
+      res.json({ success: true, status });
+    } catch (error) {
+      console.error("Scheduler config error:", error);
+      res.status(500).json({ message: "Failed to update scheduler config" });
+    }
+  });
+
+  // Trigger manual sync
+  app.post("/api/admin/scheduler/sync", requireAdmin, async (req, res) => {
+    try {
+      const { type = "all" } = req.body;
+      if (!["zoho", "embeddings", "all"].includes(type)) {
+        return res.status(400).json({ message: "Invalid sync type. Use: zoho, embeddings, or all" });
+      }
+      const results = await triggerManualSync(type);
+      res.json({ success: true, results });
+    } catch (error) {
+      console.error("Manual sync error:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: error instanceof Error ? error.message : "Sync failed" 
       });
     }
   });

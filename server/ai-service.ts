@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { db } from "./db";
-import { products, aiEvents, aiCache, generateAICacheKey } from "@shared/schema";
+import { products, aiEvents, aiCache, productEmbeddings, generateAICacheKey } from "@shared/schema";
 import { eq, ilike, or, and, gt, sql } from "drizzle-orm";
 
 const openai = new OpenAI({
@@ -338,4 +338,123 @@ Respond with JSON only:
       interpretation: "Showing keyword matches (AI search unavailable).",
     };
   }
+}
+
+// ================================================================
+// PRODUCT EMBEDDINGS GENERATION
+// ================================================================
+
+function generateEmbeddedContent(product: {
+  sku: string;
+  name: string;
+  category: string;
+  brand: string | null;
+  description: string | null;
+  tags: string[] | null;
+  subcategory: string | null;
+}): string {
+  const parts = [
+    `SKU: ${product.sku}`,
+    `Name: ${product.name}`,
+    `Category: ${product.category}`,
+    product.subcategory ? `Subcategory: ${product.subcategory}` : null,
+    product.brand ? `Brand: ${product.brand}` : null,
+    product.description ? `Description: ${product.description}` : null,
+    product.tags?.length ? `Tags: ${product.tags.join(", ")}` : null,
+  ].filter(Boolean);
+  
+  return parts.join(" | ");
+}
+
+export interface EmbeddingGenerationResult {
+  processed: number;
+  created: number;
+  updated: number;
+  errors: number;
+}
+
+export async function generateProductEmbeddings(): Promise<EmbeddingGenerationResult> {
+  const result: EmbeddingGenerationResult = {
+    processed: 0,
+    created: 0,
+    updated: 0,
+    errors: 0,
+  };
+
+  const allProducts = await db.select({
+    sku: products.sku,
+    name: products.name,
+    category: products.category,
+    subcategory: products.subcategory,
+    brand: products.brand,
+    description: products.description,
+    tags: products.tags,
+  })
+  .from(products)
+  .where(eq(products.isActive, true));
+
+  console.log(`[Embeddings] Processing ${allProducts.length} products`);
+
+  for (const product of allProducts) {
+    try {
+      result.processed++;
+      
+      const embeddedContent = generateEmbeddedContent(product);
+      
+      // Check if embedding exists
+      const [existing] = await db.select()
+        .from(productEmbeddings)
+        .where(eq(productEmbeddings.sku, product.sku));
+      
+      if (existing) {
+        // Update if content changed
+        if (existing.embeddedContent !== embeddedContent) {
+          await db.update(productEmbeddings)
+            .set({ 
+              embeddedContent,
+              embeddingModel: "pre-computed-content",
+              updatedAt: new Date(),
+            })
+            .where(eq(productEmbeddings.sku, product.sku));
+          result.updated++;
+        }
+      } else {
+        // Create new
+        await db.insert(productEmbeddings)
+          .values({
+            sku: product.sku,
+            embeddedContent,
+            embeddingModel: "pre-computed-content",
+          });
+        result.created++;
+      }
+    } catch (error) {
+      console.error(`[Embeddings] Error processing ${product.sku}:`, error);
+      result.errors++;
+    }
+  }
+
+  console.log(`[Embeddings] Complete: ${result.created} created, ${result.updated} updated, ${result.errors} errors`);
+  return result;
+}
+
+export async function getProductsWithEmbeddedContent(): Promise<Array<{
+  sku: string;
+  name: string;
+  category: string;
+  brand: string | null;
+  embeddedContent: string | null;
+}>> {
+  const result = await db.select({
+    sku: products.sku,
+    name: products.name,
+    category: products.category,
+    brand: products.brand,
+    embeddedContent: productEmbeddings.embeddedContent,
+  })
+  .from(products)
+  .leftJoin(productEmbeddings, eq(products.sku, productEmbeddings.sku))
+  .where(and(eq(products.isActive, true), eq(products.isOnline, true)));
+
+  return result;
 }

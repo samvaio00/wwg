@@ -168,10 +168,31 @@ npm run db:push
   - Category mapping: sunglasses, cellular, caps, perfumes, novelty
   - Custom field support for case pack size, min order quantity, etc.
 
-### Phase 6+ (Future)
-- Zoho Books order push (send orders to Zoho Books)
-- AI-powered embeddings for faster semantic search
-- Automated scheduled sync
+### Phase 6 (Complete) - Advanced Integration & Automation
+- **Zoho Books Order Push**: Approved orders automatically pushed to Zoho Books as Sales Orders
+  - Backend service: `server/zoho-books-service.ts` → `createZohoSalesOrder()`
+  - Auto-triggered on order approval if customer has Zoho customer ID
+  - Maps order items using product's `zohoItemId`
+  - Order stores `zohoSalesOrderId` and `zohoPushedAt` after successful push
+- **Pre-computed Searchable Content**: Product embeddings for optimized AI search
+  - Stores pre-computed searchable text in `product_embeddings` table
+  - Admin endpoint: POST /api/admin/embeddings/generate
+  - Note: True vector embeddings would require separate OpenAI API key
+- **Automated Scheduled Sync**: Periodic Zoho Inventory sync
+  - Backend service: `server/scheduler.ts`
+  - Runs Zoho sync every 60 minutes (configurable)
+  - Runs embeddings update every 120 minutes (configurable)
+  - Initial sync runs on server startup
+  - Admin endpoints:
+    - GET /api/admin/scheduler/status - View scheduler status
+    - PATCH /api/admin/scheduler/config - Update scheduler config
+    - POST /api/admin/scheduler/sync - Trigger manual sync
+  - Environment variables: SCHEDULER_ENABLED, ZOHO_SYNC_INTERVAL_MINUTES, EMBEDDINGS_UPDATE_INTERVAL_MINUTES
+
+### Phase 7+ (Future)
+- Sync `isOnline` from Zoho Inventory's "Show in Online Store" toggle
+- True vector embeddings with dedicated OpenAI API key
+- Order tracking and shipment notifications
 
 ## Online Store Visibility (isOnline field)
 
@@ -203,4 +224,4 @@ Inspired by: Amazon Business, McMaster-Carr, Shopify Plus B2B, Stripe, Apple Bus
 
 ---
 
-*Last updated: Phase 3 completion*
+*Last updated: Phase 6 completion*

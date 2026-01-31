@@ -5,6 +5,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
+import { startScheduler } from "./scheduler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -138,6 +139,18 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      
+      // Start the scheduler for automated syncs
+      const schedulerEnabled = process.env.SCHEDULER_ENABLED !== "false";
+      if (schedulerEnabled) {
+        startScheduler({
+          enabled: true,
+          zohoSyncIntervalMinutes: parseInt(process.env.ZOHO_SYNC_INTERVAL_MINUTES || "60", 10),
+          embeddingsUpdateIntervalMinutes: parseInt(process.env.EMBEDDINGS_UPDATE_INTERVAL_MINUTES || "120", 10),
+        });
+      } else {
+        log("Scheduler is disabled via SCHEDULER_ENABLED=false");
+      }
     },
   );
 })();

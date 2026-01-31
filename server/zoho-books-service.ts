@@ -260,3 +260,109 @@ export async function checkZohoCustomerById(customerId: string): Promise<ZohoCus
     throw err;
   }
 }
+
+// ================================================================
+// SALES ORDER PUSH
+// ================================================================
+
+export interface ZohoLineItem {
+  item_id: string;
+  quantity: number;
+  rate: number;
+  name?: string;
+  sku?: string;
+}
+
+export interface ZohoSalesOrderInput {
+  customerId: string;
+  orderNumber: string;
+  lineItems: ZohoLineItem[];
+  shippingAddress?: string;
+  shippingCity?: string;
+  shippingState?: string;
+  shippingZipCode?: string;
+  notes?: string;
+}
+
+export interface ZohoSalesOrderResult {
+  success: boolean;
+  salesOrderId?: string;
+  salesOrderNumber?: string;
+  message: string;
+}
+
+export async function createZohoSalesOrder(input: ZohoSalesOrderInput): Promise<ZohoSalesOrderResult> {
+  try {
+    const accessToken = await getAccessToken();
+    const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
+
+    if (!organizationId) {
+      throw new Error("Zoho organization ID not configured");
+    }
+
+    console.log(`[Zoho Books] Creating sales order for customer ${input.customerId}, order ${input.orderNumber}`);
+
+    // Build shipping address string
+    const shippingParts = [
+      input.shippingAddress,
+      input.shippingCity,
+      input.shippingState,
+      input.shippingZipCode,
+    ].filter(Boolean);
+    const shippingAddressStr = shippingParts.join(", ");
+
+    // Build the sales order payload
+    const salesOrderData = {
+      customer_id: input.customerId,
+      reference_number: input.orderNumber,
+      date: new Date().toISOString().split("T")[0],
+      line_items: input.lineItems.map((item) => ({
+        item_id: item.item_id,
+        quantity: item.quantity,
+        rate: item.rate,
+      })),
+      notes: input.notes || `Web order: ${input.orderNumber}`,
+      shipping_address: shippingAddressStr ? { address: shippingAddressStr } : undefined,
+    };
+
+    console.log(`[Zoho Books] Sales order payload:`, JSON.stringify(salesOrderData, null, 2));
+
+    const response = await fetch(
+      `https://www.zohoapis.com/books/v3/salesorders?organization_id=${organizationId}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Zoho-oauthtoken ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(salesOrderData),
+      }
+    );
+
+    const responseData = await response.json();
+
+    if (!response.ok || responseData.code !== 0) {
+      console.error("[Zoho Books] Sales order creation failed:", responseData);
+      return {
+        success: false,
+        message: responseData.message || "Failed to create sales order in Zoho Books",
+      };
+    }
+
+    const salesOrder = responseData.salesorder;
+    console.log(`[Zoho Books] Sales order created: ${salesOrder.salesorder_id} (${salesOrder.salesorder_number})`);
+
+    return {
+      success: true,
+      salesOrderId: salesOrder.salesorder_id,
+      salesOrderNumber: salesOrder.salesorder_number,
+      message: "Sales order created successfully",
+    };
+  } catch (err) {
+    console.error("Error creating Zoho sales order:", err);
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to create sales order",
+    };
+  }
+}

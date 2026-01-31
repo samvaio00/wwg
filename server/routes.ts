@@ -134,6 +134,113 @@ export async function registerRoutes(
     res.json({ user: toSafeUser(user) });
   });
 
+  // ================================================================
+  // ADMIN ROUTES
+  // ================================================================
+
+  // Admin: Get all users
+  app.get("/api/admin/users", requireAdmin, async (_req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      res.json({ users: allUsers });
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Admin: Get pending users
+  app.get("/api/admin/users/pending", requireAdmin, async (_req, res) => {
+    try {
+      const pendingUsers = await storage.getPendingUsers();
+      res.json({ users: pendingUsers });
+    } catch (error) {
+      console.error("Error fetching pending users:", error);
+      res.status(500).json({ message: "Failed to fetch pending users" });
+    }
+  });
+
+  // Admin: Approve user
+  app.post("/api/admin/users/:id/approve", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (user.status === UserStatus.APPROVED) {
+        return res.status(400).json({ message: "User is already approved" });
+      }
+      
+      const updatedUser = await storage.updateUserStatus(id, UserStatus.APPROVED, UserRole.CUSTOMER);
+      res.json({ user: updatedUser, message: "User approved successfully" });
+    } catch (error) {
+      console.error("Error approving user:", error);
+      res.status(500).json({ message: "Failed to approve user" });
+    }
+  });
+
+  // Admin: Reject user
+  app.post("/api/admin/users/:id/reject", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const updatedUser = await storage.updateUserStatus(id, UserStatus.REJECTED);
+      res.json({ user: updatedUser, message: "User rejected" });
+    } catch (error) {
+      console.error("Error rejecting user:", error);
+      res.status(500).json({ message: "Failed to reject user" });
+    }
+  });
+
+  // Admin: Suspend user
+  app.post("/api/admin/users/:id/suspend", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (user.role === UserRole.ADMIN) {
+        return res.status(400).json({ message: "Cannot suspend admin users" });
+      }
+      
+      const updatedUser = await storage.updateUserStatus(id, UserStatus.SUSPENDED);
+      res.json({ user: updatedUser, message: "User suspended" });
+    } catch (error) {
+      console.error("Error suspending user:", error);
+      res.status(500).json({ message: "Failed to suspend user" });
+    }
+  });
+
+  // Admin: Reactivate user
+  app.post("/api/admin/users/:id/reactivate", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Reactivate sets both status to approved and role to customer
+      const updatedUser = await storage.updateUserStatus(id, UserStatus.APPROVED, UserRole.CUSTOMER);
+      res.json({ user: updatedUser, message: "User reactivated" });
+    } catch (error) {
+      console.error("Error reactivating user:", error);
+      res.status(500).json({ message: "Failed to reactivate user" });
+    }
+  });
+
   // Admin: Create initial admin user (only works if no admins exist and ALLOW_ADMIN_SETUP is true)
   app.post("/api/admin/setup", async (req, res) => {
     try {

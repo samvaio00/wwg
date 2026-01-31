@@ -348,12 +348,20 @@ export const insertUserSchema = createInsertSchema(users).pick({
   businessName: true,
   contactName: true,
   phone: true,
+  address: true,
+  city: true,
+  state: true,
+  zipCode: true,
 }).extend({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   businessName: z.string().optional(),
   contactName: z.string().optional(),
   phone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zipCode: z.string().optional(),
 });
 
 export const loginSchema = z.object({

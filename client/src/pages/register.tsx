@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Building2, User, Phone, Mail, Lock } from "lucide-react";
+import { Loader2, Building2, User, Phone, Mail, Lock, MapPin } from "lucide-react";
 import wwgLogo from "@assets/wwg-logo_1769841225412.jpg";
 
 const registerSchema = z.object({
@@ -19,6 +19,10 @@ const registerSchema = z.object({
   businessName: z.string().min(2, "Business name is required"),
   contactName: z.string().min(2, "Contact name is required"),
   phone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zipCode: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -41,6 +45,10 @@ export default function RegisterPage() {
       businessName: "",
       contactName: "",
       phone: "",
+      address: "",
+      city: "",
+      state: "",
+      zipCode: "",
     },
   });
 
@@ -53,6 +61,10 @@ export default function RegisterPage() {
         businessName: data.businessName,
         contactName: data.contactName,
         phone: data.phone,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        zipCode: data.zipCode,
       });
       toast({
         title: "Registration successful!",
@@ -167,6 +179,81 @@ export default function RegisterPage() {
                             type="tel"
                             placeholder="(555) 123-4567"
                             data-testid="input-phone"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        Business Address (Optional)
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="123 Main Street"
+                          data-testid="input-address"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <FormField
+                    control={form.control}
+                    name="city"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>City</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="City"
+                            data-testid="input-city"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="state"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>State</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="CA"
+                            data-testid="input-state"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="zipCode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>ZIP Code</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="90210"
+                            data-testid="input-zip"
                             {...field}
                           />
                         </FormControl>

@@ -14,6 +14,8 @@ import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import HomePage from "@/pages/home";
+import AdminUsersPage from "@/pages/admin-users";
+import PendingApprovalPage from "@/pages/pending-approval";
 
 function LoadingScreen() {
   return (
@@ -51,7 +53,7 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
 }
 
 function AppRouter() {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, user } = useAuth();
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -67,13 +69,20 @@ function AppRouter() {
     );
   }
 
+  // Show pending approval page for users awaiting approval
+  if (user?.status === 'pending' || user?.status === 'rejected') {
+    return <PendingApprovalPage />;
+  }
+
   return (
     <AuthenticatedLayout>
       <Switch>
         <Route path="/" component={HomePage} />
         <Route path="/products" component={() => <PlaceholderPage title="Products" />} />
         <Route path="/cart" component={() => <PlaceholderPage title="Cart" />} />
-        <Route path="/admin/users" component={() => <PlaceholderPage title="User Management" />} />
+        <Route path="/orders" component={() => <PlaceholderPage title="Orders" />} />
+        <Route path="/admin/users" component={AdminUsersPage} />
+        <Route path="/admin/orders" component={() => <PlaceholderPage title="Order Management" />} />
         <Route path="/admin/settings" component={() => <PlaceholderPage title="Admin Settings" />} />
         <Route path="/settings" component={() => <PlaceholderPage title="Settings" />} />
         <Route component={NotFound} />

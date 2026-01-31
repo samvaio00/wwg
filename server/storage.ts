@@ -5,10 +5,12 @@ import {
   users, 
   toSafeUser,
   UserRole,
-  UserStatus 
+  UserStatus,
+  type UserStatusType,
+  type UserRoleType
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, desc, and, ne } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 12;
@@ -19,6 +21,11 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<SafeUser>;
   updateUserLastLogin(id: string): Promise<void>;
+  
+  // Admin user operations
+  getAllUsers(): Promise<SafeUser[]>;
+  getPendingUsers(): Promise<SafeUser[]>;
+  updateUserStatus(id: string, status: UserStatusType, role?: UserRoleType): Promise<SafeUser | undefined>;
   
   // Auth operations
   validatePassword(plainPassword: string, hashedPassword: string): Promise<boolean>;
@@ -45,6 +52,10 @@ export class DatabaseStorage implements IStorage {
       businessName: insertUser.businessName,
       contactName: insertUser.contactName,
       phone: insertUser.phone,
+      address: insertUser.address,
+      city: insertUser.city,
+      state: insertUser.state,
+      zipCode: insertUser.zipCode,
       role: UserRole.PENDING,
       status: UserStatus.PENDING,
     }).returning();
@@ -56,6 +67,39 @@ export class DatabaseStorage implements IStorage {
     await db.update(users)
       .set({ lastLoginAt: new Date() })
       .where(eq(users.id, id));
+  }
+
+  async getAllUsers(): Promise<SafeUser[]> {
+    const allUsers = await db.select()
+      .from(users)
+      .orderBy(desc(users.createdAt));
+    return allUsers.map(toSafeUser);
+  }
+
+  async getPendingUsers(): Promise<SafeUser[]> {
+    const pendingUsers = await db.select()
+      .from(users)
+      .where(eq(users.status, UserStatus.PENDING))
+      .orderBy(desc(users.createdAt));
+    return pendingUsers.map(toSafeUser);
+  }
+
+  async updateUserStatus(id: string, status: UserStatusType, role?: UserRoleType): Promise<SafeUser | undefined> {
+    const updateData: { status: UserStatusType; role?: UserRoleType; updatedAt: Date } = {
+      status,
+      updatedAt: new Date(),
+    };
+    
+    if (role) {
+      updateData.role = role;
+    }
+    
+    const [updatedUser] = await db.update(users)
+      .set(updateData)
+      .where(eq(users.id, id))
+      .returning();
+    
+    return updatedUser ? toSafeUser(updatedUser) : undefined;
   }
 
   async validatePassword(plainPassword: string, hashedPassword: string): Promise<boolean> {

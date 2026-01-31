@@ -119,12 +119,13 @@ npm run db:push
 - Seed data for all product categories
 - Documentation: zoho-mapping.md, ai.md
 
-### Phase 3 (Planned) - Signup Flow + Admin Approvals
-- Email-first signup with Zoho customer verification
-- Multi-step business intake for new retailers
-- Admin portal: intake review and approval
+### Phase 3 (Complete) - Signup Flow + Admin Approvals
+- Enhanced registration with address fields (address, city, state, zip)
+- Pending approval page for new registrants
+- Admin user management portal (approve, reject, suspend, reactivate)
+- Role-based routing (pending users see approval page)
 
-### Phase 4+ (Planned) - Full Features
+### Phase 4 (Planned) - Full Features
 - Product discovery with search and filters
 - Cart and checkout
 - Zoho integration
@@ -141,4 +142,4 @@ Inspired by: Amazon Business, McMaster-Carr, Shopify Plus B2B, Stripe, Apple Bus
 
 ---
 
-*Last updated: Phase 2 completion*
+*Last updated: Phase 3 completion*

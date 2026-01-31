@@ -104,7 +104,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
             Out of Stock
           </Badge>
         ) : isLowStock ? (
-          <Badge variant="secondary" className="absolute top-2 right-2 text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+          <Badge variant="secondary" className="absolute bottom-2 left-2 text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
             Low Stock
           </Badge>
         ) : null}

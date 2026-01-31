@@ -111,7 +111,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
             Out of Stock
           </Badge>
         ) : isLowStock && (
-          <Badge className="absolute top-2 right-2" variant="destructive">
+          <Badge className="absolute bottom-2 left-2" variant="destructive">
             Low Stock
           </Badge>
         )}

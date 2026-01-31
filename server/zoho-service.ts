@@ -223,6 +223,9 @@ async function fetchZohoCategories(): Promise<ZohoCategoriesResponse> {
     },
   });
 
+  // Log the API call
+  await logZohoApiCall("/inventory/v1/categories", "GET", response.status, response.ok, response.ok ? undefined : `Status: ${response.status}`);
+
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Failed to fetch Zoho categories: ${errorText}`);
@@ -841,6 +844,9 @@ async function fetchZohoItemGroups(page: number = 1): Promise<ZohoItemGroupsResp
     },
   });
 
+  // Log the API call
+  await logZohoApiCall("/inventory/v1/itemgroups", "GET", response.status, response.ok, response.ok ? undefined : `Status: ${response.status}`);
+
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Failed to fetch Zoho item groups: ${errorText}`);
@@ -970,6 +976,9 @@ export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data:
         Authorization: `Zoho-oauthtoken ${accessToken}`,
       },
     });
+
+    // Log the API call
+    await logZohoApiCall("/inventory/v1/items/image", "GET", response.status, response.ok, response.ok ? undefined : `Status: ${response.status}`);
 
     if (!response.ok) {
       // Handle 404 or 400 with "Attachment not found" as no image available

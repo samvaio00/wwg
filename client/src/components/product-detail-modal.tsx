@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   Dialog,
@@ -9,8 +9,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Package, Plus, Minus, Check, ShoppingCart, X } from "lucide-react";
+import { Package, Plus, Minus, Check, ShoppingCart, Layers } from "lucide-react";
 import type { Product } from "@shared/schema";
 
 interface ProductDetailModalProps {
@@ -19,7 +21,7 @@ interface ProductDetailModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {
+function ProductImage({ product, isOutOfStock, size = "large" }: { product: Product; isOutOfStock: boolean; size?: "large" | "small" }) {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   
@@ -27,10 +29,12 @@ function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStoc
     ? `/api/products/${product.id}/image`
     : product.imageUrl;
   
+  const iconSize = size === "large" ? "h-24 w-24" : "h-10 w-10";
+  
   if (!imageUrl || imageError) {
     return (
       <div className="flex items-center justify-center h-full bg-muted rounded-md">
-        <Package className="h-24 w-24 text-muted-foreground" />
+        <Package className={`${iconSize} text-muted-foreground`} />
       </div>
     );
   }
@@ -39,7 +43,7 @@ function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStoc
     <div className="relative h-full bg-muted rounded-md overflow-hidden">
       {!imageLoaded && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <Package className="h-24 w-24 text-muted-foreground animate-pulse" />
+          <Package className={`${iconSize} text-muted-foreground animate-pulse`} />
         </div>
       )}
       <img 
@@ -53,10 +57,130 @@ function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStoc
   );
 }
 
+function VariantCard({ 
+  variant, 
+  onAddToCart, 
+  isAddingToCart 
+}: { 
+  variant: Product; 
+  onAddToCart: (productId: string, quantity: number) => void;
+  isAddingToCart: boolean;
+}) {
+  const [quantity, setQuantity] = useState(variant.minOrderQuantity || 1);
+  const [justAdded, setJustAdded] = useState(false);
+  
+  const stockQty = variant.stockQuantity || 0;
+  const isOutOfStock = stockQty <= 0;
+  const isLowStock = stockQty > 0 && stockQty <= (variant.lowStockThreshold || 10);
+
+  const handleAddToCart = () => {
+    if (isOutOfStock) return;
+    onAddToCart(variant.id, quantity);
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 2000);
+  };
+
+  const incrementQuantity = () => {
+    const newQty = quantity + (variant.casePackSize || 1);
+    if (newQty <= stockQty) {
+      setQuantity(newQty);
+    }
+  };
+
+  const decrementQuantity = () => {
+    setQuantity(prev => Math.max(variant.minOrderQuantity || 1, prev - (variant.casePackSize || 1)));
+  };
+
+  return (
+    <Card className={`overflow-hidden ${isOutOfStock ? "opacity-60" : ""}`} data-testid={`card-variant-${variant.id}`}>
+      <CardContent className="p-3">
+        <div className="flex gap-3">
+          <div className="w-16 h-16 flex-shrink-0">
+            <ProductImage product={variant} isOutOfStock={isOutOfStock} size="small" />
+          </div>
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground font-mono">{variant.sku}</p>
+                <h4 className="font-medium text-sm line-clamp-1" data-testid={`text-variant-name-${variant.id}`}>
+                  {variant.name}
+                </h4>
+              </div>
+              <span className="text-sm font-bold flex-shrink-0" data-testid={`text-variant-price-${variant.id}`}>
+                ${variant.basePrice}
+              </span>
+            </div>
+            
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>Pack: {variant.casePackSize || 1}</span>
+              <span className={isLowStock ? "text-amber-600" : ""}>
+                {isOutOfStock ? "Out of Stock" : `${stockQty} in stock`}
+              </span>
+            </div>
+
+            {!isOutOfStock && (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center border rounded h-7">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-r-none"
+                    onClick={decrementQuantity}
+                    disabled={quantity <= (variant.minOrderQuantity || 1)}
+                    data-testid={`button-variant-decrease-${variant.id}`}
+                  >
+                    <Minus className="h-3 w-3" />
+                  </Button>
+                  <span className="w-8 text-center text-xs font-medium" data-testid={`text-variant-quantity-${variant.id}`}>
+                    {quantity}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-l-none"
+                    onClick={incrementQuantity}
+                    disabled={quantity >= stockQty}
+                    data-testid={`button-variant-increase-${variant.id}`}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-7 flex-1"
+                  onClick={handleAddToCart}
+                  disabled={isAddingToCart || justAdded}
+                  data-testid={`button-variant-add-to-cart-${variant.id}`}
+                >
+                  {justAdded ? (
+                    <Check className="h-3 w-3" />
+                  ) : (
+                    <>
+                      <ShoppingCart className="h-3 w-3 mr-1" />
+                      Add
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ProductDetailModal({ product, open, onOpenChange }: ProductDetailModalProps) {
   const { toast } = useToast();
   const [quantity, setQuantity] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
+
+  const isGroupedProduct = !!product?.zohoGroupId;
+
+  const { data: groupData, isLoading: isLoadingGroup } = useQuery<{ products: Product[] }>({
+    queryKey: ["/api/products/group", product?.zohoGroupId],
+    enabled: open && isGroupedProduct,
+  });
 
   useEffect(() => {
     if (product && open) {
@@ -74,14 +198,19 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      const addedProduct = isGroupedProduct 
+        ? groupData?.products.find(p => p.id === variables.productId) 
+        : product;
       toast({
         title: "Added to cart",
-        description: `${quantity} x ${product?.name || "Product"} added to your cart.`,
+        description: `${variables.quantity} x ${addedProduct?.name || "Product"} added to your cart.`,
       });
-      setJustAdded(true);
-      setTimeout(() => setJustAdded(false), 2000);
+      if (!isGroupedProduct) {
+        setJustAdded(true);
+        setTimeout(() => setJustAdded(false), 2000);
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -98,9 +227,11 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
   const isOutOfStock = stockQty <= 0;
   const isLowStock = stockQty > 0 && stockQty <= (product.lowStockThreshold || 10);
 
-  const handleAddToCart = () => {
-    if (isOutOfStock) return;
-    addToCartMutation.mutate({ productId: product.id, quantity });
+  const handleAddToCart = (productId?: string, qty?: number) => {
+    const targetProductId = productId || product.id;
+    const targetQuantity = qty || quantity;
+    if (!productId && isOutOfStock) return;
+    addToCartMutation.mutate({ productId: targetProductId, quantity: targetQuantity });
   };
 
   const incrementQuantity = () => {
@@ -124,6 +255,8 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
     }
     onOpenChange(open);
   };
+
+  const groupVariants = groupData?.products || [];
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -155,8 +288,11 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
               ) : (
                 <Badge variant="secondary">{stockQty} in stock</Badge>
               )}
-              {product.category && (
-                <Badge variant="outline">{product.category}</Badge>
+              {isGroupedProduct && (
+                <Badge variant="outline">
+                  <Layers className="h-3 w-3 mr-1" />
+                  {groupVariants.length} Variants
+                </Badge>
               )}
             </div>
 
@@ -192,7 +328,7 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
                 </div>
               </div>
 
-              {!isOutOfStock && (
+              {!isGroupedProduct && !isOutOfStock && (
                 <div className="flex items-center gap-3">
                   <div className="flex items-center border rounded-md">
                     <Button
@@ -222,7 +358,7 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
                   
                   <Button
                     className="flex-1 h-10"
-                    onClick={handleAddToCart}
+                    onClick={() => handleAddToCart()}
                     disabled={addToCartMutation.isPending || justAdded}
                     data-testid="button-modal-add-to-cart"
                   >
@@ -241,7 +377,7 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
                 </div>
               )}
 
-              {isOutOfStock && (
+              {!isGroupedProduct && isOutOfStock && (
                 <Button disabled className="w-full h-10" variant="secondary">
                   <Package className="h-4 w-4 mr-2" />
                   Out of Stock
@@ -250,6 +386,44 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
             </div>
           </div>
         </div>
+
+        {isGroupedProduct && (
+          <div className="border-t pt-4 mt-4">
+            <h3 className="font-medium mb-3 flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              Available Variants
+            </h3>
+            {isLoadingGroup ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Card key={i}>
+                    <CardContent className="p-3 flex gap-3">
+                      <Skeleton className="w-16 h-16 rounded" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-3 w-32" />
+                        <Skeleton className="h-7 w-full" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : groupVariants.length > 0 ? (
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {groupVariants.map((variant) => (
+                  <VariantCard
+                    key={variant.id}
+                    variant={variant}
+                    onAddToCart={handleAddToCart}
+                    isAddingToCart={addToCartMutation.isPending}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No variants available</p>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

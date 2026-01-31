@@ -557,6 +557,36 @@ export async function registerRoutes(
     }
   });
 
+  // Get products by group ID (for variant products) - must be before :id route
+  app.get("/api/products/group/:groupId", async (req, res) => {
+    try {
+      const groupProducts = await storage.getProductsByGroupId(req.params.groupId);
+      
+      // Apply customer-specific pricing if user has a price list
+      let productsWithPricing = groupProducts;
+      
+      if (req.session?.userId) {
+        const user = await storage.getUser(req.session.userId);
+        if (user?.priceListId) {
+          const customerPriceMap = await storage.getCustomerPricesForProducts(
+            user.priceListId,
+            groupProducts.map(p => p.id)
+          );
+          
+          productsWithPricing = groupProducts.map(product => ({
+            ...product,
+            customerPrice: customerPriceMap[product.id] || null,
+          }));
+        }
+      }
+      
+      res.json({ products: productsWithPricing });
+    } catch (error) {
+      console.error("Error fetching products by group:", error);
+      res.status(500).json({ message: "Failed to fetch group products" });
+    }
+  });
+
   // Get single product
   app.get("/api/products/:id", async (req, res) => {
     try {

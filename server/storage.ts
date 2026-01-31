@@ -65,6 +65,7 @@ export interface IStorage {
   getProduct(id: string): Promise<Product | undefined>;
   getProductInternal(id: string): Promise<Product | undefined>;
   getProductBySku(sku: string): Promise<Product | undefined>;
+  getProductsByGroupId(groupId: string): Promise<Product[]>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product | undefined>;
   getCustomerPricesForProducts(priceListId: string, productIds: string[]): Promise<Record<string, string>>;
@@ -307,6 +308,16 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
     return product;
+  }
+
+  async getProductsByGroupId(groupId: string): Promise<Product[]> {
+    const result = await db.select().from(products).where(
+      and(
+        eq(products.zohoGroupId, groupId),
+        eq(products.isOnline, true)
+      )
+    );
+    return result;
   }
 
   async createProduct(product: InsertProduct): Promise<Product> {

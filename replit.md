@@ -142,6 +142,25 @@ npm run db:push
 - Zoho Books integration for order push
 - AI features: semantic search, cart builder (requires OpenAI key)
 
+## Online Store Visibility (isOnline field)
+
+The `products.isOnline` boolean field controls whether a product appears in the storefront:
+- **true**: Product is visible to customers (default for synced products)
+- **false**: Product is hidden from storefront (still exists in database)
+
+This maps to Zoho Inventory's "Show in Online Store" toggle.
+
+**Belt-and-suspenders enforcement:**
+1. API level: `getProducts()` filters by `isOnline=true` unless `includeOffline=true`
+2. API level: `getProduct()` and `getProductBySku()` return 404 for offline products
+3. UI level: Products page also filters results by `isOnline === true`
+
+### Phase 7 TODO: Zoho Sync for isOnline
+- Sync `products.isOnline` from Zoho Inventory's native "Show in Online Store" toggle
+- Only products with Zoho's "Show in Online Store" = true should have `isOnline=true`
+- De-list products by setting `isOnline=false` (do NOT delete from database)
+- This allows products to be re-listed without losing order history
+
 ## Design Principles
 
 - Professional and trustworthy (enterprise-grade)

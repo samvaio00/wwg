@@ -151,10 +151,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Product operations
-  async getProducts(options?: { category?: string; search?: string; sortBy?: string; sortOrder?: string }): Promise<Product[]> {
-    let query = db.select().from(products).where(eq(products.isActive, true));
-    
+  async getProducts(options?: { category?: string; search?: string; sortBy?: string; sortOrder?: string; includeOffline?: boolean }): Promise<Product[]> {
     const conditions = [eq(products.isActive, true)];
+    
+    // Belt-and-suspenders: Always filter by isOnline=true for storefront unless explicitly requested
+    if (!options?.includeOffline) {
+      conditions.push(eq(products.isOnline, true));
+    }
     
     if (options?.category) {
       conditions.push(eq(products.category, options.category));
@@ -189,11 +192,19 @@ export class DatabaseStorage implements IStorage {
 
   async getProduct(id: string): Promise<Product | undefined> {
     const [product] = await db.select().from(products).where(eq(products.id, id));
+    // Return undefined for offline products (treated as 404 by API)
+    if (product && product.isOnline !== true) {
+      return undefined;
+    }
     return product;
   }
 
   async getProductBySku(sku: string): Promise<Product | undefined> {
     const [product] = await db.select().from(products).where(eq(products.sku, sku));
+    // Return undefined for offline products (treated as 404 by API)
+    if (product && product.isOnline !== true) {
+      return undefined;
+    }
     return product;
   }
 

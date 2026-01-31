@@ -123,6 +123,12 @@ export const products = pgTable("products", {
   lowStockThreshold: integer("low_stock_threshold").default(10),
   isActive: boolean("is_active").default(true),
   
+  // Online store visibility (maps to Zoho Inventory "Show in Online Store" toggle)
+  // TODO Phase 7: Sync this from Zoho's native "Show in Online Store" toggle
+  // Only products with isOnline=true should appear in storefront
+  // When Zoho sync runs, set isOnline from Zoho; de-list by setting isOnline=false (do not delete)
+  isOnline: boolean("is_online").default(false),
+  
   // Media
   imageUrl: text("image_url"),
   imageUrls: text("image_urls").array(), // Multiple images

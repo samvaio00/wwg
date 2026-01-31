@@ -277,7 +277,9 @@ export default function ProductsPage() {
     addToCartMutation.mutate({ productId, quantity });
   };
 
-  const products = data?.products || [];
+  // Belt-and-suspenders: UI also filters by isOnline even though API already filters
+  // This ensures offline products never appear even if API changes or data comes from other sources
+  const products = (data?.products || []).filter(p => p.isOnline === true);
 
   return (
     <div className="space-y-6">

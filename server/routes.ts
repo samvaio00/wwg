@@ -1,10 +1,20 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, loginSchema, toSafeUser, UserRole, UserStatus } from "@shared/schema";
+import { 
+  insertUserSchema, 
+  loginSchema, 
+  toSafeUser, 
+  UserRole, 
+  UserStatus,
+  OrderStatus,
+  insertCartItemSchema,
+  createOrderSchema,
+  ProductCategory
+} from "@shared/schema";
 import { z } from "zod";
 import { db } from "./db";
-import { users } from "@shared/schema";
+import { users, products } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 // Middleware to check if user is authenticated
@@ -292,6 +302,325 @@ export async function registerRoutes(
       }
       console.error("Admin setup error:", error);
       res.status(500).json({ message: "Admin setup failed" });
+    }
+  });
+
+  // ================================================================
+  // PRODUCT ROUTES
+  // ================================================================
+
+  // Get all products (with optional filters)
+  app.get("/api/products", async (req, res) => {
+    try {
+      const { category, search, sortBy, sortOrder } = req.query;
+      const productList = await storage.getProducts({
+        category: category as string | undefined,
+        search: search as string | undefined,
+        sortBy: sortBy as string | undefined,
+        sortOrder: sortOrder as string | undefined
+      });
+      res.json({ products: productList });
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      res.status(500).json({ message: "Failed to fetch products" });
+    }
+  });
+
+  // Get single product
+  app.get("/api/products/:id", async (req, res) => {
+    try {
+      const product = await storage.getProduct(req.params.id);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      res.json({ product });
+    } catch (error) {
+      console.error("Error fetching product:", error);
+      res.status(500).json({ message: "Failed to fetch product" });
+    }
+  });
+
+  // Get product categories
+  app.get("/api/categories", (_req, res) => {
+    res.json({ 
+      categories: Object.values(ProductCategory).map(cat => ({
+        value: cat,
+        label: cat.charAt(0).toUpperCase() + cat.slice(1)
+      }))
+    });
+  });
+
+  // ================================================================
+  // CART ROUTES (Authenticated users only)
+  // ================================================================
+
+  // Get current user's cart
+  app.get("/api/cart", requireAuth, async (req, res) => {
+    try {
+      const cart = await storage.getOrCreateCart(req.session.userId!);
+      const items = await storage.getCartItems(cart.id);
+      res.json({ cart, items });
+    } catch (error) {
+      console.error("Error fetching cart:", error);
+      res.status(500).json({ message: "Failed to fetch cart" });
+    }
+  });
+
+  // Add item to cart
+  app.post("/api/cart/items", requireAuth, async (req, res) => {
+    try {
+      const data = insertCartItemSchema.parse(req.body);
+      const cart = await storage.getOrCreateCart(req.session.userId!);
+      const cartItem = await storage.addToCart(cart.id, data.productId, data.quantity);
+      const updatedCart = await storage.getCart(req.session.userId!);
+      res.status(201).json({ cartItem, cart: updatedCart });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Error adding to cart:", error);
+      res.status(500).json({ message: "Failed to add to cart" });
+    }
+  });
+
+  // Update cart item quantity
+  app.patch("/api/cart/items/:id", requireAuth, async (req, res) => {
+    try {
+      const { quantity } = req.body;
+      if (typeof quantity !== 'number' || quantity < 1) {
+        return res.status(400).json({ message: "Invalid quantity" });
+      }
+      
+      const cart = await storage.getCart(req.session.userId!);
+      if (!cart) {
+        return res.status(404).json({ message: "Cart not found" });
+      }
+      
+      const existingItem = await storage.getCartItem(req.params.id as string);
+      if (!existingItem || existingItem.cartId !== cart.id) {
+        return res.status(403).json({ message: "Not authorized to modify this item" });
+      }
+      
+      const cartItem = await storage.updateCartItem(req.params.id as string, quantity);
+      if (!cartItem) {
+        return res.status(404).json({ message: "Cart item not found" });
+      }
+      res.json({ cartItem, cart });
+    } catch (error) {
+      console.error("Error updating cart item:", error);
+      res.status(500).json({ message: "Failed to update cart item" });
+    }
+  });
+
+  // Remove item from cart
+  app.delete("/api/cart/items/:id", requireAuth, async (req, res) => {
+    try {
+      const cart = await storage.getCart(req.session.userId!);
+      if (!cart) {
+        return res.status(404).json({ message: "Cart not found" });
+      }
+      
+      const existingItem = await storage.getCartItem(req.params.id as string);
+      if (!existingItem || existingItem.cartId !== cart.id) {
+        return res.status(403).json({ message: "Not authorized to remove this item" });
+      }
+      
+      await storage.removeCartItem(req.params.id as string);
+      res.json({ message: "Item removed", cart });
+    } catch (error) {
+      console.error("Error removing cart item:", error);
+      res.status(500).json({ message: "Failed to remove cart item" });
+    }
+  });
+
+  // Clear cart
+  app.delete("/api/cart", requireAuth, async (req, res) => {
+    try {
+      const cart = await storage.getCart(req.session.userId!);
+      if (cart) {
+        await storage.clearCart(cart.id);
+      }
+      res.json({ message: "Cart cleared" });
+    } catch (error) {
+      console.error("Error clearing cart:", error);
+      res.status(500).json({ message: "Failed to clear cart" });
+    }
+  });
+
+  // ================================================================
+  // ORDER ROUTES
+  // ================================================================
+
+  // Create order from cart (checkout)
+  app.post("/api/orders", requireAuth, async (req, res) => {
+    try {
+      const data = createOrderSchema.parse(req.body);
+      const order = await storage.createOrder(req.session.userId!, {
+        address: data.shippingAddress,
+        city: data.shippingCity,
+        state: data.shippingState,
+        zipCode: data.shippingZipCode
+      });
+      res.status(201).json({ order });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      if (error instanceof Error) {
+        return res.status(400).json({ message: error.message });
+      }
+      console.error("Error creating order:", error);
+      res.status(500).json({ message: "Failed to create order" });
+    }
+  });
+
+  // Get user's orders
+  app.get("/api/orders", requireAuth, async (req, res) => {
+    try {
+      const orderList = await storage.getUserOrders(req.session.userId!);
+      res.json({ orders: orderList });
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+      res.status(500).json({ message: "Failed to fetch orders" });
+    }
+  });
+
+  // Get single order with items
+  app.get("/api/orders/:id", requireAuth, async (req, res) => {
+    try {
+      const orderData = await storage.getOrderWithItems(req.params.id as string);
+      if (!orderData) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      // Ensure user owns this order or is admin
+      const user = await storage.getUser(req.session.userId!);
+      if (orderData.order.userId !== req.session.userId && user?.role !== UserRole.ADMIN) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      res.json(orderData);
+    } catch (error) {
+      console.error("Error fetching order:", error);
+      res.status(500).json({ message: "Failed to fetch order" });
+    }
+  });
+
+  // ================================================================
+  // ADMIN ORDER ROUTES
+  // ================================================================
+
+  // Get all orders (admin only)
+  app.get("/api/admin/orders", requireAdmin, async (_req, res) => {
+    try {
+      const orderList = await storage.getAllOrders();
+      res.json({ orders: orderList });
+    } catch (error) {
+      console.error("Error fetching orders:", error);
+      res.status(500).json({ message: "Failed to fetch orders" });
+    }
+  });
+
+  // Approve order
+  app.post("/api/admin/orders/:id/approve", requireAdmin, async (req, res) => {
+    try {
+      const order = await storage.updateOrderStatus(req.params.id as string, OrderStatus.APPROVED, req.session.userId!);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      res.json({ order, message: "Order approved" });
+    } catch (error) {
+      console.error("Error approving order:", error);
+      res.status(500).json({ message: "Failed to approve order" });
+    }
+  });
+
+  // Reject order
+  app.post("/api/admin/orders/:id/reject", requireAdmin, async (req, res) => {
+    try {
+      const { reason } = req.body;
+      const order = await storage.updateOrderStatus(req.params.id as string, OrderStatus.REJECTED, req.session.userId!, reason);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      res.json({ order, message: "Order rejected" });
+    } catch (error) {
+      console.error("Error rejecting order:", error);
+      res.status(500).json({ message: "Failed to reject order" });
+    }
+  });
+
+  // Update order status
+  app.patch("/api/admin/orders/:id/status", requireAdmin, async (req, res) => {
+    try {
+      const { status } = req.body;
+      const validStatuses = Object.values(OrderStatus);
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      const order = await storage.updateOrderStatus(req.params.id as string, status, req.session.userId!);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      res.json({ order, message: "Order status updated" });
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      res.status(500).json({ message: "Failed to update order status" });
+    }
+  });
+
+  // ================================================================
+  // SEED PRODUCTS (Admin only - for demo)
+  // ================================================================
+
+  app.post("/api/admin/seed-products", requireAdmin, async (_req, res) => {
+    try {
+      // Check if products already exist
+      const existing = await storage.getProducts();
+      if (existing.length > 0) {
+        return res.status(400).json({ message: "Products already seeded" });
+      }
+
+      const sampleProducts = [
+        // Sunglasses
+        { sku: "SG-001", name: "Classic Aviator Sunglasses", description: "Timeless aviator style with UV400 protection", category: "sunglasses", brand: "SunStyle", basePrice: "8.50", compareAtPrice: "24.99", stockQuantity: 500, minOrderQuantity: 12, casePackSize: 12, imageUrl: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400" },
+        { sku: "SG-002", name: "Wayfarer Sport Sunglasses", description: "Modern wayfarer design for active lifestyles", category: "sunglasses", brand: "SunStyle", basePrice: "6.75", compareAtPrice: "19.99", stockQuantity: 350, minOrderQuantity: 12, casePackSize: 12, imageUrl: "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400" },
+        { sku: "SG-003", name: "Oversized Fashion Sunglasses", description: "Bold oversized frames for fashion-forward customers", category: "sunglasses", brand: "GlamShade", basePrice: "7.25", compareAtPrice: "22.99", stockQuantity: 280, minOrderQuantity: 12, casePackSize: 12, imageUrl: "https://images.unsplash.com/photo-1577803645773-f96470509666?w=400" },
+        { sku: "SG-004", name: "Polarized Driving Sunglasses", description: "Premium polarized lenses for reduced glare", category: "sunglasses", brand: "DriveVision", basePrice: "12.50", compareAtPrice: "34.99", stockQuantity: 200, minOrderQuantity: 6, casePackSize: 6, imageUrl: "https://images.unsplash.com/photo-1508296695146-257a814070b4?w=400" },
+        
+        // Cellular
+        { sku: "CE-001", name: "Universal Phone Charger Cable 3ft", description: "Durable braided USB-C cable, fast charging", category: "cellular", brand: "TechCharge", basePrice: "2.25", compareAtPrice: "9.99", stockQuantity: 1000, minOrderQuantity: 24, casePackSize: 24, imageUrl: "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=400" },
+        { sku: "CE-002", name: "Car Phone Mount", description: "360-degree rotation, dashboard and vent compatible", category: "cellular", brand: "TechCharge", basePrice: "4.50", compareAtPrice: "14.99", stockQuantity: 400, minOrderQuantity: 12, casePackSize: 12, imageUrl: "https://images.unsplash.com/photo-1586253634026-8cb574908d1e?w=400" },
+        { sku: "CE-003", name: "Wireless Earbuds Basic", description: "Bluetooth 5.0, 4-hour battery life", category: "cellular", brand: "SoundPods", basePrice: "8.99", compareAtPrice: "29.99", stockQuantity: 300, minOrderQuantity: 6, casePackSize: 6, imageUrl: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400" },
+        { sku: "CE-004", name: "Clear Phone Case Universal", description: "Shock-absorbing clear case, fits most phones", category: "cellular", brand: "CasePro", basePrice: "1.75", compareAtPrice: "7.99", stockQuantity: 800, minOrderQuantity: 48, casePackSize: 48, imageUrl: "https://images.unsplash.com/photo-1601784551446-20c9e07cdbdb?w=400" },
+        { sku: "CE-005", name: "Portable Power Bank 5000mAh", description: "Compact power bank with dual USB ports", category: "cellular", brand: "TechCharge", basePrice: "6.50", compareAtPrice: "19.99", stockQuantity: 250, minOrderQuantity: 12, casePackSize: 12, imageUrl: "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=400" },
+        
+        // Caps
+        { sku: "CA-001", name: "Classic Baseball Cap - Black", description: "Adjustable cotton twill baseball cap", category: "caps", brand: "HeadStyle", basePrice: "3.25", compareAtPrice: "12.99", stockQuantity: 600, minOrderQuantity: 24, casePackSize: 24, imageUrl: "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400" },
+        { sku: "CA-002", name: "Trucker Mesh Cap - Assorted", description: "Breathable mesh back, foam front", category: "caps", brand: "HeadStyle", basePrice: "2.75", compareAtPrice: "9.99", stockQuantity: 500, minOrderQuantity: 24, casePackSize: 24, imageUrl: "https://images.unsplash.com/photo-1521369909029-2afed882baee?w=400" },
+        { sku: "CA-003", name: "Knit Beanie - Winter", description: "Warm acrylic knit beanie, one size fits most", category: "caps", brand: "WarmHead", basePrice: "2.50", compareAtPrice: "8.99", stockQuantity: 400, minOrderQuantity: 24, casePackSize: 24, imageUrl: "https://images.unsplash.com/photo-1576871337622-98d48d1cf531?w=400" },
+        { sku: "CA-004", name: "Sports Performance Cap", description: "Moisture-wicking fabric, curved bill", category: "caps", brand: "ActiveWear", basePrice: "4.50", compareAtPrice: "15.99", stockQuantity: 300, minOrderQuantity: 12, casePackSize: 12, imageUrl: "https://images.unsplash.com/photo-1534215754734-18e55d13e346?w=400" },
+        
+        // Perfumes
+        { sku: "PF-001", name: "Fresh Ocean Body Spray", description: "Light, refreshing ocean-inspired fragrance", category: "perfumes", brand: "ScentWave", basePrice: "3.99", compareAtPrice: "12.99", stockQuantity: 350, minOrderQuantity: 12, casePackSize: 12, imageUrl: "https://images.unsplash.com/photo-1594035910387-fea47794261f?w=400" },
+        { sku: "PF-002", name: "Midnight Musk Cologne", description: "Bold masculine fragrance with woody notes", category: "perfumes", brand: "DarkScent", basePrice: "5.50", compareAtPrice: "18.99", stockQuantity: 250, minOrderQuantity: 12, casePackSize: 12, imageUrl: "https://images.unsplash.com/photo-1541643600914-78b084683601?w=400" },
+        { sku: "PF-003", name: "Floral Garden Perfume", description: "Sweet floral bouquet, long-lasting", category: "perfumes", brand: "BloomScent", basePrice: "4.75", compareAtPrice: "15.99", stockQuantity: 300, minOrderQuantity: 12, casePackSize: 12, imageUrl: "https://images.unsplash.com/photo-1588405748880-12d1d2a59f75?w=400" },
+        { sku: "PF-004", name: "Citrus Burst Body Mist", description: "Energizing citrus fragrance, great for summer", category: "perfumes", brand: "FreshScent", basePrice: "3.25", compareAtPrice: "10.99", stockQuantity: 400, minOrderQuantity: 12, casePackSize: 12, imageUrl: "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?w=400" },
+        
+        // Novelty
+        { sku: "NV-001", name: "Pine Tree Air Freshener 3-Pack", description: "Classic pine scent car air fresheners", category: "novelty", brand: "FreshRide", basePrice: "0.99", compareAtPrice: "3.99", stockQuantity: 1000, minOrderQuantity: 48, casePackSize: 48, imageUrl: "https://images.unsplash.com/photo-1600298881974-6be191ceeda1?w=400" },
+        { sku: "NV-002", name: "LED Keychain Flashlight", description: "Compact LED flashlight with keyring", category: "novelty", brand: "LightUp", basePrice: "1.25", compareAtPrice: "4.99", stockQuantity: 700, minOrderQuantity: 36, casePackSize: 36, imageUrl: "https://images.unsplash.com/photo-1506792006437-256b665541e2?w=400" },
+        { sku: "NV-003", name: "Lucky Dice Mirror Hanger", description: "Fuzzy dice in assorted colors", category: "novelty", brand: "FunStuff", basePrice: "1.50", compareAtPrice: "5.99", stockQuantity: 400, minOrderQuantity: 24, casePackSize: 24, imageUrl: "https://images.unsplash.com/photo-1551431009-a802eeec77b1?w=400" },
+        { sku: "NV-004", name: "Phone Grip Pop Socket", description: "Expandable grip and stand for phones", category: "novelty", brand: "GripIt", basePrice: "1.75", compareAtPrice: "6.99", stockQuantity: 600, minOrderQuantity: 24, casePackSize: 24, imageUrl: "https://images.unsplash.com/photo-1556656793-08538906a9f8?w=400" },
+        { sku: "NV-005", name: "Scratch-Off Lottery Ticket Holder", description: "Keychain scratcher with coin edge", category: "novelty", brand: "LuckyCharm", basePrice: "0.75", compareAtPrice: "2.99", stockQuantity: 900, minOrderQuantity: 48, casePackSize: 48, imageUrl: "https://images.unsplash.com/photo-1518458028785-8fbcd101ebb9?w=400" },
+      ];
+
+      for (const product of sampleProducts) {
+        await storage.createProduct(product);
+      }
+
+      res.status(201).json({ message: `Seeded ${sampleProducts.length} products successfully` });
+    } catch (error) {
+      console.error("Error seeding products:", error);
+      res.status(500).json({ message: "Failed to seed products" });
     }
   });
 

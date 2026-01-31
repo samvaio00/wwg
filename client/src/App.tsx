@@ -14,7 +14,12 @@ import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import HomePage from "@/pages/home";
+import ProductsPage from "@/pages/products";
+import CartPage from "@/pages/cart";
+import CheckoutPage from "@/pages/checkout";
+import OrdersPage from "@/pages/orders";
 import AdminUsersPage from "@/pages/admin-users";
+import AdminOrdersPage from "@/pages/admin-orders";
 import PendingApprovalPage from "@/pages/pending-approval";
 
 function LoadingScreen() {
@@ -78,11 +83,12 @@ function AppRouter() {
     <AuthenticatedLayout>
       <Switch>
         <Route path="/" component={HomePage} />
-        <Route path="/products" component={() => <PlaceholderPage title="Products" />} />
-        <Route path="/cart" component={() => <PlaceholderPage title="Cart" />} />
-        <Route path="/orders" component={() => <PlaceholderPage title="Orders" />} />
+        <Route path="/products" component={ProductsPage} />
+        <Route path="/cart" component={CartPage} />
+        <Route path="/checkout" component={CheckoutPage} />
+        <Route path="/orders" component={OrdersPage} />
         <Route path="/admin/users" component={AdminUsersPage} />
-        <Route path="/admin/orders" component={() => <PlaceholderPage title="Order Management" />} />
+        <Route path="/admin/orders" component={AdminOrdersPage} />
         <Route path="/admin/settings" component={() => <PlaceholderPage title="Admin Settings" />} />
         <Route path="/settings" component={() => <PlaceholderPage title="Settings" />} />
         <Route component={NotFound} />

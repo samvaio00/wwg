@@ -68,7 +68,7 @@ function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStoc
       <img 
         src={imageUrl} 
         alt={product.name}
-        className={`object-cover w-full h-full ${isOutOfStock ? "grayscale" : ""} ${imageLoaded ? "" : "opacity-0"}`}
+        className={`object-contain w-full h-full ${isOutOfStock ? "grayscale" : ""} ${imageLoaded ? "" : "opacity-0"}`}
         loading="lazy"
         onError={() => setImageError(true)}
         onLoad={() => setImageLoaded(true)}
@@ -112,14 +112,11 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
       className={`overflow-hidden ${isOutOfStock ? "opacity-60" : "hover-elevate"}`} 
       data-testid={`card-product-${product.id}`}
     >
-      <div className="aspect-square relative bg-muted">
+      <div className="h-32 relative bg-muted overflow-hidden">
         <ProductImage 
           product={product} 
           isOutOfStock={isOutOfStock}
         />
-        <Badge className="absolute top-2 left-2" variant="secondary">
-          {product.category}
-        </Badge>
         {isOutOfStock ? (
           <Badge className="absolute top-2 right-2" variant="destructive" data-testid={`badge-out-of-stock-${product.id}`}>
             Out of Stock
@@ -130,37 +127,28 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
           </Badge>
         )}
       </div>
-      <CardContent className="p-4 space-y-3">
+      <CardContent className="p-3 space-y-2">
         <div>
           <p className="text-xs text-muted-foreground font-mono">{product.sku}</p>
-          <h3 className="font-semibold line-clamp-2" data-testid={`text-product-name-${product.id}`}>
+          <h3 className="font-semibold text-sm line-clamp-2" data-testid={`text-product-name-${product.id}`}>
             {product.name}
           </h3>
-          {product.brand && (
-            <p className="text-sm text-muted-foreground">{product.brand}</p>
-          )}
         </div>
-        
-        <p className="text-sm text-muted-foreground line-clamp-2">
-          {product.description}
-        </p>
 
         <div className="flex items-baseline gap-2">
-          <span className="text-xl font-bold" data-testid={`text-product-price-${product.id}`}>
+          <span className="text-lg font-bold" data-testid={`text-product-price-${product.id}`}>
             ${product.basePrice}
           </span>
           {product.compareAtPrice && (
-            <span className="text-sm text-muted-foreground line-through">
+            <span className="text-xs text-muted-foreground line-through">
               ${product.compareAtPrice}
             </span>
           )}
-          <span className="text-xs text-muted-foreground">/ unit</span>
         </div>
 
-        <div className="text-xs text-muted-foreground space-y-1">
-          <p>Min Order: {product.minOrderQuantity || 1} units</p>
-          <p>Case Pack: {product.casePackSize || 1} units</p>
-          <p>In Stock: {product.stockQuantity || 0}</p>
+        <div className="text-xs text-muted-foreground flex gap-3">
+          <span>Pack: {product.casePackSize || 1}</span>
+          <span>Stock: {product.stockQuantity || 0}</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -220,12 +208,11 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
 function ProductSkeleton() {
   return (
     <Card className="overflow-hidden">
-      <Skeleton className="aspect-square" />
-      <CardContent className="p-4 space-y-3">
-        <Skeleton className="h-4 w-16" />
-        <Skeleton className="h-5 w-full" />
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-6 w-20" />
+      <Skeleton className="h-32" />
+      <CardContent className="p-3 space-y-2">
+        <Skeleton className="h-3 w-16" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-5 w-20" />
         <div className="flex gap-2">
           <Skeleton className="h-8 flex-1" />
           <Skeleton className="h-8 flex-1" />
@@ -307,6 +294,7 @@ export default function ProductsPage() {
     queryParams.set("sortOrder", "desc");
   }
   queryParams.set("page", page.toString());
+  queryParams.set("limit", "12");
 
   const { data, isLoading, error } = useQuery<{ products: Product[]; pagination: PaginationInfo }>({
     queryKey: ["/api/products", queryParams.toString()],
@@ -429,7 +417,7 @@ export default function ProductsPage() {
 
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
+          {Array.from({ length: 12 }).map((_, i) => (
             <ProductSkeleton key={i} />
           ))}
         </div>

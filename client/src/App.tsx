@@ -1,6 +1,6 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Link } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
@@ -9,6 +9,8 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { ShoppingCart } from "lucide-react";
 
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
@@ -33,6 +35,26 @@ function LoadingScreen() {
   );
 }
 
+function CartButton() {
+  const { data } = useQuery<{ cart: { itemCount: number } }>({
+    queryKey: ["/api/cart"],
+  });
+  const itemCount = data?.cart?.itemCount || 0;
+
+  return (
+    <Link href="/cart">
+      <Button variant="ghost" size="icon" className="relative" data-testid="button-header-cart">
+        <ShoppingCart className="h-5 w-5" />
+        {itemCount > 0 && (
+          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
+            {itemCount > 99 ? "99+" : itemCount}
+          </span>
+        )}
+      </Button>
+    </Link>
+  );
+}
+
 function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const style = {
     "--sidebar-width": "16rem",
@@ -46,7 +68,10 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
         <SidebarInset className="flex flex-col flex-1">
           <header className="sticky top-0 z-50 flex h-14 items-center justify-between gap-4 border-b bg-background px-4">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <ThemeToggle />
+            <div className="flex items-center gap-2">
+              <CartButton />
+              <ThemeToggle />
+            </div>
           </header>
           <main className="flex-1 overflow-auto p-6">
             {children}

@@ -276,46 +276,23 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual"): Prom
       }
     }
 
+    // Delist products that are no longer in Zoho's online store
+    // This handles products that were deleted or made inactive in Zoho
     if (onlineZohoItemIds.length > 0) {
-      const delistedProducts = await db
-        .update(products)
-        .set({ 
-          isOnline: false, 
-          isActive: false,
-          updatedAt: new Date(),
-        })
-        .where(
-          isNotNull(products.zohoItemId)
-        )
-        .returning();
-
-      const toDelistIds = delistedProducts
-        .filter(p => p.zohoItemId && !onlineZohoItemIds.includes(p.zohoItemId) && p.isOnline)
-        .map(p => p.id);
-
-      if (toDelistIds.length > 0) {
-        await db
-          .update(products)
-          .set({ 
-            isOnline: false, 
-            isActive: false,
-            updatedAt: new Date(),
-          })
-          .where(notInArray(products.id, toDelistIds.length > 0 ? toDelistIds : ['dummy']));
-      }
-
       const allSyncedProducts = await db
         .select({ id: products.id, zohoItemId: products.zohoItemId, isOnline: products.isOnline })
         .from(products)
         .where(isNotNull(products.zohoItemId));
 
       for (const prod of allSyncedProducts) {
+        // If product has a Zoho ID but is NOT in the current online list, delist it
         if (prod.zohoItemId && !onlineZohoItemIds.includes(prod.zohoItemId) && prod.isOnline) {
           await db
             .update(products)
             .set({ isOnline: false, isActive: false, updatedAt: new Date() })
             .where(eq(products.id, prod.id));
           result.delisted++;
+          console.log(`[Zoho Sync] Delisted product ${prod.id} (Zoho item ${prod.zohoItemId} no longer online)`);
         }
       }
     }

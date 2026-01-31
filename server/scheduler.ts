@@ -1,4 +1,4 @@
-import { syncProductsFromZoho, syncCategoriesFromZoho } from "./zoho-service";
+import { syncProductsFromZoho, syncCategoriesFromZoho, syncItemGroupsFromZoho } from "./zoho-service";
 import { syncCustomerStatusFromZoho } from "./zoho-books-service";
 import { generateProductEmbeddings } from "./ai-service";
 
@@ -99,6 +99,15 @@ async function runZohoSync() {
     const result = await syncProductsFromZoho("scheduler");
     lastZohoSync = new Date();
     console.log(`[Scheduler] Zoho sync complete: ${result.created} created, ${result.updated} updated, ${result.delisted} delisted`);
+    
+    // Sync item groups to update products with group IDs for variant display
+    try {
+      const groupResult = await syncItemGroupsFromZoho();
+      console.log(`[Scheduler] Item groups sync complete: ${groupResult.synced} groups, ${groupResult.updated} products updated`);
+    } catch (groupError) {
+      console.error("[Scheduler] Item groups sync error:", groupError);
+    }
+    
     return result;
   } catch (error) {
     console.error("[Scheduler] Zoho sync error:", error);

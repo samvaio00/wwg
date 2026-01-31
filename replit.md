@@ -153,12 +153,17 @@ npm run db:push
   - Response caching with 15-30 min TTL in ai_cache table
   - Event logging in ai_events table (latency, model, cache hits, errors)
   - All AI features use Replit AI Integrations (gpt-4o-mini model)
-- Zoho Integration: Setup guide at docs/zoho-setup-guide.txt (requires user's API credentials)
+- Zoho Inventory Integration:
+  - OAuth token refresh with caching
+  - Admin UI at /admin/settings for sync management
+  - Backend endpoints: GET /api/admin/zoho/test, POST /api/admin/zoho/sync
+  - Category mapping: sunglasses, cellular, caps, perfumes, novelty
+  - Custom field support for case pack size, min order quantity, etc.
 
 ### Phase 6+ (Future)
-- Zoho Inventory product sync (when user provides credentials)
-- Zoho Books order push
+- Zoho Books order push (send orders to Zoho Books)
 - AI-powered embeddings for faster semantic search
+- Automated scheduled sync
 
 ## Online Store Visibility (isOnline field)
 

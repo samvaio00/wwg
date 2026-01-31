@@ -118,7 +118,7 @@ export function AICartBuilder() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="default" className="gap-2" data-testid="button-ai-cart-builder">
+        <Button className="gap-2 bg-green-500 hover:bg-green-600 text-white" data-testid="button-ai-cart-builder">
           <Sparkles className="h-4 w-4" />
           AI Cart Builder
         </Button>

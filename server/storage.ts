@@ -13,6 +13,8 @@ import {
   type InsertJob,
   type Category,
   type InsertCategory,
+  type ZohoApiLog,
+  type InsertZohoApiLog,
   users,
   products,
   carts,
@@ -24,6 +26,7 @@ import {
   customerPrices,
   priceLists,
   categories,
+  zohoApiLogs,
   toSafeUser,
   UserRole,
   UserStatus,
@@ -123,6 +126,10 @@ export interface IStorage {
   getCategoryBySlug(slug: string): Promise<Category | undefined>;
   getCategoryByZohoId(zohoCategoryId: string): Promise<Category | undefined>;
   upsertCategory(category: InsertCategory): Promise<Category>;
+  
+  // Zoho API log operations
+  logZohoApiCall(log: InsertZohoApiLog): Promise<ZohoApiLog>;
+  getZohoApiCallStats(sinceDate: Date): Promise<{ total: number; success: number; failed: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -986,6 +993,30 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return created;
+  }
+
+  // Zoho API log operations
+  async logZohoApiCall(log: InsertZohoApiLog): Promise<ZohoApiLog> {
+    const [created] = await db.insert(zohoApiLogs)
+      .values(log)
+      .returning();
+    return created;
+  }
+
+  async getZohoApiCallStats(sinceDate: Date): Promise<{ total: number; success: number; failed: number }> {
+    const result = await db.select({
+      total: sql<number>`COUNT(*)::int`,
+      success: sql<number>`SUM(CASE WHEN ${zohoApiLogs.success} = true THEN 1 ELSE 0 END)::int`,
+      failed: sql<number>`SUM(CASE WHEN ${zohoApiLogs.success} = false THEN 1 ELSE 0 END)::int`,
+    })
+    .from(zohoApiLogs)
+    .where(gte(zohoApiLogs.createdAt, sinceDate));
+    
+    return {
+      total: result[0]?.total || 0,
+      success: result[0]?.success || 0,
+      failed: result[0]?.failed || 0,
+    };
   }
 }
 

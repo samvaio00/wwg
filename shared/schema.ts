@@ -495,6 +495,38 @@ export type Job = typeof jobs.$inferSelect;
 export type InsertJob = typeof jobs.$inferInsert;
 
 // ================================================================
+// ZOHO API LOGS TABLE (Track API calls for monitoring)
+// ================================================================
+
+export const zohoApiLogs = pgTable("zoho_api_logs", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // API endpoint called
+  endpoint: text("endpoint").notNull(),
+  
+  // HTTP method
+  method: text("method").notNull(),
+  
+  // Response status
+  statusCode: integer("status_code"),
+  
+  // Success/failure
+  success: boolean("success").notNull().default(true),
+  
+  // Error message if failed
+  errorMessage: text("error_message"),
+  
+  // Timestamp
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  endpointIdx: index("zoho_api_logs_endpoint_idx").on(table.endpoint),
+  createdAtIdx: index("zoho_api_logs_created_at_idx").on(table.createdAt),
+}));
+
+export type ZohoApiLog = typeof zohoApiLogs.$inferSelect;
+export type InsertZohoApiLog = typeof zohoApiLogs.$inferInsert;
+
+// ================================================================
 // PRICE LISTS TABLE (Zoho price list sync)
 // ================================================================
 

@@ -11,7 +11,8 @@ import {
   Clock,
   CheckCircle2,
   Truck,
-  XCircle
+  XCircle,
+  Cloud
 } from "lucide-react";
 
 type AnalyticsData = {
@@ -304,6 +305,11 @@ function TopProductsTable({ data, loading }: { data: TopProductsData['topProduct
   );
 }
 
+type ZohoApiStatsData = {
+  lastHour: { total: number; success: number; failed: number };
+  today: { total: number; success: number; failed: number };
+};
+
 export default function AdminAnalyticsPage() {
   const { data: analytics, isLoading: analyticsLoading } = useQuery<AnalyticsData>({
     queryKey: ["/api/admin/analytics"],
@@ -311,6 +317,11 @@ export default function AdminAnalyticsPage() {
 
   const { data: topProducts, isLoading: productsLoading } = useQuery<TopProductsData>({
     queryKey: ["/api/admin/analytics/top-products"],
+  });
+
+  const { data: zohoStats, isLoading: zohoLoading } = useQuery<ZohoApiStatsData>({
+    queryKey: ["/api/admin/analytics/zoho-api-stats"],
+    refetchInterval: 60000, // Refresh every minute
   });
 
   return (
@@ -351,6 +362,54 @@ export default function AdminAnalyticsPage() {
           icon={Users}
           loading={analyticsLoading}
         />
+      </div>
+
+      {/* Zoho API Stats */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+            <CardTitle className="text-sm font-medium">Zoho API Calls (Last Hour)</CardTitle>
+            <Cloud className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {zohoLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold" data-testid="metric-zoho-api-hour">
+                  {zohoStats?.lastHour.total || 0}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  <span className="text-green-600">{zohoStats?.lastHour.success || 0} success</span>
+                  {" · "}
+                  <span className="text-red-600">{zohoStats?.lastHour.failed || 0} failed</span>
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+            <CardTitle className="text-sm font-medium">Zoho API Calls (Today)</CardTitle>
+            <Cloud className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {zohoLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold" data-testid="metric-zoho-api-today">
+                  {zohoStats?.today.total || 0}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  <span className="text-green-600">{zohoStats?.today.success || 0} success</span>
+                  {" · "}
+                  <span className="text-red-600">{zohoStats?.today.failed || 0} failed</span>
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <SalesTrendChart 

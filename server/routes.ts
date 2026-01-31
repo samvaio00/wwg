@@ -1553,6 +1553,30 @@ export async function registerRoutes(
     }
   });
 
+  // Get Zoho API call statistics
+  app.get("/api/admin/analytics/zoho-api-stats", requireAdmin, async (_req, res) => {
+    try {
+      const now = new Date();
+      
+      // Stats for last hour
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      const lastHourStats = await storage.getZohoApiCallStats(oneHourAgo);
+      
+      // Stats for today (start of day)
+      const startOfDay = new Date(now);
+      startOfDay.setHours(0, 0, 0, 0);
+      const todayStats = await storage.getZohoApiCallStats(startOfDay);
+      
+      res.json({
+        lastHour: lastHourStats,
+        today: todayStats,
+      });
+    } catch (error) {
+      console.error("Zoho API stats error:", error);
+      res.status(500).json({ message: "Failed to load Zoho API stats" });
+    }
+  });
+
   // ================================================================
   // SCHEDULER (Admin)
   // ================================================================

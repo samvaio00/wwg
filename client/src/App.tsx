@@ -9,7 +9,6 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AICartBuilder } from "@/components/ai-cart-builder";
-import { BulkImportDialog } from "@/components/bulk-import-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -143,7 +142,6 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-2">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <AICartBuilder />
-              <BulkImportDialog />
             </div>
             <div className="flex items-center gap-2">
               <HeaderUserMenu />

@@ -105,6 +105,10 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              
+              {/* Separator between Browse items and Categories */}
+              <div className="my-2 mx-2 border-t border-sidebar-border" />
+              
               {categories.map((category) => (
                 <SidebarMenuItem key={category.id}>
                   <SidebarMenuButton

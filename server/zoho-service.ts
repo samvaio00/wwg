@@ -1,7 +1,23 @@
 import { db } from "./db";
-import { products, syncRuns, SyncType, priceLists, customerPrices, categories } from "@shared/schema";
+import { products, syncRuns, SyncType, priceLists, customerPrices, categories, zohoApiLogs } from "@shared/schema";
 import { eq, isNotNull, desc, and, sql } from "drizzle-orm";
 import { storage } from "./storage";
+
+// Helper to log Zoho API calls
+async function logZohoApiCall(endpoint: string, method: string, statusCode: number | null, success: boolean, errorMessage?: string) {
+  try {
+    await db.insert(zohoApiLogs).values({
+      endpoint,
+      method,
+      statusCode,
+      success,
+      errorMessage,
+    });
+  } catch (e) {
+    // Silently fail - don't break API calls if logging fails
+    console.error("[Zoho API Log] Failed to log API call:", e);
+  }
+}
 
 interface ZohoTokenResponse {
   access_token: string;
@@ -128,6 +144,9 @@ async function fetchZohoItems(options: FetchZohoItemsOptions = {}): Promise<Zoho
       Authorization: `Zoho-oauthtoken ${accessToken}`,
     },
   });
+
+  // Log the API call
+  await logZohoApiCall("/inventory/v1/items", "GET", response.status, response.ok, response.ok ? undefined : `Status: ${response.status}`);
 
   if (!response.ok) {
     const errorText = await response.text();

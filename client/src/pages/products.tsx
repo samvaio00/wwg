@@ -152,24 +152,24 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
         </div>
 
         <div className="flex items-center gap-1">
-          <div className="flex items-center border rounded text-xs">
+          <div className="flex items-center border rounded text-xs flex-1">
             <Button 
               variant="ghost" 
               size="icon"
-              className="h-6 w-6"
+              className="h-6 w-7"
               onClick={decrementQuantity}
               disabled={isOutOfStock || quantity <= (product.minOrderQuantity || 1)}
               data-testid={`button-decrease-qty-${product.id}`}
             >
               <Minus className="h-2.5 w-2.5" />
             </Button>
-            <span className="w-6 text-center text-xs font-medium" data-testid={`text-quantity-${product.id}`}>
+            <span className="w-8 text-center text-xs font-medium" data-testid={`text-quantity-${product.id}`}>
               {quantity}
             </span>
             <Button 
               variant="ghost" 
               size="icon"
-              className="h-6 w-6"
+              className="h-6 w-7"
               onClick={incrementQuantity}
               disabled={isOutOfStock || quantity >= stockQty}
               data-testid={`button-increase-qty-${product.id}`}
@@ -178,7 +178,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
             </Button>
           </div>
           <Button 
-            className="flex-1 h-6 text-xs"
+            className="h-6 text-xs w-14 px-2"
             size="sm"
             onClick={handleAddToCart}
             disabled={isAddingToCart || isOutOfStock}
@@ -186,18 +186,12 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
             data-testid={`button-add-to-cart-${product.id}`}
           >
             {isOutOfStock ? (
-              <>
-                <Package className="h-3 w-3 mr-1" />
-                Unavailable
-              </>
+              <Package className="h-3 w-3" />
             ) : justAdded ? (
-              <>
-                <Check className="h-3 w-3 mr-1" />
-                Added
-              </>
+              <Check className="h-3 w-3" />
             ) : (
               <>
-                <ShoppingCart className="h-3 w-3 mr-1" />
+                <ShoppingCart className="h-3 w-3 mr-0.5" />
                 Add
               </>
             )}
@@ -356,9 +350,6 @@ export default function ProductsPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <AICartBuilder />
           <BulkImportDialog />
-          <Badge variant="secondary" className="w-fit">
-            {isLoading ? "..." : pagination?.totalCount || 0} products
-          </Badge>
         </div>
       </div>
 
@@ -450,65 +441,72 @@ export default function ProductsPage() {
           </div>
           
           {/* Pagination Controls */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-6" data-testid="pagination-controls">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(1)}
-                disabled={page === 1}
-                data-testid="button-first-page"
-              >
-                <ChevronsLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                data-testid="button-prev-page"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              
-              <div className="flex items-center gap-1 px-2">
-                <span className="text-sm text-muted-foreground">Page</span>
-                <Select 
-                  value={page.toString()} 
-                  onValueChange={(v) => setPage(parseInt(v, 10))}
-                >
-                  <SelectTrigger className="w-[70px] h-8" data-testid="select-page">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((p) => (
-                      <SelectItem key={p} value={p.toString()}>
-                        {p}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span className="text-sm text-muted-foreground">of {pagination.totalPages}</span>
-              </div>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
-                disabled={page === pagination.totalPages}
-                data-testid="button-next-page"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(pagination.totalPages)}
-                disabled={page === pagination.totalPages}
-                data-testid="button-last-page"
-              >
-                <ChevronsRight className="h-4 w-4" />
-              </Button>
+          {pagination && (
+            <div className="flex items-center justify-center gap-4 pt-6 flex-wrap" data-testid="pagination-controls">
+              <span className="text-sm text-muted-foreground">
+                {pagination.totalCount} products
+              </span>
+              {pagination.totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(1)}
+                    disabled={page === 1}
+                    data-testid="button-first-page"
+                  >
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    data-testid="button-prev-page"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  
+                  <div className="flex items-center gap-1 px-2">
+                    <span className="text-sm text-muted-foreground">Page</span>
+                    <Select 
+                      value={page.toString()} 
+                      onValueChange={(v) => setPage(parseInt(v, 10))}
+                    >
+                      <SelectTrigger className="w-[70px] h-8" data-testid="select-page">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((p) => (
+                          <SelectItem key={p} value={p.toString()}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="text-sm text-muted-foreground">of {pagination.totalPages}</span>
+                  </div>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+                    disabled={page === pagination.totalPages}
+                    data-testid="button-next-page"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(pagination.totalPages)}
+                    disabled={page === pagination.totalPages}
+                    data-testid="button-last-page"
+                  >
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </>

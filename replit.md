@@ -24,6 +24,7 @@ The platform is built with a modern web stack:
 - **Core Features**:
     - **User Management**: Supports 'admin', 'customer', and 'pending' roles with a comprehensive status workflow (pending, approved, rejected, suspended).
     - **Product Catalog**: Displays products with category filtering, search, sorting, pagination, and inventory-based buyability. Products can be marked as `isOnline` to control storefront visibility, linked to Zoho Inventory's "Show in Online Store" toggle.
+    - **Homepage Featured Products**: Customers see a customizable homepage with featured products. Admins can highlight products in Settings. Minimum 12 highlighted products required to show "Featured Products"; otherwise falls back to "Warner Collection" category.
     - **Shopping Cart & Order Management**: Full shopping cart functionality, secure checkout, order creation, order history for customers, and an admin portal for order approvals and status management with a detailed workflow.
     - **AI Features**: Includes an AI Cart Builder for natural language product recommendations and AI-enhanced semantic product search, powered by Replit AI Integrations (gpt-4o-mini). Vector embeddings are used for optimized semantic search, optionally with OpenAI API.
     - **Admin & Analytics**: An advanced analytics dashboard provides real-time order metrics, sales trends, customer insights, and top-selling products. Admin views for hidden products, out-of-stock items, and inactive customers are available.

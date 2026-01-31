@@ -181,8 +181,12 @@ function CustomerHomePage() {
     (c) => c.name.toLowerCase() === "warner" || c.slug === "warner"
   );
 
-  // Fetch Warner products if no highlighted products
-  const shouldFetchWarner = !highlightedLoading && (!highlightedData?.products || highlightedData.products.length === 0) && warnerCategory;
+  // Check if we have at least 12 highlighted products (minimum required)
+  const highlightedProducts = highlightedData?.products || [];
+  const hasEnoughHighlighted = highlightedProducts.length >= 12;
+
+  // Fetch Warner products if we don't have at least 12 highlighted products
+  const shouldFetchWarner = !highlightedLoading && !hasEnoughHighlighted && warnerCategory;
   const { data: warnerData, isLoading: warnerLoading } = useQuery<{ products: Product[] }>({
     queryKey: ["/api/products", { category: warnerCategory?.slug, limit: 24 }],
     enabled: !!shouldFetchWarner,
@@ -213,12 +217,12 @@ function CustomerHomePage() {
     addToCartMutation.mutate({ productId, quantity });
   };
 
-  // Determine which products to show
-  const displayProducts = highlightedData?.products?.length 
-    ? highlightedData.products 
+  // Determine which products to show - require at least 12 highlighted products
+  const displayProducts = hasEnoughHighlighted
+    ? highlightedProducts 
     : warnerData?.products || [];
   
-  const isHighlighted = highlightedData?.products && highlightedData.products.length > 0;
+  const showingHighlighted = hasEnoughHighlighted;
   const isLoading = highlightedLoading || (shouldFetchWarner && warnerLoading);
 
   return (
@@ -226,7 +230,7 @@ function CustomerHomePage() {
       <div className="flex items-center gap-2">
         <Star className="h-5 w-5 text-amber-500" />
         <h2 className="text-xl font-semibold">
-          {isHighlighted ? "Featured Products" : "Warner Collection"}
+          {showingHighlighted ? "Featured Products" : "Warner Collection"}
         </h2>
       </div>
 

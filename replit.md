@@ -189,10 +189,31 @@ npm run db:push
     - POST /api/admin/scheduler/sync - Trigger manual sync
   - Environment variables: SCHEDULER_ENABLED, ZOHO_SYNC_INTERVAL_MINUTES, EMBEDDINGS_UPDATE_INTERVAL_MINUTES
 
-### Phase 7+ (Future)
-- Sync `isOnline` from Zoho Inventory's "Show in Online Store" toggle
+### Phase 7 (Complete) - Online Store, Active Customers, Inventory Buyability
+- **Zoho Inventory Online Store Sync**: Sync `isOnline` from Zoho's native "Show in Online Store" toggle
+  - Products with `show_in_storefront=false` in Zoho get `isOnline=false` in DB
+  - De-listed products are hidden but not deleted (preserves order history)
+  - Inventory/pricing only synced for online products
+- **Zoho Books Customer Status Sync**: Sync active/inactive status from Zoho Books
+  - Users with linked Zoho customers get their status synced
+  - Inactive customers automatically suspended (users.status='suspended')
+  - Reactivated customers automatically approved again
+- **Inventory-Based Buyability**:
+  - Products with `stockQuantity <= 0` show "Out of Stock" badge
+  - Add-to-cart disabled for out-of-stock products (greyed out)
+  - API enforces stock validation on cart add, update, and checkout
+  - Checkout blocked if any cart item is out of stock
+- **Admin Visibility Views**:
+  - GET /api/admin/products/hidden - View offline/hidden products
+  - GET /api/admin/products/out-of-stock - View online but out-of-stock products
+  - GET /api/admin/customers/inactive - View suspended customers
+  - GET /api/admin/sync/history - View sync run logs
+- **Sync Run Logging**: All sync operations logged to `sync_runs` table with timing, counts, errors
+
+### Phase 8+ (Future)
 - True vector embeddings with dedicated OpenAI API key
 - Order tracking and shipment notifications
+- Customer price lists from Zoho
 
 ## Online Store Visibility (isOnline field)
 
@@ -224,4 +245,4 @@ Inspired by: Amazon Business, McMaster-Carr, Shopify Plus B2B, Stripe, Apple Bus
 
 ---
 
-*Last updated: Phase 6 completion*
+*Last updated: Phase 7 completion*

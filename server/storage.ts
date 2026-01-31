@@ -8,12 +8,14 @@ import {
   type CartItem,
   type Order,
   type OrderItem,
+  type SyncRun,
   users,
   products,
   carts,
   cartItems,
   orders,
   orderItems,
+  syncRuns,
   toSafeUser,
   UserRole,
   UserStatus,
@@ -24,7 +26,7 @@ import {
   type OrderStatusType
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, ne, ilike, or, asc, sql } from "drizzle-orm";
+import { eq, desc, and, ne, ilike, or, asc, sql, lte } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 12;
@@ -72,6 +74,18 @@ export interface IStorage {
   getAllOrders(): Promise<(Order & { user: SafeUser })[]>;
   updateOrderStatus(id: string, status: OrderStatusType, adminId?: string, reason?: string): Promise<Order | undefined>;
   updateOrderZohoInfo(id: string, zohoSalesOrderId: string): Promise<Order | undefined>;
+  
+  // Admin visibility operations
+  getHiddenProducts(): Promise<Product[]>;
+  getOutOfStockProducts(): Promise<Product[]>;
+  getInactiveCustomers(): Promise<SafeUser[]>;
+  getSyncHistory(limit?: number): Promise<SyncRun[]>;
+  createSyncRun(syncType: SyncType, triggeredBy: string): Promise<SyncRun>;
+  updateSyncRun(id: string, updates: Partial<SyncRun>): Promise<SyncRun | undefined>;
+  
+  // User Zoho status operations
+  updateUserZohoStatus(id: string, isActive: boolean): Promise<SafeUser | undefined>;
+  getUsersWithZohoCustomerId(): Promise<User[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -220,6 +234,11 @@ export class DatabaseStorage implements IStorage {
     }
     return product;
   }
+  
+  async getProductInternal(id: string): Promise<Product | undefined> {
+    const [product] = await db.select().from(products).where(eq(products.id, id));
+    return product;
+  }
 
   async getProductBySku(sku: string): Promise<Product | undefined> {
     const [product] = await db.select().from(products).where(eq(products.sku, sku));
@@ -276,18 +295,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addToCart(cartId: string, productId: string, quantity: number): Promise<CartItem> {
-    const product = await this.getProduct(productId);
+    const product = await this.getProductInternal(productId);
     if (!product) throw new Error('Product not found');
+    
+    // Check if product is buyable (online and in stock)
+    if (!product.isOnline) {
+      throw new Error(`Product "${product.name}" is no longer available for purchase`);
+    }
+    
+    const stockQty = product.stockQuantity || 0;
+    if (stockQty <= 0) {
+      throw new Error(`Product "${product.name}" is out of stock`);
+    }
     
     // Check if item already exists in cart
     const [existingItem] = await db.select()
       .from(cartItems)
       .where(and(eq(cartItems.cartId, cartId), eq(cartItems.productId, productId)));
     
+    const newQuantity = existingItem ? existingItem.quantity + quantity : quantity;
+    
+    // Check if requested quantity exceeds available stock
+    if (newQuantity > stockQty) {
+      throw new Error(`Only ${stockQty} units of "${product.name}" available in stock`);
+    }
+    
     let cartItem: CartItem;
     
     if (existingItem) {
-      const newQuantity = existingItem.quantity + quantity;
       const lineTotal = (parseFloat(product.basePrice) * newQuantity).toFixed(2);
       const [updated] = await db.update(cartItems)
         .set({ quantity: newQuantity, lineTotal, updatedAt: new Date() })
@@ -316,8 +351,22 @@ export class DatabaseStorage implements IStorage {
     const [item] = await db.select().from(cartItems).where(eq(cartItems.id, cartItemId));
     if (!item) return undefined;
     
-    const product = await this.getProduct(item.productId);
+    const product = await this.getProductInternal(item.productId);
     if (!product) return undefined;
+    
+    // Check if product is still available
+    if (!product.isOnline) {
+      throw new Error(`Product "${product.name}" is no longer available for purchase`);
+    }
+    
+    // Check stock availability for the new quantity
+    const stockQty = product.stockQuantity || 0;
+    if (stockQty <= 0) {
+      throw new Error(`Product "${product.name}" is out of stock`);
+    }
+    if (quantity > stockQty) {
+      throw new Error(`Only ${stockQty} units of "${product.name}" available in stock`);
+    }
     
     const lineTotal = (parseFloat(product.basePrice) * quantity).toFixed(2);
     const [updated] = await db.update(cartItems)
@@ -359,6 +408,28 @@ export class DatabaseStorage implements IStorage {
     
     const items = await this.getCartItems(cart.id);
     if (items.length === 0) throw new Error('Cart is empty');
+    
+    // Validate stock for all items before creating order
+    const outOfStockItems: string[] = [];
+    const insufficientStockItems: string[] = [];
+    
+    for (const item of items) {
+      const product = item.product;
+      const stockQty = product.stockQuantity || 0;
+      
+      if (!product.isOnline) {
+        outOfStockItems.push(`${product.name} (SKU: ${product.sku}) is no longer available`);
+      } else if (stockQty <= 0) {
+        outOfStockItems.push(`${product.name} (SKU: ${product.sku}) is out of stock`);
+      } else if (item.quantity > stockQty) {
+        insufficientStockItems.push(`${product.name} (SKU: ${product.sku}): only ${stockQty} available, you have ${item.quantity} in cart`);
+      }
+    }
+    
+    if (outOfStockItems.length > 0 || insufficientStockItems.length > 0) {
+      const allIssues = [...outOfStockItems, ...insufficientStockItems];
+      throw new Error(`Unable to place order:\n${allIssues.join('\n')}`);
+    }
     
     const subtotal = parseFloat(cart.subtotal || '0');
     const taxAmount = 0; // Can be calculated based on shipping address
@@ -474,6 +545,37 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return updated;
+  }
+
+  // Admin visibility queries
+  async getHiddenProducts(): Promise<Product[]> {
+    return db.select()
+      .from(products)
+      .where(eq(products.isOnline, false))
+      .orderBy(desc(products.updatedAt));
+  }
+
+  async getOutOfStockProducts(): Promise<Product[]> {
+    return db.select()
+      .from(products)
+      .where(and(eq(products.isOnline, true), lte(products.stockQuantity, 0)))
+      .orderBy(desc(products.updatedAt));
+  }
+
+  async getInactiveCustomers(): Promise<SafeUser[]> {
+    const result = await db.select()
+      .from(users)
+      .where(and(eq(users.role, 'customer'), eq(users.status, 'suspended')))
+      .orderBy(desc(users.updatedAt));
+    
+    return result.map(toSafeUser);
+  }
+
+  async getSyncHistory(limit: number = 20): Promise<SyncRun[]> {
+    return db.select()
+      .from(syncRuns)
+      .orderBy(desc(syncRuns.startedAt))
+      .limit(limit);
   }
 }
 

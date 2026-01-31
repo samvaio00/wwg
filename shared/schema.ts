@@ -62,6 +62,15 @@ export const AIEventType = {
 
 export type AIEventTypeValue = typeof AIEventType[keyof typeof AIEventType];
 
+// Sync types for logging
+export const SyncType = {
+  ZOHO_INVENTORY: 'zoho_inventory',
+  ZOHO_CUSTOMERS: 'zoho_customers',
+  EMBEDDINGS: 'embeddings',
+} as const;
+
+export type SyncTypeValue = typeof SyncType[keyof typeof SyncType];
+
 // ================================================================
 // USERS TABLE
 // ================================================================
@@ -87,6 +96,8 @@ export const users = pgTable("users", {
   // Zoho integration
   zohoCustomerId: text("zoho_customer_id"),
   priceListId: text("price_list_id"), // Customer-specific pricing tier
+  zohoIsActive: boolean("zoho_is_active").default(true), // Reflects Zoho Books customer active status
+  zohoLastCheckedAt: timestamp("zoho_last_checked_at"), // Last time status was verified
   
   // Timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -344,6 +355,41 @@ export const aiEvents = pgTable("ai_events", {
 }));
 
 // ================================================================
+// SYNC RUNS TABLE (for logging sync operations)
+// ================================================================
+
+export const syncRuns = pgTable("sync_runs", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Sync type: zoho_inventory, zoho_customers, embeddings
+  syncType: text("sync_type").notNull(),
+  
+  // Status: running, completed, failed
+  status: text("status").notNull().default("running"),
+  
+  // Counts
+  totalProcessed: integer("total_processed").default(0),
+  created: integer("created").default(0),
+  updated: integer("updated").default(0),
+  skipped: integer("skipped").default(0),
+  errors: integer("errors").default(0),
+  
+  // Timing
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  durationMs: integer("duration_ms"),
+  
+  // Error details
+  errorMessages: text("error_messages").array(),
+  
+  // Metadata
+  triggeredBy: text("triggered_by"), // "scheduler", "manual", "startup"
+}, (table) => ({
+  syncTypeIdx: index("sync_runs_type_idx").on(table.syncType),
+  startedAtIdx: index("sync_runs_started_idx").on(table.startedAt),
+}));
+
+// ================================================================
 // ZOD SCHEMAS & TYPES
 // ================================================================
 
@@ -425,6 +471,7 @@ export type OrderItem = typeof orderItems.$inferSelect;
 export type ProductEmbedding = typeof productEmbeddings.$inferSelect;
 export type AICache = typeof aiCache.$inferSelect;
 export type AIEvent = typeof aiEvents.$inferSelect;
+export type SyncRun = typeof syncRuns.$inferSelect;
 
 // ================================================================
 // HELPERS

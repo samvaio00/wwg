@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { products } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { products, syncRuns, SyncType } from "@shared/schema";
+import { eq, isNotNull, notInArray } from "drizzle-orm";
 
 interface ZohoTokenResponse {
   access_token: string;
@@ -138,92 +138,226 @@ export interface SyncResult {
   created: number;
   updated: number;
   skipped: number;
+  delisted: number;
   errors: string[];
   total: number;
+  syncRunId?: string;
 }
 
-export async function syncProductsFromZoho(): Promise<SyncResult> {
+export async function syncProductsFromZoho(triggeredBy: string = "manual"): Promise<SyncResult> {
+  const startTime = Date.now();
+  
+  const [syncRunRecord] = await db.insert(syncRuns).values({
+    id: crypto.randomUUID(),
+    syncType: SyncType.ZOHO_INVENTORY,
+    status: "running",
+    triggeredBy,
+  }).returning();
+
   const result: SyncResult = {
     created: 0,
     updated: 0,
     skipped: 0,
+    delisted: 0,
     errors: [],
     total: 0,
+    syncRunId: syncRunRecord.id,
   };
+
+  const onlineZohoItemIds: string[] = [];
 
   try {
     let page = 1;
     let hasMore = true;
+    let retryCount = 0;
+    const maxRetries = 3;
 
     while (hasMore) {
-      const response = await fetchZohoItems(page);
-      const items = response.items || [];
-      result.total += items.length;
+      try {
+        const response = await fetchZohoItems(page);
+        const items = response.items || [];
+        result.total += items.length;
+        retryCount = 0;
 
-      for (const item of items) {
-        try {
-          if (item.status !== "active") {
-            result.skipped++;
-            continue;
+        for (const item of items) {
+          try {
+            if (item.status !== "active") {
+              result.skipped++;
+              continue;
+            }
+
+            const showInOnlineStore = item.show_in_storefront === true;
+            
+            if (showInOnlineStore) {
+              onlineZohoItemIds.push(item.item_id);
+            }
+
+            const existingProduct = await db
+              .select()
+              .from(products)
+              .where(eq(products.zohoItemId, item.item_id))
+              .limit(1);
+
+            const subcategory = getCustomFieldValue(item, "subcategory");
+            const tags = getCustomFieldValue(item, "tags");
+            const compareAtPrice = getCustomFieldValue(item, "compare_at_price");
+            const minOrderQty = getCustomFieldValue(item, "min_order_quantity");
+            const casePackSize = getCustomFieldValue(item, "case_pack_size");
+
+            const stockQuantity = showInOnlineStore ? Math.floor(item.stock_on_hand || 0) : (existingProduct.length > 0 ? existingProduct[0].stockQuantity : 0);
+            const lowStockThreshold = showInOnlineStore ? (item.reorder_level || 10) : (existingProduct.length > 0 ? existingProduct[0].lowStockThreshold : 10);
+
+            if (existingProduct.length > 0) {
+              await db
+                .update(products)
+                .set({
+                  sku: item.sku || `ZOHO-${item.item_id}`,
+                  name: item.name,
+                  description: item.description || null,
+                  category: mapZohoCategoryToLocal(item.category_name),
+                  subcategory: typeof subcategory === "string" ? subcategory : null,
+                  brand: item.brand || item.manufacturer || null,
+                  tags: typeof tags === "string" ? tags.split(",").map((t) => t.trim()) : [],
+                  basePrice: item.rate.toString(),
+                  compareAtPrice: compareAtPrice ? String(compareAtPrice) : null,
+                  minOrderQuantity: typeof minOrderQty === "number" ? minOrderQty : 1,
+                  casePackSize: typeof casePackSize === "number" ? casePackSize : 1,
+                  stockQuantity,
+                  lowStockThreshold,
+                  isActive: true,
+                  isOnline: showInOnlineStore,
+                  zohoItemId: item.item_id,
+                  zohoLastSyncAt: new Date(),
+                  updatedAt: new Date(),
+                })
+                .where(eq(products.id, existingProduct[0].id));
+              result.updated++;
+            } else {
+              await db.insert(products).values({
+                id: crypto.randomUUID(),
+                sku: item.sku || `ZOHO-${item.item_id}`,
+                name: item.name,
+                description: item.description || null,
+                category: mapZohoCategoryToLocal(item.category_name),
+                subcategory: typeof subcategory === "string" ? subcategory : null,
+                brand: item.brand || item.manufacturer || null,
+                tags: typeof tags === "string" ? tags.split(",").map((t) => t.trim()) : [],
+                basePrice: item.rate.toString(),
+                compareAtPrice: compareAtPrice ? String(compareAtPrice) : null,
+                minOrderQuantity: typeof minOrderQty === "number" ? minOrderQty : 1,
+                casePackSize: typeof casePackSize === "number" ? casePackSize : 1,
+                stockQuantity,
+                lowStockThreshold,
+                isActive: true,
+                isOnline: showInOnlineStore,
+                zohoItemId: item.item_id,
+                zohoLastSyncAt: new Date(),
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              });
+              result.created++;
+            }
+          } catch (err) {
+            result.errors.push(`Item ${item.item_id}: ${err instanceof Error ? err.message : "Unknown error"}`);
           }
+        }
 
-          const existingProduct = await db
-            .select()
-            .from(products)
-            .where(eq(products.zohoItemId, item.item_id))
-            .limit(1);
-
-          const subcategory = getCustomFieldValue(item, "subcategory");
-          const tags = getCustomFieldValue(item, "tags");
-          const compareAtPrice = getCustomFieldValue(item, "compare_at_price");
-          const minOrderQty = getCustomFieldValue(item, "min_order_quantity");
-          const casePackSize = getCustomFieldValue(item, "case_pack_size");
-
-          const productData = {
-            sku: item.sku || `ZOHO-${item.item_id}`,
-            name: item.name,
-            description: item.description || null,
-            category: mapZohoCategoryToLocal(item.category_name),
-            subcategory: typeof subcategory === "string" ? subcategory : null,
-            brand: item.brand || item.manufacturer || null,
-            tags: typeof tags === "string" ? tags.split(",").map((t) => t.trim()) : [],
-            basePrice: item.rate.toString(),
-            compareAtPrice: compareAtPrice ? String(compareAtPrice) : null,
-            minOrderQuantity: typeof minOrderQty === "number" ? minOrderQty : 1,
-            casePackSize: typeof casePackSize === "number" ? casePackSize : 1,
-            stockQuantity: Math.floor(item.stock_on_hand || 0),
-            lowStockThreshold: item.reorder_level || 10,
-            isActive: true,
-            isOnline: item.show_in_storefront !== false,
-            zohoItemId: item.item_id,
-            zohoSku: item.sku || null,
-            zohoCategoryName: item.category_name || null,
-            zohoLastSyncAt: new Date(),
-          };
-
-          if (existingProduct.length > 0) {
-            await db
-              .update(products)
-              .set(productData)
-              .where(eq(products.id, existingProduct[0].id));
-            result.updated++;
-          } else {
-            await db.insert(products).values({
-              ...productData,
-              id: crypto.randomUUID(),
-            });
-            result.created++;
-          }
-        } catch (err) {
-          result.errors.push(`Item ${item.item_id}: ${err instanceof Error ? err.message : "Unknown error"}`);
+        hasMore = response.page_context?.has_more_page || false;
+        page++;
+      } catch (pageErr) {
+        if (retryCount < maxRetries) {
+          retryCount++;
+          const delay = Math.pow(2, retryCount) * 1000;
+          console.log(`[Zoho Sync] Retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          throw pageErr;
         }
       }
-
-      hasMore = response.page_context?.has_more_page || false;
-      page++;
     }
+
+    if (onlineZohoItemIds.length > 0) {
+      const delistedProducts = await db
+        .update(products)
+        .set({ 
+          isOnline: false, 
+          isActive: false,
+          updatedAt: new Date(),
+        })
+        .where(
+          isNotNull(products.zohoItemId)
+        )
+        .returning();
+
+      const toDelistIds = delistedProducts
+        .filter(p => p.zohoItemId && !onlineZohoItemIds.includes(p.zohoItemId) && p.isOnline)
+        .map(p => p.id);
+
+      if (toDelistIds.length > 0) {
+        await db
+          .update(products)
+          .set({ 
+            isOnline: false, 
+            isActive: false,
+            updatedAt: new Date(),
+          })
+          .where(notInArray(products.id, toDelistIds.length > 0 ? toDelistIds : ['dummy']));
+      }
+
+      const allSyncedProducts = await db
+        .select({ id: products.id, zohoItemId: products.zohoItemId, isOnline: products.isOnline })
+        .from(products)
+        .where(isNotNull(products.zohoItemId));
+
+      for (const prod of allSyncedProducts) {
+        if (prod.zohoItemId && !onlineZohoItemIds.includes(prod.zohoItemId) && prod.isOnline) {
+          await db
+            .update(products)
+            .set({ isOnline: false, isActive: false, updatedAt: new Date() })
+            .where(eq(products.id, prod.id));
+          result.delisted++;
+        }
+      }
+    }
+
+    const durationMs = Date.now() - startTime;
+    await db
+      .update(syncRuns)
+      .set({
+        status: "completed",
+        totalProcessed: result.total,
+        created: result.created,
+        updated: result.updated,
+        skipped: result.skipped + result.delisted,
+        errors: result.errors.length,
+        completedAt: new Date(),
+        durationMs,
+        errorMessages: result.errors.length > 0 ? result.errors.slice(0, 100) : null,
+      })
+      .where(eq(syncRuns.id, syncRunRecord.id));
+
+    console.log(`[Zoho Sync] Complete: ${result.created} created, ${result.updated} updated, ${result.delisted} delisted, ${result.errors.length} errors in ${durationMs}ms`);
   } catch (err) {
-    result.errors.push(`Sync failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+    const durationMs = Date.now() - startTime;
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    result.errors.push(`Sync failed: ${errorMessage}`);
+    
+    await db
+      .update(syncRuns)
+      .set({
+        status: "failed",
+        totalProcessed: result.total,
+        created: result.created,
+        updated: result.updated,
+        skipped: result.skipped,
+        errors: result.errors.length,
+        completedAt: new Date(),
+        durationMs,
+        errorMessages: result.errors.slice(0, 100),
+      })
+      .where(eq(syncRuns.id, syncRunRecord.id));
+
+    console.error(`[Zoho Sync] Failed: ${errorMessage}`);
   }
 
   return result;
@@ -243,4 +377,12 @@ export async function testZohoConnection(): Promise<{ success: boolean; message:
       message: err instanceof Error ? err.message : "Unknown error",
     };
   }
+}
+
+export async function getSyncHistory(limit: number = 20): Promise<typeof syncRuns.$inferSelect[]> {
+  return db
+    .select()
+    .from(syncRuns)
+    .orderBy(syncRuns.startedAt)
+    .limit(limit);
 }

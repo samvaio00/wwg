@@ -1,0 +1,86 @@
+PHASE 7 COMBINED ADD-ON:
+(1) ONLINE-ONLY ITEMS (Zoho Inventory native toggle)
+(2) ACTIVE-ONLY CUSTOMERS (Zoho Books)
+(3) INVENTORY-BASED BUYABILITY (qty > 0 buyable; qty <= 0 greyed + not buyable)
+
+A) ZOHO INVENTORY — SYNC ONLY ONLINE STORE ITEMS
+1) Fetch items from Zoho Inventory using list endpoints with pagination.
+2) Filter to ONLY items where the native Zoho Inventory flag “Show in Online Store” is TRUE.
+   - Use server-side filtering if Zoho API supports it; otherwise filter client-side per page.
+3) Persist the flag in DB:
+   - products.is_online boolean MUST reflect Zoho’s native toggle.
+
+4) De-listing behavior:
+   - If an item was previously synced (is_online=true) and later becomes is_online=false in Zoho:
+     - Do NOT delete it.
+     - Set products.is_online=false and products.status='hidden' (or equivalent).
+     - Ensure it disappears from ALL storefront listings/search after the next sync.
+     - Skip further inventory and price updates for that item.
+
+5) Inventory/pricing sync scope:
+   - Only sync inventory_levels and product_prices for products where is_online=true.
+   - Skip inventory/pricing updates for products where is_online=false.
+
+B) ZOHO BOOKS — SYNC ONLY ACTIVE CUSTOMERS
+1) Fetch customers/contacts from Zoho Books using list endpoints with pagination.
+2) Filter to ONLY ACTIVE customers (based on Zoho’s native status/active fields).
+   - Use server-side filtering if available; else filter client-side.
+3) Persist status in DB:
+   - customers.is_active boolean MUST reflect Zoho status.
+
+4) Deactivation behavior:
+   - If a customer previously synced as active becomes inactive in Zoho:
+     - Set customers.is_active=false.
+     - Suspend any linked user accounts: users.status='suspended' (or equivalent).
+     - Block login and hide pricing/checkout after next sync.
+     - Do NOT delete records (retain for audit/history).
+
+5) Signup/Login enforcement:
+   - During signup, if email exists but customer is inactive: block activation and show:
+     “Your account is inactive. Contact support.”
+   - During login, if linked Zoho customer is inactive: block login with same message.
+
+C) INVENTORY-BASED BUYABILITY (UI + API RULES)
+We must display products even when out of stock, but they must NOT be buyable.
+
+1) Store inventory quantity:
+   - inventory_levels.quantity_available (number)
+
+2) Define buyability:
+   - A product is BUYABLE if:
+     products.is_online == true AND inventory_levels.quantity_available > 0
+   - A product is NOT BUYABLE if:
+     quantity_available <= 0 (including 0 or negative)
+
+3) UI behavior (storefront):
+   - If NOT BUYABLE (qty <= 0):
+     - Grey out the product tile and show an “Out of stock” badge (or similar).
+     - Disable “Add to cart” button everywhere (tile and product detail page).
+   - If BUYABLE:
+     - Normal appearance and Add to cart enabled.
+
+4) API enforcement (must not rely only on UI):
+   - Cart/add endpoints MUST validate buyability:
+     - Reject add-to-cart attempts for qty <= 0 with a clear error.
+   - Checkout must revalidate stock for all cart items before creating the order:
+     - If any item is now qty <= 0, block checkout and show which SKUs are unavailable.
+
+5) Optional (recommended) soft backorder behavior:
+   - Do NOT allow backorders unless explicitly enabled by an admin setting.
+   - Default: qty <= 0 => not buyable.
+
+D) ADMIN VISIBILITY
+1) Add admin-only read-only views for:
+   - Hidden products (is_online=false)
+   - Out-of-stock products (qty <= 0)
+   - Inactive customers (is_active=false)
+
+E) SYNC ENGINE REQUIREMENTS (applies to all)
+- Pagination must be robust.
+- Upserts must be idempotent.
+- Sync runs logged in sync_runs with counts, duration, errors.
+- Manual “Run Sync Now” in admin for debugging.
+- Retries with exponential backoff.
+- NEVER call Zoho from storefront rendering; only workers.
+
+Proceed with PHASE 7 ONLY. Stop when complete and ask to proceed.

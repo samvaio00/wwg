@@ -291,6 +291,140 @@ export interface ZohoSalesOrderResult {
   message: string;
 }
 
+// ================================================================
+// CUSTOMER STATUS SYNC
+// ================================================================
+
+import { db } from "./db";
+import { users, syncRuns, SyncType, UserStatus } from "@shared/schema";
+import { eq, isNotNull } from "drizzle-orm";
+
+export interface CustomerSyncResult {
+  total: number;
+  checked: number;
+  suspended: number;
+  reactivated: number;
+  errors: string[];
+  syncRunId?: string;
+}
+
+export async function syncCustomerStatusFromZoho(triggeredBy: string = "manual"): Promise<CustomerSyncResult> {
+  const startTime = Date.now();
+  
+  const [syncRunRecord] = await db.insert(syncRuns).values({
+    id: crypto.randomUUID(),
+    syncType: SyncType.ZOHO_CUSTOMERS,
+    status: "running",
+    triggeredBy,
+  }).returning();
+
+  const result: CustomerSyncResult = {
+    total: 0,
+    checked: 0,
+    suspended: 0,
+    reactivated: 0,
+    errors: [],
+    syncRunId: syncRunRecord.id,
+  };
+
+  try {
+    const usersWithZoho = await db
+      .select()
+      .from(users)
+      .where(isNotNull(users.zohoCustomerId));
+
+    result.total = usersWithZoho.length;
+    console.log(`[Zoho Customer Sync] Checking ${result.total} users with Zoho customer IDs`);
+
+    for (const user of usersWithZoho) {
+      try {
+        if (!user.zohoCustomerId) continue;
+
+        const zohoResult = await checkZohoCustomerById(user.zohoCustomerId);
+        result.checked++;
+
+        const wasActive = user.zohoIsActive !== false;
+        const isNowActive = zohoResult.found && zohoResult.active;
+
+        if (wasActive && !isNowActive) {
+          await db
+            .update(users)
+            .set({
+              zohoIsActive: false,
+              zohoLastCheckedAt: new Date(),
+              status: UserStatus.SUSPENDED,
+              updatedAt: new Date(),
+            })
+            .where(eq(users.id, user.id));
+          result.suspended++;
+          console.log(`[Zoho Customer Sync] Suspended user ${user.email} (Zoho inactive)`);
+        } else if (!wasActive && isNowActive && user.status === UserStatus.SUSPENDED) {
+          await db
+            .update(users)
+            .set({
+              zohoIsActive: true,
+              zohoLastCheckedAt: new Date(),
+              status: UserStatus.APPROVED,
+              updatedAt: new Date(),
+            })
+            .where(eq(users.id, user.id));
+          result.reactivated++;
+          console.log(`[Zoho Customer Sync] Reactivated user ${user.email} (Zoho active)`);
+        } else {
+          await db
+            .update(users)
+            .set({
+              zohoIsActive: isNowActive,
+              zohoLastCheckedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(users.id, user.id));
+        }
+      } catch (err) {
+        result.errors.push(`User ${user.email}: ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
+    }
+
+    const durationMs = Date.now() - startTime;
+    await db
+      .update(syncRuns)
+      .set({
+        status: "completed",
+        totalProcessed: result.total,
+        created: result.reactivated,
+        updated: result.checked,
+        skipped: result.suspended,
+        errors: result.errors.length,
+        completedAt: new Date(),
+        durationMs,
+        errorMessages: result.errors.length > 0 ? result.errors.slice(0, 100) : null,
+      })
+      .where(eq(syncRuns.id, syncRunRecord.id));
+
+    console.log(`[Zoho Customer Sync] Complete: ${result.checked} checked, ${result.suspended} suspended, ${result.reactivated} reactivated in ${durationMs}ms`);
+  } catch (err) {
+    const durationMs = Date.now() - startTime;
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    result.errors.push(`Sync failed: ${errorMessage}`);
+    
+    await db
+      .update(syncRuns)
+      .set({
+        status: "failed",
+        totalProcessed: result.total,
+        errors: result.errors.length,
+        completedAt: new Date(),
+        durationMs,
+        errorMessages: result.errors.slice(0, 100),
+      })
+      .where(eq(syncRuns.id, syncRunRecord.id));
+
+    console.error(`[Zoho Customer Sync] Failed: ${errorMessage}`);
+  }
+
+  return result;
+}
+
 export async function createZohoSalesOrder(input: ZohoSalesOrderInput): Promise<ZohoSalesOrderResult> {
   try {
     const accessToken = await getAccessToken();

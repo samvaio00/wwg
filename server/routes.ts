@@ -502,7 +502,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Validation error", errors: error.errors });
       }
       console.error("Error adding to cart:", error);
-      res.status(500).json({ message: "Failed to add to cart" });
+      const message = error instanceof Error ? error.message : "Failed to add to cart";
+      res.status(400).json({ message });
     }
   });
 
@@ -941,8 +942,8 @@ export async function registerRoutes(
   app.post("/api/admin/scheduler/sync", requireAdmin, async (req, res) => {
     try {
       const { type = "all" } = req.body;
-      if (!["zoho", "embeddings", "all"].includes(type)) {
-        return res.status(400).json({ message: "Invalid sync type. Use: zoho, embeddings, or all" });
+      if (!["zoho", "embeddings", "customers", "all"].includes(type)) {
+        return res.status(400).json({ message: "Invalid sync type. Use: zoho, embeddings, customers, or all" });
       }
       const results = await triggerManualSync(type);
       res.json({ success: true, results });
@@ -952,6 +953,55 @@ export async function registerRoutes(
         success: false, 
         message: error instanceof Error ? error.message : "Sync failed" 
       });
+    }
+  });
+
+  // ================================================================
+  // ADMIN VISIBILITY ENDPOINTS
+  // ================================================================
+
+  // Get hidden products (isOnline = false)
+  app.get("/api/admin/products/hidden", requireAdmin, async (_req, res) => {
+    try {
+      const hiddenProducts = await storage.getHiddenProducts();
+      res.json({ products: hiddenProducts, count: hiddenProducts.length });
+    } catch (error) {
+      console.error("Error fetching hidden products:", error);
+      res.status(500).json({ message: "Failed to fetch hidden products" });
+    }
+  });
+
+  // Get out-of-stock products (online but qty <= 0)
+  app.get("/api/admin/products/out-of-stock", requireAdmin, async (_req, res) => {
+    try {
+      const outOfStockProducts = await storage.getOutOfStockProducts();
+      res.json({ products: outOfStockProducts, count: outOfStockProducts.length });
+    } catch (error) {
+      console.error("Error fetching out-of-stock products:", error);
+      res.status(500).json({ message: "Failed to fetch out-of-stock products" });
+    }
+  });
+
+  // Get inactive/suspended customers
+  app.get("/api/admin/customers/inactive", requireAdmin, async (_req, res) => {
+    try {
+      const inactiveCustomers = await storage.getInactiveCustomers();
+      res.json({ customers: inactiveCustomers, count: inactiveCustomers.length });
+    } catch (error) {
+      console.error("Error fetching inactive customers:", error);
+      res.status(500).json({ message: "Failed to fetch inactive customers" });
+    }
+  });
+
+  // Get sync history
+  app.get("/api/admin/sync/history", requireAdmin, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const history = await storage.getSyncHistory(limit);
+      res.json({ runs: history, count: history.length });
+    } catch (error) {
+      console.error("Error fetching sync history:", error);
+      res.status(500).json({ message: "Failed to fetch sync history" });
     }
   });
 

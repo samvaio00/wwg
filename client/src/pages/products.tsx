@@ -52,15 +52,23 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
 }) {
   const [quantity, setQuantity] = useState(product.minOrderQuantity || 1);
   const [justAdded, setJustAdded] = useState(false);
+  
+  const stockQty = product.stockQuantity || 0;
+  const isOutOfStock = stockQty <= 0;
+  const isLowStock = stockQty > 0 && stockQty <= (product.lowStockThreshold || 10);
 
   const handleAddToCart = () => {
+    if (isOutOfStock) return;
     onAddToCart(product.id, quantity);
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 2000);
   };
 
   const incrementQuantity = () => {
-    setQuantity(prev => prev + (product.casePackSize || 1));
+    const newQty = quantity + (product.casePackSize || 1);
+    if (newQty <= stockQty) {
+      setQuantity(newQty);
+    }
   };
 
   const decrementQuantity = () => {
@@ -68,13 +76,16 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
   };
 
   return (
-    <Card className="overflow-hidden hover-elevate" data-testid={`card-product-${product.id}`}>
+    <Card 
+      className={`overflow-hidden ${isOutOfStock ? "opacity-60" : "hover-elevate"}`} 
+      data-testid={`card-product-${product.id}`}
+    >
       <div className="aspect-square relative bg-muted">
         {product.imageUrl ? (
           <img 
             src={product.imageUrl} 
             alt={product.name}
-            className="object-cover w-full h-full"
+            className={`object-cover w-full h-full ${isOutOfStock ? "grayscale" : ""}`}
             loading="lazy"
           />
         ) : (
@@ -85,7 +96,11 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
         <Badge className="absolute top-2 left-2" variant="secondary">
           {product.category}
         </Badge>
-        {product.stockQuantity && product.stockQuantity <= (product.lowStockThreshold || 10) && (
+        {isOutOfStock ? (
+          <Badge className="absolute top-2 right-2" variant="destructive" data-testid={`badge-out-of-stock-${product.id}`}>
+            Out of Stock
+          </Badge>
+        ) : isLowStock && (
           <Badge className="absolute top-2 right-2" variant="destructive">
             Low Stock
           </Badge>
@@ -107,7 +122,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
         </p>
 
         <div className="flex items-baseline gap-2">
-          <span className="text-xl font-bold text-primary" data-testid={`text-product-price-${product.id}`}>
+          <span className="text-xl font-bold" data-testid={`text-product-price-${product.id}`}>
             ${product.basePrice}
           </span>
           {product.compareAtPrice && (
@@ -128,22 +143,21 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
           <div className="flex items-center border rounded-md">
             <Button 
               variant="ghost" 
-              size="icon" 
-              className="h-8 w-8"
+              size="sm"
               onClick={decrementQuantity}
-              disabled={quantity <= (product.minOrderQuantity || 1)}
+              disabled={isOutOfStock || quantity <= (product.minOrderQuantity || 1)}
               data-testid={`button-decrease-qty-${product.id}`}
             >
               <Minus className="h-3 w-3" />
             </Button>
-            <span className="w-12 text-center text-sm font-medium" data-testid={`text-quantity-${product.id}`}>
+            <span className="w-10 text-center text-sm font-medium" data-testid={`text-quantity-${product.id}`}>
               {quantity}
             </span>
             <Button 
               variant="ghost" 
-              size="icon" 
-              className="h-8 w-8"
+              size="sm"
               onClick={incrementQuantity}
+              disabled={isOutOfStock || quantity >= stockQty}
               data-testid={`button-increase-qty-${product.id}`}
             >
               <Plus className="h-3 w-3" />
@@ -152,10 +166,16 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
           <Button 
             className="flex-1"
             onClick={handleAddToCart}
-            disabled={isAddingToCart}
+            disabled={isAddingToCart || isOutOfStock}
+            variant={isOutOfStock ? "secondary" : "default"}
             data-testid={`button-add-to-cart-${product.id}`}
           >
-            {justAdded ? (
+            {isOutOfStock ? (
+              <>
+                <Package className="h-4 w-4 mr-1" />
+                Unavailable
+              </>
+            ) : justAdded ? (
               <>
                 <Check className="h-4 w-4 mr-1" />
                 Added
@@ -256,6 +276,10 @@ export default function ProductsPage() {
   const addToCartMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
       const res = await apiRequest("POST", "/api/cart/items", { productId, quantity });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to add to cart");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -265,10 +289,10 @@ export default function ProductsPage() {
         description: "Product has been added to your cart.",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Error",
-        description: "Failed to add product to cart. Please try again.",
+        title: "Unable to add to cart",
+        description: error.message || "Failed to add product to cart. Please try again.",
         variant: "destructive",
       });
     },

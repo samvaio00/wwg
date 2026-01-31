@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { products, syncRuns, SyncType } from "@shared/schema";
-import { eq, isNotNull, notInArray } from "drizzle-orm";
+import { eq, isNotNull, desc, and } from "drizzle-orm";
 
 interface ZohoTokenResponse {
   access_token: string;
@@ -29,6 +29,7 @@ interface ZohoItem {
   image_document_id?: string;
   show_in_storefront?: boolean;
   status: string;
+  last_modified_time?: string;
   custom_fields?: ZohoCustomField[];
   cf_case_pack_size?: number;
   cf_min_order_quantity?: number;
@@ -98,21 +99,31 @@ async function getAccessToken(): Promise<string> {
   return cachedAccessToken;
 }
 
-async function fetchZohoItems(page: number = 1): Promise<ZohoItemsResponse> {
+interface FetchZohoItemsOptions {
+  page?: number;
+  sortByModified?: boolean;
+}
+
+async function fetchZohoItems(options: FetchZohoItemsOptions = {}): Promise<ZohoItemsResponse> {
+  const { page = 1, sortByModified = false } = options;
   const accessToken = await getAccessToken();
   const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
 
   if (!organizationId) {
     throw new Error("Zoho organization ID not configured");
   }
-  const response = await fetch(
-    `https://www.zohoapis.com/inventory/v1/items?organization_id=${organizationId}&page=${page}&per_page=100`,
-    {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${accessToken}`,
-      },
-    }
-  );
+  
+  let url = `https://www.zohoapis.com/inventory/v1/items?organization_id=${organizationId}&page=${page}&per_page=200`;
+  
+  if (sortByModified) {
+    url += `&sort_column=last_modified_time&sort_order=D`;
+  }
+  
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+    },
+  });
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -120,6 +131,23 @@ async function fetchZohoItems(page: number = 1): Promise<ZohoItemsResponse> {
   }
 
   return response.json();
+}
+
+async function getLastSuccessfulSyncTime(syncType: string): Promise<Date | null> {
+  const lastSync = await db
+    .select({ completedAt: syncRuns.completedAt })
+    .from(syncRuns)
+    .where(and(
+      eq(syncRuns.syncType, syncType),
+      eq(syncRuns.status, "completed")
+    ))
+    .orderBy(desc(syncRuns.completedAt))
+    .limit(1);
+  
+  if (lastSync.length > 0 && lastSync[0].completedAt) {
+    return lastSync[0].completedAt;
+  }
+  return null;
 }
 
 function mapZohoCategoryToLocal(categoryName?: string): string {
@@ -147,6 +175,10 @@ export interface SyncResult {
 export async function syncProductsFromZoho(triggeredBy: string = "manual"): Promise<SyncResult> {
   const startTime = Date.now();
   
+  // Get last successful sync time for incremental sync
+  const lastSyncTime = await getLastSuccessfulSyncTime(SyncType.ZOHO_INVENTORY);
+  const isIncremental = lastSyncTime !== null;
+  
   const [syncRunRecord] = await db.insert(syncRuns).values({
     id: crypto.randomUUID(),
     syncType: SyncType.ZOHO_INVENTORY,
@@ -171,25 +203,38 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual"): Prom
     let hasMore = true;
     let retryCount = 0;
     const maxRetries = 3;
+    
+    console.log(`[Zoho Sync] Starting ${isIncremental ? 'incremental' : 'full'} sync${isIncremental ? ` (since ${lastSyncTime?.toISOString()})` : ''}`);
 
     while (hasMore) {
       try {
-        const response = await fetchZohoItems(page);
+        const response = await fetchZohoItems({ page, sortByModified: true });
         const items = response.items || [];
         result.total += items.length;
         retryCount = 0;
 
         for (const item of items) {
           try {
+            const showInOnlineStore = item.show_in_storefront === true;
+            
+            // Always track online items for delisting check (before status check)
+            // This ensures we don't delist items that are still in storefront even if inactive
+            if (showInOnlineStore) {
+              onlineZohoItemIds.push(item.item_id);
+            }
+
             if (item.status !== "active") {
               result.skipped++;
               continue;
             }
-
-            const showInOnlineStore = item.show_in_storefront === true;
             
-            if (showInOnlineStore) {
-              onlineZohoItemIds.push(item.item_id);
+            // For incremental sync, skip items that haven't changed since last sync
+            if (isIncremental && lastSyncTime && item.last_modified_time) {
+              const itemModifiedAt = new Date(item.last_modified_time);
+              if (itemModifiedAt < lastSyncTime) {
+                result.skipped++;
+                continue; // Skip updating this item, but continue collecting online IDs
+              }
             }
 
             const existingProduct = await db
@@ -343,7 +388,7 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual"): Prom
 export async function testZohoConnection(): Promise<{ success: boolean; message: string }> {
   try {
     await getAccessToken();
-    const response = await fetchZohoItems(1);
+    const response = await fetchZohoItems({ page: 1 });
     return {
       success: true,
       message: `Connected successfully. Found ${response.items?.length || 0} items on first page.`,

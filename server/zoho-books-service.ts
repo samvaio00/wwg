@@ -334,9 +334,17 @@ export async function syncCustomerStatusFromZoho(triggeredBy: string = "manual")
       .where(isNotNull(users.zohoCustomerId));
 
     result.total = usersWithZoho.length;
-    console.log(`[Zoho Customer Sync] Checking ${result.total} users with Zoho customer IDs`);
+    
+    // Incremental sync: skip users checked within the last hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const usersToCheck = usersWithZoho.filter(user => {
+      if (!user.zohoLastCheckedAt) return true;
+      return user.zohoLastCheckedAt < oneHourAgo;
+    });
+    
+    console.log(`[Zoho Customer Sync] Checking ${usersToCheck.length} of ${result.total} users (${result.total - usersToCheck.length} recently checked)`);
 
-    for (const user of usersWithZoho) {
+    for (const user of usersToCheck) {
       try {
         if (!user.zohoCustomerId) continue;
 

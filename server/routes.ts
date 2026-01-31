@@ -481,7 +481,7 @@ export async function registerRoutes(
   // PRODUCT ROUTES
   // ================================================================
 
-  // Get all products (with optional filters)
+  // Get all products (with optional filters and customer pricing)
   app.get("/api/products", async (req, res) => {
     try {
       const { category, search, sortBy, sortOrder, limit, page } = req.query;
@@ -500,16 +500,39 @@ export async function registerRoutes(
         offset
       });
       
+      // Apply customer-specific pricing if user has a price list
+      let productsWithPricing = result.products;
+      let userPriceListId: string | null = null;
+      
+      if (req.session?.userId) {
+        const user = await storage.getUser(req.session.userId);
+        if (user?.priceListId) {
+          userPriceListId = user.priceListId;
+          // Get customer prices for all products in this batch
+          const customerPriceMap = await storage.getCustomerPricesForProducts(
+            user.priceListId,
+            result.products.map(p => p.id)
+          );
+          
+          // Add customer price to each product
+          productsWithPricing = result.products.map(product => ({
+            ...product,
+            customerPrice: customerPriceMap[product.id] || null,
+          }));
+        }
+      }
+      
       const totalPages = Math.ceil(result.totalCount / pageSize);
       
       res.json({ 
-        products: result.products,
+        products: productsWithPricing,
         pagination: {
           page: pageNum,
           pageSize,
           totalCount: result.totalCount,
           totalPages
-        }
+        },
+        priceListId: userPriceListId,
       });
     } catch (error) {
       console.error("Error fetching products:", error);
@@ -973,6 +996,147 @@ export async function registerRoutes(
         total: 0,
         errors: [error instanceof Error ? error.message : "Unknown sync error"] 
       });
+    }
+  });
+
+  // Sync price lists from Zoho Inventory
+  app.post("/api/admin/zoho/price-lists/sync", requireAdmin, async (_req, res) => {
+    try {
+      const { syncPriceListsFromZoho } = await import("./zoho-service");
+      const result = await syncPriceListsFromZoho();
+      res.json({
+        success: true,
+        ...result,
+        message: `Synced ${result.priceListsCreated + result.priceListsUpdated} price lists, ${result.itemPricesCreated + result.itemPricesUpdated} item prices`,
+      });
+    } catch (error) {
+      console.error("Price list sync error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown sync error",
+      });
+    }
+  });
+
+  // Get all price lists
+  app.get("/api/admin/price-lists", requireAdmin, async (_req, res) => {
+    try {
+      const { getPriceLists } = await import("./zoho-service");
+      const lists = await getPriceLists();
+      res.json(lists);
+    } catch (error) {
+      console.error("Get price lists error:", error);
+      res.status(500).json({ message: "Failed to get price lists" });
+    }
+  });
+
+  // ================================================================
+  // ORDER TRACKING (Admin)
+  // ================================================================
+
+  // Update order tracking info
+  app.patch("/api/admin/orders/:id/tracking", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { trackingNumber, carrier } = req.body;
+
+      const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      const updateData: Record<string, unknown> = {
+        updatedAt: new Date(),
+      };
+
+      if (trackingNumber !== undefined) updateData.trackingNumber = trackingNumber;
+      if (carrier !== undefined) updateData.carrier = carrier;
+
+      await db.update(orders).set(updateData).where(eq(orders.id, id));
+
+      const [updatedOrder] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error("Update tracking error:", error);
+      res.status(500).json({ message: "Failed to update tracking info" });
+    }
+  });
+
+  // Mark order as shipped with tracking
+  app.post("/api/admin/orders/:id/ship", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { trackingNumber, carrier, sendNotification = true } = req.body;
+
+      const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      if (order.status !== OrderStatus.PROCESSING && order.status !== OrderStatus.APPROVED) {
+        return res.status(400).json({ 
+          message: `Cannot ship order with status ${order.status}. Order must be in processing or approved status.` 
+        });
+      }
+
+      await db.update(orders).set({
+        status: OrderStatus.SHIPPED,
+        trackingNumber: trackingNumber || null,
+        carrier: carrier || null,
+        shippedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(orders.id, id));
+
+      // Send notification if requested
+      if (sendNotification && trackingNumber) {
+        try {
+          const { sendShipmentNotification } = await import("./email-service");
+          await sendShipmentNotification(order.id);
+        } catch (notifError) {
+          console.error("Failed to send shipment notification:", notifError);
+          // Don't fail the request if notification fails
+        }
+      }
+
+      const [updatedOrder] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+      res.json({ 
+        success: true, 
+        order: updatedOrder,
+        notificationSent: sendNotification && trackingNumber,
+      });
+    } catch (error) {
+      console.error("Ship order error:", error);
+      res.status(500).json({ message: "Failed to ship order" });
+    }
+  });
+
+  // Mark order as delivered
+  app.post("/api/admin/orders/:id/deliver", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      if (order.status !== OrderStatus.SHIPPED) {
+        return res.status(400).json({ 
+          message: `Cannot mark as delivered. Order must be in shipped status.` 
+        });
+      }
+
+      await db.update(orders).set({
+        status: OrderStatus.DELIVERED,
+        deliveredAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(orders.id, id));
+
+      const [updatedOrder] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+      res.json({ success: true, order: updatedOrder });
+    } catch (error) {
+      console.error("Deliver order error:", error);
+      res.status(500).json({ message: "Failed to mark order as delivered" });
     }
   });
 

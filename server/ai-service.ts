@@ -3,10 +3,61 @@ import { db } from "./db";
 import { products, aiEvents, aiCache, productEmbeddings, generateAICacheKey } from "@shared/schema";
 import { eq, ilike, or, and, gt, sql } from "drizzle-orm";
 
+// Replit AI Integrations client (for chat completions)
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
+
+// Separate OpenAI client for embeddings (requires user's own API key)
+// Embeddings API is not supported by Replit AI Integrations
+const embeddingsClient = process.env.OPENAI_API_KEY 
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
+const EMBEDDING_MODEL = "text-embedding-3-small";
+const EMBEDDING_DIMENSIONS = 1536;
+
+// Cosine similarity for vector search
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0;
+  
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+// Generate embedding for a text query
+async function generateEmbedding(text: string): Promise<number[] | null> {
+  if (!embeddingsClient) {
+    return null;
+  }
+  
+  try {
+    const response = await embeddingsClient.embeddings.create({
+      model: EMBEDDING_MODEL,
+      input: text,
+    });
+    return response.data[0].embedding;
+  } catch (error) {
+    console.error("[Embeddings] Error generating embedding:", error);
+    return null;
+  }
+}
+
+// Check if vector embeddings are available
+export function hasVectorEmbeddings(): boolean {
+  return embeddingsClient !== null;
+}
 
 interface CartBuilderResult {
   suggestions: Array<{
@@ -217,6 +268,92 @@ Respond with JSON only in this exact format:
   }
 }
 
+// Vector similarity search using embeddings
+async function vectorSimilaritySearch(
+  query: string,
+  allProducts: Array<{
+    id: string;
+    sku: string;
+    name: string;
+    category: string;
+    brand: string | null;
+    basePrice: string;
+    imageUrl: string | null;
+  }>,
+  category?: string
+): Promise<SearchResult | null> {
+  try {
+    // Generate embedding for the query
+    const queryEmbedding = await generateEmbedding(query);
+    if (!queryEmbedding) {
+      return null;
+    }
+    
+    // Get all product embeddings
+    const embeddings = await db.select()
+      .from(productEmbeddings)
+      .where(sql`${productEmbeddings.embedding} IS NOT NULL`);
+    
+    if (embeddings.length === 0) {
+      console.log("[Vector Search] No product embeddings found");
+      return null;
+    }
+    
+    // Calculate similarity scores
+    const scoredProducts: Array<{
+      sku: string;
+      similarity: number;
+    }> = [];
+    
+    for (const emb of embeddings) {
+      if (emb.embedding && Array.isArray(emb.embedding)) {
+        const similarity = cosineSimilarity(queryEmbedding, emb.embedding as number[]);
+        scoredProducts.push({ sku: emb.sku, similarity });
+      }
+    }
+    
+    // Sort by similarity (descending) and take top results
+    scoredProducts.sort((a, b) => b.similarity - a.similarity);
+    const topSkus = scoredProducts
+      .filter(p => p.similarity > 0.3) // Minimum similarity threshold
+      .slice(0, 20)
+      .map(p => p.sku);
+    
+    if (topSkus.length === 0) {
+      console.log("[Vector Search] No products above similarity threshold");
+      return null;
+    }
+    
+    // Filter products by matched SKUs
+    const matchedProducts = allProducts.filter(p => topSkus.includes(p.sku));
+    
+    // Sort matched products by their similarity score
+    matchedProducts.sort((a, b) => {
+      const scoreA = scoredProducts.find(s => s.sku === a.sku)?.similarity || 0;
+      const scoreB = scoredProducts.find(s => s.sku === b.sku)?.similarity || 0;
+      return scoreB - scoreA;
+    });
+    
+    console.log(`[Vector Search] Found ${matchedProducts.length} products for query: "${query}"`);
+    
+    return {
+      products: matchedProducts.map(p => ({
+        id: p.id,
+        sku: p.sku,
+        name: p.name,
+        category: p.category,
+        brand: p.brand,
+        basePrice: p.basePrice,
+        imageUrl: p.imageUrl,
+      })),
+      interpretation: `Found ${matchedProducts.length} products matching "${query}" using semantic search`,
+    };
+  } catch (error) {
+    console.error("[Vector Search] Error:", error);
+    return null;
+  }
+}
+
 export async function aiEnhancedSearch(
   userId: string | null,
   query: string,
@@ -248,6 +385,16 @@ export async function aiEnhancedSearch(
     eq(products.isOnline, true),
     category ? eq(products.category, category) : sql`TRUE`
   ));
+
+  // Try vector similarity search first if embeddings are available
+  if (hasVectorEmbeddings()) {
+    const vectorResult = await vectorSimilaritySearch(query, allProducts, category);
+    if (vectorResult) {
+      await setCachedResponse(cacheKey, "search", vectorResult, 15);
+      await logAIEvent(userId, "search", "search", { query, category }, vectorResult, Date.now() - startTime, false, EMBEDDING_MODEL);
+      return vectorResult;
+    }
+  }
 
   const productList = allProducts.map(p => ({
     id: p.id,
@@ -381,6 +528,9 @@ export async function generateProductEmbeddings(): Promise<EmbeddingGenerationRe
     errors: 0,
   };
 
+  const useVectorEmbeddings = hasVectorEmbeddings();
+  console.log(`[Embeddings] Vector embeddings ${useVectorEmbeddings ? 'ENABLED' : 'DISABLED (no OPENAI_API_KEY)'}`);
+
   const allProducts = await db.select({
     sku: products.sku,
     name: products.name,
@@ -406,13 +556,28 @@ export async function generateProductEmbeddings(): Promise<EmbeddingGenerationRe
         .from(productEmbeddings)
         .where(eq(productEmbeddings.sku, product.sku));
       
+      // Generate vector embedding if API key is available
+      let embedding: number[] | null = null;
+      let modelUsed = "pre-computed-content";
+      
+      if (useVectorEmbeddings) {
+        embedding = await generateEmbedding(embeddedContent);
+        if (embedding) {
+          modelUsed = EMBEDDING_MODEL;
+        }
+      }
+      
       if (existing) {
-        // Update if content changed
-        if (existing.embeddedContent !== embeddedContent) {
+        // Update if content changed OR if we now have vector embeddings but existing doesn't
+        const needsUpdate = existing.embeddedContent !== embeddedContent || 
+          (useVectorEmbeddings && embedding && !existing.embedding);
+          
+        if (needsUpdate) {
           await db.update(productEmbeddings)
             .set({ 
               embeddedContent,
-              embeddingModel: "pre-computed-content",
+              embedding: embedding || existing.embedding,
+              embeddingModel: modelUsed,
               updatedAt: new Date(),
             })
             .where(eq(productEmbeddings.sku, product.sku));
@@ -424,7 +589,8 @@ export async function generateProductEmbeddings(): Promise<EmbeddingGenerationRe
           .values({
             sku: product.sku,
             embeddedContent,
-            embeddingModel: "pre-computed-content",
+            embedding,
+            embeddingModel: modelUsed,
           });
         result.created++;
       }

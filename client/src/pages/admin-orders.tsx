@@ -54,16 +54,23 @@ function OrderRow({
   onApprove, 
   onReject,
   onUpdateStatus,
+  onShip,
+  onDeliver,
   isUpdating 
 }: { 
   order: OrderWithUser;
   onApprove: (id: string) => void;
   onReject: (id: string, reason: string) => void;
   onUpdateStatus: (id: string, status: string) => void;
+  onShip: (id: string, trackingNumber: string, carrier: string) => void;
+  onDeliver: (id: string) => void;
   isUpdating: boolean;
 }) {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [showShipDialog, setShowShipDialog] = useState(false);
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [carrier, setCarrier] = useState("");
   
   const status = statusConfig[order.status] || statusConfig.pending_approval;
   const StatusIcon = status.icon;
@@ -141,7 +148,39 @@ function OrderRow({
                 </>
               )}
 
-              {order.status !== "pending_approval" && order.status !== "rejected" && order.status !== "cancelled" && order.status !== "delivered" && (
+              {(order.status === "approved" || order.status === "processing") && (
+                <Button 
+                  size="sm"
+                  onClick={() => setShowShipDialog(true)}
+                  disabled={isUpdating}
+                  data-testid={`button-ship-order-${order.id}`}
+                >
+                  <Truck className="h-4 w-4 mr-1" />
+                  Ship Order
+                </Button>
+              )}
+
+              {order.status === "shipped" && (
+                <Button 
+                  size="sm"
+                  onClick={() => onDeliver(order.id)}
+                  disabled={isUpdating}
+                  data-testid={`button-deliver-order-${order.id}`}
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                  Mark Delivered
+                </Button>
+              )}
+
+              {order.trackingNumber && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Package className="h-3 w-3" />
+                  {order.carrier ? `${order.carrier}: ` : ""}
+                  {order.trackingNumber}
+                </span>
+              )}
+
+              {order.status !== "pending_approval" && order.status !== "rejected" && order.status !== "cancelled" && order.status !== "delivered" && order.status !== "shipped" && (
                 <Select 
                   value={order.status} 
                   onValueChange={(status) => onUpdateStatus(order.id, status)}
@@ -151,7 +190,7 @@ function OrderRow({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {allStatuses.filter(s => s !== "pending_approval").map((s) => (
+                    {allStatuses.filter(s => s !== "pending_approval" && s !== "shipped" && s !== "delivered").map((s) => (
                       <SelectItem key={s} value={s}>
                         {statusConfig[s]?.label || s}
                       </SelectItem>
@@ -189,6 +228,61 @@ function OrderRow({
               data-testid="button-confirm-reject"
             >
               Reject Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showShipDialog} onOpenChange={setShowShipDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ship Order</DialogTitle>
+            <DialogDescription>
+              Enter tracking information for order #{order.orderNumber}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Carrier</label>
+              <Select value={carrier} onValueChange={setCarrier}>
+                <SelectTrigger data-testid="select-carrier">
+                  <SelectValue placeholder="Select carrier..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="UPS">UPS</SelectItem>
+                  <SelectItem value="FedEx">FedEx</SelectItem>
+                  <SelectItem value="USPS">USPS</SelectItem>
+                  <SelectItem value="DHL">DHL</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Tracking Number</label>
+              <Input
+                placeholder="Enter tracking number..."
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                data-testid="input-tracking-number"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowShipDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                onShip(order.id, trackingNumber, carrier);
+                setShowShipDialog(false);
+                setTrackingNumber("");
+                setCarrier("");
+              }}
+              disabled={!trackingNumber.trim()}
+              data-testid="button-confirm-ship"
+            >
+              <Truck className="h-4 w-4 mr-1" />
+              Ship Order
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -263,12 +357,42 @@ export default function AdminOrdersPage() {
     },
   });
 
+  const shipMutation = useMutation({
+    mutationFn: async ({ id, trackingNumber, carrier }: { id: string; trackingNumber: string; carrier: string }) => {
+      const res = await apiRequest("POST", `/api/admin/orders/${id}/ship`, { trackingNumber, carrier });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      toast({ title: "Order shipped", description: "Shipment notification sent to customer." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to ship order.", variant: "destructive" });
+    },
+  });
+
+  const deliverMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/admin/orders/${id}/deliver`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      toast({ title: "Order delivered", description: "Delivery confirmation sent to customer." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to mark as delivered.", variant: "destructive" });
+    },
+  });
+
   const handleApprove = (id: string) => approveMutation.mutate(id);
   const handleReject = (id: string, reason: string) => rejectMutation.mutate({ id, reason });
   const handleUpdateStatus = (id: string, status: string) => updateStatusMutation.mutate({ id, status });
+  const handleShip = (id: string, trackingNumber: string, carrier: string) => shipMutation.mutate({ id, trackingNumber, carrier });
+  const handleDeliver = (id: string) => deliverMutation.mutate(id);
 
   const orders = data?.orders || [];
-  const isUpdating = approveMutation.isPending || rejectMutation.isPending || updateStatusMutation.isPending;
+  const isUpdating = approveMutation.isPending || rejectMutation.isPending || updateStatusMutation.isPending || shipMutation.isPending || deliverMutation.isPending;
 
   const pendingOrders = orders.filter(o => o.status === "pending_approval");
   const activeOrders = orders.filter(o => ["approved", "processing", "shipped"].includes(o.status));
@@ -380,6 +504,8 @@ export default function AdminOrdersPage() {
                   onApprove={handleApprove}
                   onReject={handleReject}
                   onUpdateStatus={handleUpdateStatus}
+                  onShip={handleShip}
+                  onDeliver={handleDeliver}
                   isUpdating={isUpdating}
                 />
               ))
@@ -401,6 +527,8 @@ export default function AdminOrdersPage() {
                   onApprove={handleApprove}
                   onReject={handleReject}
                   onUpdateStatus={handleUpdateStatus}
+                  onShip={handleShip}
+                  onDeliver={handleDeliver}
                   isUpdating={isUpdating}
                 />
               ))
@@ -422,6 +550,8 @@ export default function AdminOrdersPage() {
                   onApprove={handleApprove}
                   onReject={handleReject}
                   onUpdateStatus={handleUpdateStatus}
+                  onShip={handleShip}
+                  onDeliver={handleDeliver}
                   isUpdating={isUpdating}
                 />
               ))
@@ -436,6 +566,8 @@ export default function AdminOrdersPage() {
                 onApprove={handleApprove}
                 onReject={handleReject}
                 onUpdateStatus={handleUpdateStatus}
+                onShip={handleShip}
+                onDeliver={handleDeliver}
                 isUpdating={isUpdating}
               />
             ))}

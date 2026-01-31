@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { products, syncRuns, SyncType } from "@shared/schema";
-import { eq, isNotNull, desc, and } from "drizzle-orm";
+import { products, syncRuns, SyncType, priceLists, customerPrices } from "@shared/schema";
+import { eq, isNotNull, desc, and, sql } from "drizzle-orm";
 
 interface ZohoTokenResponse {
   access_token: string;
@@ -407,4 +407,268 @@ export async function getSyncHistory(limit: number = 20): Promise<typeof syncRun
     .from(syncRuns)
     .orderBy(syncRuns.startedAt)
     .limit(limit);
+}
+
+// ================================================================
+// PRICE LIST SYNC
+// ================================================================
+
+interface ZohoPriceList {
+  pricebook_id: string;
+  pricebook_name: string;
+  description?: string;
+  pricebook_type: string;
+  currency_code?: string;
+  status: string;
+}
+
+interface ZohoPriceListItem {
+  pricebook_id: string;
+  item_id: string;
+  pricebook_rate: number;
+  item_name?: string;
+  sku?: string;
+}
+
+interface ZohoPriceListsResponse {
+  pricebooks: ZohoPriceList[];
+  page_context?: {
+    page: number;
+    per_page: number;
+    has_more_page: boolean;
+  };
+}
+
+interface ZohoPriceListItemsResponse {
+  pricebook_items: ZohoPriceListItem[];
+  page_context?: {
+    page: number;
+    per_page: number;
+    has_more_page: boolean;
+  };
+}
+
+async function fetchZohoPriceLists(): Promise<ZohoPriceListsResponse> {
+  const accessToken = await getAccessToken();
+  const orgId = process.env.ZOHO_ORGANIZATION_ID;
+
+  const response = await fetch(
+    `https://www.zohoapis.com/inventory/v1/pricebooks?organization_id=${orgId}`,
+    {
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to fetch price lists: ${error}`);
+  }
+
+  return response.json();
+}
+
+async function fetchZohoPriceListItems(priceBookId: string, page: number = 1): Promise<ZohoPriceListItemsResponse> {
+  const accessToken = await getAccessToken();
+  const orgId = process.env.ZOHO_ORGANIZATION_ID;
+
+  const response = await fetch(
+    `https://www.zohoapis.com/inventory/v1/pricebooks/${priceBookId}/items?organization_id=${orgId}&page=${page}&per_page=200`,
+    {
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to fetch price list items: ${error}`);
+  }
+
+  return response.json();
+}
+
+export interface PriceListSyncResult {
+  priceListsCreated: number;
+  priceListsUpdated: number;
+  itemPricesCreated: number;
+  itemPricesUpdated: number;
+  errors: string[];
+}
+
+export async function syncPriceListsFromZoho(): Promise<PriceListSyncResult> {
+  const result: PriceListSyncResult = {
+    priceListsCreated: 0,
+    priceListsUpdated: 0,
+    itemPricesCreated: 0,
+    itemPricesUpdated: 0,
+    errors: [],
+  };
+
+  try {
+    console.log("[Price Lists] Starting sync...");
+    
+    // Fetch all price lists from Zoho
+    const priceListsResponse = await fetchZohoPriceLists();
+    const zohoPriceLists = priceListsResponse.pricebooks || [];
+    
+    console.log(`[Price Lists] Found ${zohoPriceLists.length} price lists in Zoho`);
+
+    for (const zohoPL of zohoPriceLists) {
+      try {
+        // Skip inactive price lists
+        if (zohoPL.status !== "active") continue;
+
+        // Check if price list exists in our database
+        const [existing] = await db
+          .select()
+          .from(priceLists)
+          .where(eq(priceLists.zohoPriceListId, zohoPL.pricebook_id))
+          .limit(1);
+
+        let priceListId: string;
+
+        if (existing) {
+          // Update existing price list
+          await db
+            .update(priceLists)
+            .set({
+              name: zohoPL.pricebook_name,
+              description: zohoPL.description,
+              priceListType: zohoPL.pricebook_type,
+              currencyCode: zohoPL.currency_code || "USD",
+              zohoLastSyncedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(priceLists.id, existing.id));
+          priceListId = existing.id;
+          result.priceListsUpdated++;
+        } else {
+          // Create new price list
+          const [newPriceList] = await db
+            .insert(priceLists)
+            .values({
+              zohoPriceListId: zohoPL.pricebook_id,
+              name: zohoPL.pricebook_name,
+              description: zohoPL.description,
+              priceListType: zohoPL.pricebook_type,
+              currencyCode: zohoPL.currency_code || "USD",
+              zohoLastSyncedAt: new Date(),
+            })
+            .returning();
+          priceListId = newPriceList.id;
+          result.priceListsCreated++;
+        }
+
+        // Fetch and sync price list items
+        let page = 1;
+        let hasMore = true;
+
+        while (hasMore) {
+          const itemsResponse = await fetchZohoPriceListItems(zohoPL.pricebook_id, page);
+          const items = itemsResponse.pricebook_items || [];
+
+          for (const item of items) {
+            try {
+              // Find the product by zohoItemId
+              const [product] = await db
+                .select({ id: products.id })
+                .from(products)
+                .where(eq(products.zohoItemId, item.item_id))
+                .limit(1);
+
+              if (!product) continue; // Skip if product not found
+
+              // Check if customer price exists
+              const [existingPrice] = await db
+                .select()
+                .from(customerPrices)
+                .where(
+                  and(
+                    eq(customerPrices.priceListId, priceListId),
+                    eq(customerPrices.productId, product.id)
+                  )
+                )
+                .limit(1);
+
+              if (existingPrice) {
+                // Update existing price
+                await db
+                  .update(customerPrices)
+                  .set({
+                    customPrice: item.pricebook_rate.toString(),
+                    zohoItemId: item.item_id,
+                    updatedAt: new Date(),
+                  })
+                  .where(eq(customerPrices.id, existingPrice.id));
+                result.itemPricesUpdated++;
+              } else {
+                // Create new price
+                await db
+                  .insert(customerPrices)
+                  .values({
+                    priceListId,
+                    productId: product.id,
+                    zohoItemId: item.item_id,
+                    customPrice: item.pricebook_rate.toString(),
+                  });
+                result.itemPricesCreated++;
+              }
+            } catch (itemError) {
+              result.errors.push(
+                `Price list ${zohoPL.pricebook_name}, item ${item.item_id}: ${
+                  itemError instanceof Error ? itemError.message : "Unknown error"
+                }`
+              );
+            }
+          }
+
+          hasMore = itemsResponse.page_context?.has_more_page || false;
+          page++;
+        }
+      } catch (plError) {
+        result.errors.push(
+          `Price list ${zohoPL.pricebook_name}: ${
+            plError instanceof Error ? plError.message : "Unknown error"
+          }`
+        );
+      }
+    }
+
+    console.log(
+      `[Price Lists] Sync complete: ${result.priceListsCreated} created, ${result.priceListsUpdated} updated, ` +
+        `${result.itemPricesCreated} item prices created, ${result.itemPricesUpdated} item prices updated, ` +
+        `${result.errors.length} errors`
+    );
+
+    return result;
+  } catch (error) {
+    console.error("[Price Lists] Sync error:", error);
+    result.errors.push(error instanceof Error ? error.message : "Unknown error");
+    return result;
+  }
+}
+
+export async function getPriceLists(): Promise<(typeof priceLists.$inferSelect)[]> {
+  return db.select().from(priceLists).where(eq(priceLists.isActive, true));
+}
+
+export async function getCustomerPriceForProduct(
+  priceListId: string,
+  productId: string
+): Promise<string | null> {
+  const [price] = await db
+    .select()
+    .from(customerPrices)
+    .where(
+      and(
+        eq(customerPrices.priceListId, priceListId),
+        eq(customerPrices.productId, productId)
+      )
+    )
+    .limit(1);
+
+  return price?.customPrice || null;
 }

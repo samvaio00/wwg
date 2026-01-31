@@ -243,10 +243,38 @@ npm run db:push
   - Updates user's zohoCustomerId on successful customer creation
   - Updates order's zohoSalesOrderId on successful order push
 
-### Phase 8+ (Future)
-- True vector embeddings with dedicated OpenAI API key
-- Order tracking and shipment notifications
-- Customer price lists from Zoho
+### Phase 8 (Complete) - Vector Embeddings, Order Tracking & Price Lists
+- **True Vector Embeddings**: Optional OpenAI API key support for semantic search
+  - Uses OpenAI's text-embedding-3-small model (1536 dimensions)
+  - Falls back to text-based search if OPENAI_API_KEY not provided
+  - Cosine similarity calculation for semantic matching
+  - Admin endpoint: POST /api/admin/embeddings/generate
+  - Backend service: `server/ai-service.ts` → `generateVectorEmbeddings()`
+- **Order Tracking & Shipment Notifications**:
+  - New order fields: trackingNumber, carrier, shippedAt, deliveredAt
+  - Email notification service with multiple provider support (Resend, SendGrid)
+  - Console logging fallback for development environments
+  - Automatic notification on ship/deliver events
+  - Backend service: `server/email-service.ts`
+  - Admin endpoints:
+    - PATCH /api/admin/orders/:id/tracking - Update tracking info
+    - POST /api/admin/orders/:id/ship - Mark shipped with tracking
+    - POST /api/admin/orders/:id/deliver - Mark delivered
+  - Admin UI: Ship dialog with carrier selection and tracking number input
+  - Notification tracking: shipmentNotificationSentAt, deliveryNotificationSentAt
+- **Customer Price Lists from Zoho**:
+  - New tables: price_lists, customer_prices
+  - Zoho Books price list sync service
+  - Customer-specific pricing applied at API level
+  - Products API enriched with customerPrice field for authenticated users
+  - Backend service: `server/zoho-books-service.ts` → `syncPriceLists()`
+  - Admin endpoint: POST /api/admin/zoho/price-lists/sync
+  - Users table: priceListId field for linking customers to price lists
+
+### Phase 9+ (Future)
+- Enhanced order tracking portal for customers
+- Advanced reporting and analytics dashboard
+- Bulk order import from spreadsheets
 
 ## Online Store Visibility (isOnline field)
 

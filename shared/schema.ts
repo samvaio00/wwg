@@ -242,6 +242,16 @@ export const orders = pgTable("orders", {
   // Internal notes (admin only)
   internalNotes: text("internal_notes"),
   
+  // Shipping tracking
+  trackingNumber: text("tracking_number"),
+  carrier: text("carrier"), // UPS, FedEx, USPS, etc.
+  shippedAt: timestamp("shipped_at"),
+  deliveredAt: timestamp("delivered_at"),
+  
+  // Notification tracking
+  shipmentNotificationSentAt: timestamp("shipment_notification_sent_at"),
+  deliveryNotificationSentAt: timestamp("delivery_notification_sent_at"),
+  
   // Zoho integration
   zohoSalesOrderId: text("zoho_sales_order_id"),
   zohoPushedAt: timestamp("zoho_pushed_at"),
@@ -443,6 +453,67 @@ export const jobs = pgTable("jobs", {
 
 export type Job = typeof jobs.$inferSelect;
 export type InsertJob = typeof jobs.$inferInsert;
+
+// ================================================================
+// PRICE LISTS TABLE (Zoho price list sync)
+// ================================================================
+
+export const priceLists = pgTable("price_lists", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Zoho mapping
+  zohoPriceListId: text("zoho_price_list_id").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  // Type: fixed, percentage_markup, percentage_discount
+  priceListType: text("price_list_type"),
+  
+  // Currency
+  currencyCode: text("currency_code").default("USD"),
+  
+  // Status
+  isActive: boolean("is_active").default(true),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  zohoLastSyncedAt: timestamp("zoho_last_synced_at"),
+}, (table) => ({
+  zohoPriceListIdIdx: index("price_lists_zoho_id_idx").on(table.zohoPriceListId),
+}));
+
+export type PriceList = typeof priceLists.$inferSelect;
+export type InsertPriceList = typeof priceLists.$inferInsert;
+
+// ================================================================
+// CUSTOMER PRICES TABLE (item-level custom pricing)
+// ================================================================
+
+export const customerPrices = pgTable("customer_prices", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // References
+  priceListId: varchar("price_list_id", { length: 36 }).notNull().references(() => priceLists.id, { onDelete: "cascade" }),
+  productId: varchar("product_id", { length: 36 }).notNull().references(() => products.id, { onDelete: "cascade" }),
+  
+  // Zoho mapping
+  zohoItemId: text("zoho_item_id"),
+  
+  // Pricing
+  customPrice: decimal("custom_price", { precision: 10, scale: 2 }).notNull(),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  priceListIdx: index("customer_prices_price_list_idx").on(table.priceListId),
+  productIdx: index("customer_prices_product_idx").on(table.productId),
+  uniquePriceListProduct: index("customer_prices_unique_idx").on(table.priceListId, table.productId),
+}));
+
+export type CustomerPrice = typeof customerPrices.$inferSelect;
+export type InsertCustomerPrice = typeof customerPrices.$inferInsert;
 
 // ================================================================
 // ZOD SCHEMAS & TYPES

@@ -19,6 +19,8 @@ import {
   orderItems,
   syncRuns,
   jobs,
+  customerPrices,
+  priceLists,
   toSafeUser,
   UserRole,
   UserStatus,
@@ -61,6 +63,7 @@ export interface IStorage {
   getProductBySku(sku: string): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product | undefined>;
+  getCustomerPricesForProducts(priceListId: string, productIds: string[]): Promise<Record<string, string>>;
   
   // Cart operations
   getCart(userId: string): Promise<Cart | undefined>;
@@ -304,6 +307,43 @@ export class DatabaseStorage implements IStorage {
       .where(eq(products.id, id))
       .returning();
     return updated;
+  }
+
+  async getCustomerPricesForProducts(priceListId: string, productIds: string[]): Promise<Record<string, string>> {
+    if (productIds.length === 0) return {};
+    
+    // First, find the internal price list id from the Zoho price list id
+    const [priceList] = await db
+      .select()
+      .from(priceLists)
+      .where(eq(priceLists.id, priceListId))
+      .limit(1);
+    
+    if (!priceList) {
+      // Try by Zoho price list ID
+      const [zohoList] = await db
+        .select()
+        .from(priceLists)
+        .where(eq(priceLists.zohoPriceListId, priceListId))
+        .limit(1);
+      if (!zohoList) return {};
+    }
+    
+    const prices = await db
+      .select({
+        productId: customerPrices.productId,
+        customPrice: customerPrices.customPrice,
+      })
+      .from(customerPrices)
+      .where(eq(customerPrices.priceListId, priceListId));
+    
+    const priceMap: Record<string, string> = {};
+    for (const price of prices) {
+      if (productIds.includes(price.productId)) {
+        priceMap[price.productId] = price.customPrice;
+      }
+    }
+    return priceMap;
   }
 
   // Cart operations

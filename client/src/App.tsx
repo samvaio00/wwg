@@ -22,6 +22,7 @@ import CheckoutPage from "@/pages/checkout";
 import OrdersPage from "@/pages/orders";
 import AdminUsersPage from "@/pages/admin-users";
 import AdminOrdersPage from "@/pages/admin-orders";
+import AdminSettingsPage from "@/pages/admin-settings";
 import PendingApprovalPage from "@/pages/pending-approval";
 
 function LoadingScreen() {
@@ -114,7 +115,7 @@ function AppRouter() {
         <Route path="/orders" component={OrdersPage} />
         <Route path="/admin/users" component={AdminUsersPage} />
         <Route path="/admin/orders" component={AdminOrdersPage} />
-        <Route path="/admin/settings" component={() => <PlaceholderPage title="Admin Settings" />} />
+        <Route path="/admin/settings" component={AdminSettingsPage} />
         <Route path="/settings" component={() => <PlaceholderPage title="Settings" />} />
         <Route component={NotFound} />
       </Switch>

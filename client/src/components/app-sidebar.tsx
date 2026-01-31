@@ -69,6 +69,11 @@ const adminNavItems = [
     icon: Users,
   },
   {
+    title: "Order Management",
+    url: "/admin/orders",
+    icon: Package,
+  },
+  {
     title: "Settings",
     url: "/admin/settings",
     icon: Settings,

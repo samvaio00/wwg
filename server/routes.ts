@@ -17,6 +17,7 @@ import { db } from "./db";
 import { users, products } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch } from "./ai-service";
+import { syncProductsFromZoho, testZohoConnection } from "./zoho-service";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -666,6 +667,38 @@ export async function registerRoutes(
     } catch (error) {
       console.error("AI Search error:", error);
       res.status(500).json({ message: "AI search is temporarily unavailable. Please try again." });
+    }
+  });
+
+  // ================================================================
+  // ZOHO INTEGRATION
+  // ================================================================
+
+  // Test Zoho connection
+  app.get("/api/admin/zoho/test", requireAdmin, async (req, res) => {
+    try {
+      const result = await testZohoConnection();
+      res.json(result);
+    } catch (error) {
+      console.error("Zoho test error:", error);
+      res.status(500).json({ success: false, message: "Failed to test Zoho connection" });
+    }
+  });
+
+  // Sync products from Zoho Inventory
+  app.post("/api/admin/zoho/sync", requireAdmin, async (req, res) => {
+    try {
+      const result = await syncProductsFromZoho();
+      res.json(result);
+    } catch (error) {
+      console.error("Zoho sync error:", error);
+      res.status(500).json({ 
+        created: 0, 
+        updated: 0, 
+        skipped: 0, 
+        total: 0,
+        errors: [error instanceof Error ? error.message : "Unknown sync error"] 
+      });
     }
   });
 

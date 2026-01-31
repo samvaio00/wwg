@@ -49,7 +49,7 @@ export interface IStorage {
   hashPassword(password: string): Promise<string>;
   
   // Product operations
-  getProducts(options?: { category?: string; search?: string; sortBy?: string; sortOrder?: string }): Promise<Product[]>;
+  getProducts(options?: { category?: string; search?: string; sortBy?: string; sortOrder?: string; includeOffline?: boolean; limit?: number; offset?: number }): Promise<{ products: Product[]; totalCount: number }>;
   getProduct(id: string): Promise<Product | undefined>;
   getProductBySku(sku: string): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
@@ -187,7 +187,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Product operations
-  async getProducts(options?: { category?: string; search?: string; sortBy?: string; sortOrder?: string; includeOffline?: boolean }): Promise<Product[]> {
+  async getProducts(options?: { 
+    category?: string; 
+    search?: string; 
+    sortBy?: string; 
+    sortOrder?: string; 
+    includeOffline?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ products: Product[]; totalCount: number }> {
     const conditions = [eq(products.isActive, true)];
     
     // Belt-and-suspenders: Always filter by isOnline=true for storefront unless explicitly requested
@@ -220,10 +228,27 @@ export class DatabaseStorage implements IStorage {
       orderBy = desc(products.createdAt);
     }
     
-    return db.select()
+    // Get total count first
+    const countResult = await db.select({ count: sql<number>`count(*)` })
+      .from(products)
+      .where(and(...conditions));
+    const totalCount = Number(countResult[0]?.count || 0);
+    
+    // Build query with optional pagination
+    let query = db.select()
       .from(products)
       .where(and(...conditions))
       .orderBy(orderBy);
+    
+    if (options?.limit !== undefined) {
+      query = query.limit(options.limit) as typeof query;
+    }
+    if (options?.offset !== undefined) {
+      query = query.offset(options.offset) as typeof query;
+    }
+    
+    const productList = await query;
+    return { products: productList, totalCount };
   }
 
   async getProduct(id: string): Promise<Product | undefined> {

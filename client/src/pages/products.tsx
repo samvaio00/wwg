@@ -17,7 +17,11 @@ import {
   ArrowUpDown,
   Plus,
   Minus,
-  Check
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from "lucide-react";
 import {
   Select,
@@ -211,6 +215,13 @@ function ProductSkeleton() {
   );
 }
 
+interface PaginationInfo {
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+}
+
 export default function ProductsPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -222,13 +233,20 @@ export default function ProductsPage() {
   const [category, setCategory] = useState(urlCategory);
   const [sort, setSort] = useState("newest");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     setCategory(urlCategory);
   }, [urlCategory]);
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, category, sort]);
+
   const handleCategoryChange = (value: string) => {
     setCategory(value);
+    setPage(1);
     if (value === "all") {
       setLocation("/products");
     } else {
@@ -262,8 +280,9 @@ export default function ProductsPage() {
     queryParams.set("sortBy", "name");
     queryParams.set("sortOrder", "desc");
   }
+  queryParams.set("page", page.toString());
 
-  const { data, isLoading, error } = useQuery<{ products: Product[] }>({
+  const { data, isLoading, error } = useQuery<{ products: Product[]; pagination: PaginationInfo }>({
     queryKey: ["/api/products", queryParams.toString()],
     queryFn: async () => {
       const url = `/api/products${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
@@ -272,6 +291,8 @@ export default function ProductsPage() {
       return res.json();
     },
   });
+
+  const pagination = data?.pagination;
 
   const addToCartMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
@@ -318,7 +339,7 @@ export default function ProductsPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <AICartBuilder />
           <Badge variant="secondary" className="w-fit">
-            {isLoading ? "..." : products.length} products
+            {isLoading ? "..." : pagination?.totalCount || 0} products
           </Badge>
         </div>
       </div>
@@ -397,16 +418,81 @@ export default function ProductsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {products.map((product) => (
-            <ProductCard 
-              key={product.id} 
-              product={product} 
-              onAddToCart={handleAddToCart}
-              isAddingToCart={addToCartMutation.isPending}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {products.map((product) => (
+              <ProductCard 
+                key={product.id} 
+                product={product} 
+                onAddToCart={handleAddToCart}
+                isAddingToCart={addToCartMutation.isPending}
+              />
+            ))}
+          </div>
+          
+          {/* Pagination Controls */}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-6" data-testid="pagination-controls">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(1)}
+                disabled={page === 1}
+                data-testid="button-first-page"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                data-testid="button-prev-page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <div className="flex items-center gap-1 px-2">
+                <span className="text-sm text-muted-foreground">Page</span>
+                <Select 
+                  value={page.toString()} 
+                  onValueChange={(v) => setPage(parseInt(v, 10))}
+                >
+                  <SelectTrigger className="w-[70px] h-8" data-testid="select-page">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((p) => (
+                      <SelectItem key={p} value={p.toString()}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground">of {pagination.totalPages}</span>
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+                disabled={page === pagination.totalPages}
+                data-testid="button-next-page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage(pagination.totalPages)}
+                disabled={page === pagination.totalPages}
+                data-testid="button-last-page"
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

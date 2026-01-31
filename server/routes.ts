@@ -435,14 +435,33 @@ export async function registerRoutes(
   // Get all products (with optional filters)
   app.get("/api/products", async (req, res) => {
     try {
-      const { category, search, sortBy, sortOrder } = req.query;
-      const productList = await storage.getProducts({
+      const { category, search, sortBy, sortOrder, limit, page } = req.query;
+      
+      // Default to 24 products per page (fits nicely in 4-column grid)
+      const pageSize = limit ? parseInt(limit as string, 10) : 24;
+      const pageNum = page ? parseInt(page as string, 10) : 1;
+      const offset = (pageNum - 1) * pageSize;
+      
+      const result = await storage.getProducts({
         category: category as string | undefined,
         search: search as string | undefined,
         sortBy: sortBy as string | undefined,
-        sortOrder: sortOrder as string | undefined
+        sortOrder: sortOrder as string | undefined,
+        limit: pageSize,
+        offset
       });
-      res.json({ products: productList });
+      
+      const totalPages = Math.ceil(result.totalCount / pageSize);
+      
+      res.json({ 
+        products: result.products,
+        pagination: {
+          page: pageNum,
+          pageSize,
+          totalCount: result.totalCount,
+          totalPages
+        }
+      });
     } catch (error) {
       console.error("Error fetching products:", error);
       res.status(500).json({ message: "Failed to fetch products" });
@@ -758,7 +777,7 @@ export async function registerRoutes(
     try {
       // Check if products already exist (include offline products in check)
       const existing = await storage.getProducts({ includeOffline: true });
-      if (existing.length > 0) {
+      if (existing.products.length > 0) {
         return res.status(400).json({ message: "Products already seeded" });
       }
 

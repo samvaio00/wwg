@@ -1,0 +1,156 @@
+================================================================================
+                    ZOHO API CREDENTIALS SETUP GUIDE
+                         For WholesaleHub Integration
+================================================================================
+
+This guide will help you obtain the API credentials needed to connect 
+WholesaleHub with Zoho Inventory and Zoho Books.
+
+--------------------------------------------------------------------------------
+STEP 1: CREATE A ZOHO DEVELOPER ACCOUNT
+--------------------------------------------------------------------------------
+
+1. Go to the Zoho API Console:
+   https://api-console.zoho.com/
+
+2. Sign in with your Zoho account (the one that has access to Zoho Inventory 
+   and Zoho Books)
+
+--------------------------------------------------------------------------------
+STEP 2: CREATE A SELF CLIENT APPLICATION
+--------------------------------------------------------------------------------
+
+1. Click the "Add Client" button
+
+2. Select "Self Client" (this is the best option for server-to-server 
+   integration)
+
+3. Click "Create"
+
+--------------------------------------------------------------------------------
+STEP 3: GET YOUR CLIENT ID AND CLIENT SECRET
+--------------------------------------------------------------------------------
+
+After creating the self client, you will see:
+
+   - Client ID: Copy and save this value
+   - Client Secret: Copy and save this value (keep it secure!)
+
+These credentials identify your application to Zoho.
+
+--------------------------------------------------------------------------------
+STEP 4: GENERATE AN AUTHORIZATION CODE
+--------------------------------------------------------------------------------
+
+1. In the Self Client page, click "Generate Code"
+
+2. Enter the required scopes (permissions). For Zoho Inventory and Books, use:
+
+   ZohoInventory.FullAccess.all,ZohoBooks.fullaccess.all
+
+3. Set "Time Duration" to 10 minutes (this is the maximum)
+
+4. Enter a description (e.g., "WholesaleHub Integration")
+
+5. Click "Create"
+
+6. Copy the Authorization Code that appears
+
+   IMPORTANT: This code expires in 10 minutes! Proceed to Step 5 immediately.
+
+--------------------------------------------------------------------------------
+STEP 5: EXCHANGE FOR REFRESH TOKEN
+--------------------------------------------------------------------------------
+
+You need to exchange the authorization code for a refresh token. You can do 
+this using a terminal (command line) or a tool like Postman.
+
+Using Terminal/Command Line:
+----------------------------
+
+Replace the placeholders and run this command:
+
+curl -X POST "https://accounts.zoho.com/oauth/v2/token" \
+  -d "grant_type=authorization_code" \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  -d "code=YOUR_AUTHORIZATION_CODE"
+
+Example with actual values:
+
+curl -X POST "https://accounts.zoho.com/oauth/v2/token" \
+  -d "grant_type=authorization_code" \
+  -d "client_id=1000.ABC123DEF456" \
+  -d "client_secret=abcd1234efgh5678" \
+  -d "code=1000.xyz789authorization_code"
+
+The response will look like:
+
+{
+  "access_token": "1000.xxxxxxx.xxxxxxx",
+  "refresh_token": "1000.xxxxxxx.xxxxxxx",
+  "expires_in": 3600,
+  "token_type": "Bearer"
+}
+
+Save the "refresh_token" value - this is what we need for the integration.
+The refresh token does not expire (unless revoked).
+
+--------------------------------------------------------------------------------
+STEP 6: GET YOUR ORGANIZATION ID
+--------------------------------------------------------------------------------
+
+1. Log into Zoho Inventory:
+   https://inventory.zoho.com
+
+2. Go to Settings (gear icon) → Organization Profile
+
+3. Find and note your Organization ID
+
+   It will be a numeric value like: 12345678901
+
+--------------------------------------------------------------------------------
+SUMMARY: WHAT YOU NEED TO PROVIDE
+--------------------------------------------------------------------------------
+
+Once you have completed all steps, you will have these four values:
+
+   1. Client ID          - From Step 3
+   2. Client Secret      - From Step 3
+   3. Refresh Token      - From Step 5
+   4. Organization ID    - From Step 6
+
+Provide these to complete the Zoho integration setup in WholesaleHub.
+
+--------------------------------------------------------------------------------
+NOTES FOR DIFFERENT ZOHO REGIONS
+--------------------------------------------------------------------------------
+
+If your Zoho account is in a region other than the US, use the appropriate 
+domain for the OAuth token endpoint:
+
+   US:     https://accounts.zoho.com/oauth/v2/token
+   EU:     https://accounts.zoho.eu/oauth/v2/token
+   India:  https://accounts.zoho.in/oauth/v2/token
+   AU:     https://accounts.zoho.com.au/oauth/v2/token
+   China:  https://accounts.zoho.com.cn/oauth/v2/token
+
+--------------------------------------------------------------------------------
+TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+"Invalid Code" Error:
+- The authorization code expired (10 minute limit)
+- Generate a new code and try again immediately
+
+"Invalid Client" Error:
+- Double-check your Client ID and Client Secret
+- Make sure there are no extra spaces
+
+"Scope Not Authorized" Error:
+- Your Zoho account may not have access to Inventory or Books
+- Verify your subscription includes these products
+
+--------------------------------------------------------------------------------
+                              END OF GUIDE
+================================================================================

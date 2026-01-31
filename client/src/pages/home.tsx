@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { ProductDetailModal } from "@/components/product-detail-modal";
 import { 
@@ -22,7 +23,8 @@ import {
   Minus,
   Check,
   Tag,
-  Eye
+  Eye,
+  Search
 } from "lucide-react";
 import type { Product, Category } from "@shared/schema";
 
@@ -212,6 +214,7 @@ function CustomerHomePage() {
   const { toast } = useToast();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [search, setSearch] = useState("");
   
   // Fetch highlighted products
   const { data: highlightedData, isLoading: highlightedLoading } = useQuery<{ products: Product[] }>({
@@ -271,9 +274,23 @@ function CustomerHomePage() {
   };
 
   // Determine which products to show - require at least 12 highlighted products
-  const displayProducts = hasEnoughHighlighted
+  const baseProducts = hasEnoughHighlighted
     ? highlightedProducts 
     : warnerData?.products || [];
+  
+  // Filter products by search term
+  const displayProducts = useMemo(() => {
+    if (!search.trim()) return baseProducts.filter(p => p.isOnline);
+    
+    const searchLower = search.toLowerCase().trim();
+    return baseProducts.filter(p => 
+      p.isOnline && (
+        p.name.toLowerCase().includes(searchLower) ||
+        p.sku?.toLowerCase().includes(searchLower) ||
+        p.description?.toLowerCase().includes(searchLower)
+      )
+    );
+  }, [baseProducts, search]);
   
   const showingHighlighted = hasEnoughHighlighted;
   const isLoading = highlightedLoading || (shouldFetchWarner && warnerLoading);
@@ -284,11 +301,24 @@ function CustomerHomePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <HeadingIcon className={`h-5 w-5 ${showingHighlighted ? "text-amber-500" : "text-primary"}`} />
-        <h1 className="text-xl font-semibold" data-testid="heading-home-products">
-          {headingText}
-        </h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <HeadingIcon className={`h-5 w-5 ${showingHighlighted ? "text-amber-500" : "text-primary"}`} />
+          <h1 className="text-xl font-semibold" data-testid="heading-home-products">
+            {headingText}
+          </h1>
+        </div>
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search products..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8"
+            data-testid="input-search-home"
+          />
+        </div>
       </div>
 
       {isLoading ? (
@@ -306,7 +336,7 @@ function CustomerHomePage() {
         </div>
       ) : displayProducts.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {displayProducts.filter(p => p.isOnline).map((product) => (
+          {displayProducts.map((product) => (
             <ProductCard
               key={product.id}
               product={product}
@@ -320,13 +350,17 @@ function CustomerHomePage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Package className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">No Products Available</h3>
+            <h3 className="text-lg font-medium mb-2">
+              {search ? "No products found" : "No Products Available"}
+            </h3>
             <p className="text-muted-foreground text-center mb-4">
-              Browse our full catalog to find products
+              {search ? "Try a different search term" : "Browse our full catalog to find products"}
             </p>
-            <Button asChild data-testid="button-browse-products">
-              <Link href="/products">Browse Products</Link>
-            </Button>
+            {!search && (
+              <Button asChild data-testid="button-browse-products">
+                <Link href="/products">Browse Products</Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}

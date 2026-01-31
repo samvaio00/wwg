@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { Product, Category } from "@shared/schema";
 
 const sortOptions = [
@@ -266,6 +267,7 @@ export default function ProductsPage() {
   const [page, setPage] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [inStockOnly, setInStockOnly] = useState(false);
 
   // Fetch categories from Zoho
   const { data: categoriesData } = useQuery<{ categories: Category[] }>({
@@ -290,7 +292,7 @@ export default function ProductsPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, category, sort]);
+  }, [debouncedSearch, category, sort, inStockOnly]);
 
   const handleCategoryChange = (value: string) => {
     setCategory(value);
@@ -374,7 +376,12 @@ export default function ProductsPage() {
 
   // Belt-and-suspenders: UI also filters by isOnline even though API already filters
   // This ensures offline products never appear even if API changes or data comes from other sources
-  const products = (data?.products || []).filter(p => p.isOnline === true);
+  // Also apply "In Stock Only" filter if enabled
+  const products = (data?.products || []).filter(p => {
+    if (!p.isOnline) return false;
+    if (inStockOnly && (p.stockQuantity || 0) <= 0) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -429,6 +436,21 @@ export default function ProductsPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="in-stock-only"
+              checked={inStockOnly}
+              onCheckedChange={(checked) => setInStockOnly(checked === true)}
+              data-testid="checkbox-in-stock-only"
+            />
+            <label
+              htmlFor="in-stock-only"
+              className="text-sm font-medium leading-none cursor-pointer select-none"
+            >
+              In Stock Only
+            </label>
           </div>
         </div>
       </div>

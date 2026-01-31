@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Package, Loader2, Building2, User, Phone, Mail, Lock } from "lucide-react";
+import { Loader2, Building2, User, Phone, Mail, Lock } from "lucide-react";
+import wwgLogo from "@assets/wwg-logo_1769841225412.jpg";
 
 const registerSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -73,11 +74,8 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-lg space-y-6">
         <div className="flex flex-col items-center space-y-2 text-center">
-          <div className="flex items-center gap-2 text-primary">
-            <Package className="h-10 w-10" />
-            <span className="text-2xl font-bold">Warner Wireless Gears</span>
-          </div>
-          <p className="text-muted-foreground">B2B Wholesale Commerce Platform</p>
+          <img src={wwgLogo} alt="Warner Wireless Gears" className="h-24 w-auto object-contain" />
+          <p className="text-muted-foreground">B2B Distribution</p>
         </div>
 
         <Card className="border-border">

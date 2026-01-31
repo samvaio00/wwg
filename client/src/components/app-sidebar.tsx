@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import wwgLogo from "@assets/wwg-logo_1769841225412.jpg";
 import {
   Sidebar,
   SidebarContent,
@@ -101,11 +102,11 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <Link href="/" className="flex items-center gap-2 text-sidebar-foreground">
-          <Package className="h-8 w-8" />
+        <Link href="/" className="flex items-center gap-3 text-sidebar-foreground">
+          <img src={wwgLogo} alt="Warner Wireless Gears" className="h-12 w-12 rounded object-contain" />
           <div className="flex flex-col">
-            <span className="text-lg font-bold">Warner Wireless Gears</span>
-            <span className="text-xs text-sidebar-foreground/70">B2B Commerce</span>
+            <span className="text-lg font-bold leading-tight">Warner Wireless Gears</span>
+            <span className="text-xs text-sidebar-foreground/70">B2B Distribution</span>
           </div>
         </Link>
       </SidebarHeader>

@@ -92,6 +92,10 @@ The platform integrates with Zoho Inventory and Zoho Books for inventory managem
 ### Admin
 - `POST /api/admin/setup` - Create initial admin (requires ALLOW_ADMIN_SETUP=true)
 
+### AI Features (requires auth)
+- `POST /api/ai/cart-builder` - AI-powered cart building from natural language
+- `POST /api/ai/search` - AI-enhanced semantic product search
+
 ## Development
 
 ### Run the application
@@ -137,10 +141,24 @@ npm run db:push
 - Admin order management with approve/reject/status workflow
 - Cart ownership security verification
 
-### Phase 5 (Planned) - Integrations
-- Zoho Inventory integration for product sync (requires API credentials)
-- Zoho Books integration for order push
-- AI features: semantic search, cart builder (requires OpenAI key)
+### Phase 5 (Complete) - AI Features
+- AI Cart Builder: Natural language cart building with product recommendations
+  - Describe your store needs, AI suggests products with quantities and reasoning
+  - Frontend dialog component on Products page
+  - Backend endpoint: POST /api/ai/cart-builder
+- AI Enhanced Search: Semantic product search with interpretation
+  - Understands natural language queries beyond keyword matching
+  - Backend endpoint: POST /api/ai/search
+- AI Cost Controls:
+  - Response caching with 15-30 min TTL in ai_cache table
+  - Event logging in ai_events table (latency, model, cache hits, errors)
+  - All AI features use Replit AI Integrations (gpt-4o-mini model)
+- Zoho Integration: Setup guide at docs/zoho-setup-guide.txt (requires user's API credentials)
+
+### Phase 6+ (Future)
+- Zoho Inventory product sync (when user provides credentials)
+- Zoho Books order push
+- AI-powered embeddings for faster semantic search
 
 ## Online Store Visibility (isOnline field)
 

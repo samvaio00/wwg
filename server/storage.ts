@@ -104,6 +104,7 @@ export interface IStorage {
   getPendingJobs(): Promise<Job[]>;
   getJobsByUser(userId: string): Promise<Job[]>;
   getJobsByOrder(orderId: string): Promise<Job[]>;
+  getFailedJobs(): Promise<Job[]>;
   updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined>;
   markJobProcessing(id: string): Promise<Job | undefined>;
   markJobCompleted(id: string): Promise<Job | undefined>;
@@ -768,6 +769,13 @@ export class DatabaseStorage implements IStorage {
       .from(jobs)
       .where(eq(jobs.orderId, orderId))
       .orderBy(desc(jobs.createdAt));
+  }
+  
+  async getFailedJobs(): Promise<Job[]> {
+    return db.select()
+      .from(jobs)
+      .where(eq(jobs.status, JobStatus.FAILED))
+      .orderBy(desc(jobs.updatedAt));
   }
   
   async updateJob(id: string, updates: Partial<Job>): Promise<Job | undefined> {

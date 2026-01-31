@@ -34,6 +34,7 @@ import {
   HardHat,
   Sparkles,
   Gift,
+  BarChart3,
 } from "lucide-react";
 
 const mainNavItems = [
@@ -72,6 +73,11 @@ const adminNavItems = [
     title: "Order Management",
     url: "/admin/orders",
     icon: Package,
+  },
+  {
+    title: "Analytics",
+    url: "/admin/analytics",
+    icon: BarChart3,
   },
   {
     title: "Settings",

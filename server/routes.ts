@@ -14,13 +14,15 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { db } from "./db";
-import { users, products } from "@shared/schema";
+import { users, products, orders } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
 import { syncProductsFromZoho, testZohoConnection } from "./zoho-service";
 import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, type ZohoLineItem } from "./zoho-books-service";
 import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
+import { sendShipmentNotification, sendDeliveryNotification } from "./email-service";
+import { processJobQueue } from "./job-worker";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -662,6 +664,82 @@ export async function registerRoutes(
     }
   });
 
+  // Bulk import to cart from CSV data
+  app.post("/api/cart/bulk-import", requireAuth, async (req, res) => {
+    try {
+      const { items } = req.body;
+      
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: "Items array is required" });
+      }
+      
+      if (items.length > 100) {
+        return res.status(400).json({ message: "Maximum 100 items per import" });
+      }
+      
+      const cart = await storage.getOrCreateCart(req.session.userId!);
+      const results: { 
+        success: { sku: string; quantity: number; productName: string }[];
+        failed: { sku: string; quantity: number; reason: string }[];
+      } = { success: [], failed: [] };
+      
+      for (const item of items) {
+        const { sku, quantity } = item;
+        
+        if (!sku || typeof sku !== 'string') {
+          results.failed.push({ sku: sku || 'unknown', quantity, reason: 'Invalid SKU' });
+          continue;
+        }
+        
+        const qty = parseInt(String(quantity), 10);
+        if (isNaN(qty) || qty < 1) {
+          results.failed.push({ sku, quantity, reason: 'Invalid quantity (must be positive number)' });
+          continue;
+        }
+        
+        const product = await storage.getProductBySku(sku.trim());
+        if (!product) {
+          results.failed.push({ sku, quantity: qty, reason: 'Product not found' });
+          continue;
+        }
+        
+        if (!product.isOnline) {
+          results.failed.push({ sku, quantity: qty, reason: 'Product not available' });
+          continue;
+        }
+        
+        if (product.stockQuantity <= 0) {
+          results.failed.push({ sku, quantity: qty, reason: 'Out of stock' });
+          continue;
+        }
+        
+        if (qty > product.stockQuantity) {
+          results.failed.push({ sku, quantity: qty, reason: `Only ${product.stockQuantity} in stock` });
+          continue;
+        }
+        
+        try {
+          await storage.addToCart(cart.id, product.id, qty);
+          results.success.push({ sku, quantity: qty, productName: product.name });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Failed to add';
+          results.failed.push({ sku, quantity: qty, reason: message });
+        }
+      }
+      
+      const updatedCart = await storage.getCartWithItems(req.session.userId!);
+      
+      res.json({
+        message: `Imported ${results.success.length} items, ${results.failed.length} failed`,
+        results,
+        cart: updatedCart
+      });
+    } catch (error) {
+      console.error("Bulk import error:", error);
+      res.status(500).json({ message: "Failed to import items" });
+    }
+  });
+
   // ================================================================
   // ORDER ROUTES
   // ================================================================
@@ -1160,6 +1238,161 @@ export async function registerRoutes(
         success: false,
         message: error instanceof Error ? error.message : "Unknown error",
       });
+    }
+  });
+
+  // ================================================================
+  // ANALYTICS (Admin)
+  // ================================================================
+
+  // Get analytics dashboard data
+  app.get("/api/admin/analytics", requireAdmin, async (_req, res) => {
+    try {
+      // Get all orders for metrics
+      const allOrders = await storage.getAllOrders();
+      const allUsers = await storage.getAllUsers();
+      
+      // Calculate order metrics
+      const totalOrders = allOrders.length;
+      const validOrders = allOrders.filter(o => !['rejected', 'cancelled', 'pending_approval'].includes(o.status));
+      const totalRevenue = validOrders.reduce((sum, o) => sum + parseFloat(o.totalAmount), 0);
+      const averageOrderValue = validOrders.length > 0 ? totalRevenue / validOrders.length : 0;
+      
+      // Order status breakdown
+      const ordersByStatus: Record<string, number> = {};
+      allOrders.forEach(o => {
+        ordersByStatus[o.status] = (ordersByStatus[o.status] || 0) + 1;
+      });
+      
+      // Calculate sales by day (last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const salesByDay: { date: string; orders: number; revenue: number }[] = [];
+      const dayMap = new Map<string, { orders: number; revenue: number }>();
+      
+      allOrders
+        .filter(o => !['rejected', 'cancelled', 'pending_approval'].includes(o.status))
+        .filter(o => new Date(o.createdAt) >= thirtyDaysAgo)
+        .forEach(o => {
+          const dateKey = new Date(o.createdAt).toISOString().split('T')[0];
+          const existing = dayMap.get(dateKey) || { orders: 0, revenue: 0 };
+          dayMap.set(dateKey, {
+            orders: existing.orders + 1,
+            revenue: existing.revenue + parseFloat(o.totalAmount)
+          });
+        });
+      
+      // Fill in missing days
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateKey = date.toISOString().split('T')[0];
+        const data = dayMap.get(dateKey) || { orders: 0, revenue: 0 };
+        salesByDay.push({ date: dateKey, ...data });
+      }
+      
+      // Customer metrics
+      const customers = allUsers.filter(u => u.role === 'customer');
+      const activeCustomers = customers.filter(u => u.status === 'approved').length;
+      const pendingCustomers = customers.filter(u => u.status === 'pending').length;
+      
+      // Top customers by order value
+      const customerOrderTotals = new Map<string, { user: typeof customers[0]; total: number; orderCount: number }>();
+      allOrders
+        .filter(o => !['rejected', 'cancelled', 'pending_approval'].includes(o.status))
+        .forEach(o => {
+          const existing = customerOrderTotals.get(o.userId);
+          if (existing) {
+            existing.total += parseFloat(o.totalAmount);
+            existing.orderCount += 1;
+          } else {
+            const user = customers.find(u => u.id === o.userId);
+            if (user) {
+              customerOrderTotals.set(o.userId, { 
+                user, 
+                total: parseFloat(o.totalAmount),
+                orderCount: 1
+              });
+            }
+          }
+        });
+      
+      const topCustomers = Array.from(customerOrderTotals.values())
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 10)
+        .map(c => ({
+          id: c.user.id,
+          businessName: c.user.businessName,
+          email: c.user.email,
+          totalSpent: c.total.toFixed(2),
+          orderCount: c.orderCount
+        }));
+      
+      res.json({
+        orderMetrics: {
+          totalOrders,
+          totalRevenue: totalRevenue.toFixed(2),
+          averageOrderValue: averageOrderValue.toFixed(2),
+          ordersByStatus
+        },
+        customerMetrics: {
+          totalCustomers: customers.length,
+          activeCustomers,
+          pendingCustomers
+        },
+        salesTrend: salesByDay,
+        topCustomers
+      });
+    } catch (error) {
+      console.error("Analytics error:", error);
+      res.status(500).json({ message: "Failed to load analytics" });
+    }
+  });
+
+  // Get top selling products
+  app.get("/api/admin/analytics/top-products", requireAdmin, async (_req, res) => {
+    try {
+      const allOrders = await storage.getAllOrders();
+      
+      // Get order items for completed orders
+      const productSales = new Map<string, { productId: string; name: string; sku: string; quantitySold: number; revenue: number }>();
+      
+      for (const order of allOrders) {
+        if (['rejected', 'cancelled', 'pending_approval'].includes(order.status)) continue;
+        
+        const orderData = await storage.getOrderWithItems(order.id);
+        if (!orderData) continue;
+        
+        for (const item of orderData.items) {
+          const existing = productSales.get(item.productId);
+          if (existing) {
+            existing.quantitySold += item.quantity;
+            existing.revenue += parseFloat(item.lineTotal);
+          } else {
+            productSales.set(item.productId, {
+              productId: item.productId,
+              name: item.product.name,
+              sku: item.product.sku,
+              quantitySold: item.quantity,
+              revenue: parseFloat(item.lineTotal)
+            });
+          }
+        }
+      }
+      
+      const topProducts = Array.from(productSales.values())
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 20)
+        .map(p => ({
+          ...p,
+          revenue: p.revenue.toFixed(2)
+        }));
+      
+      res.json({ topProducts });
+    } catch (error) {
+      console.error("Top products error:", error);
+      res.status(500).json({ message: "Failed to load top products" });
     }
   });
 

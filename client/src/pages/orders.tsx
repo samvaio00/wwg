@@ -75,6 +75,16 @@ function OrderCard({ order }: { order: Order }) {
             </div>
           )}
 
+          {order.trackingNumber && (
+            <div className="flex items-center gap-2 text-sm bg-muted/50 rounded-md px-3 py-2">
+              <Truck className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">{order.carrier || "Tracking"}: </span>
+                <span className="font-mono font-medium">{order.trackingNumber}</span>
+              </div>
+            </div>
+          )}
+
           <Button 
             variant="outline" 
             size="sm" 

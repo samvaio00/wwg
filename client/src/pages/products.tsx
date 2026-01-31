@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { AICartBuilder } from "@/components/ai-cart-builder";
+import { BulkImportDialog } from "@/components/bulk-import-dialog";
 import { 
   Search, 
   ShoppingCart, 
@@ -338,6 +339,7 @@ export default function ProductsPage() {
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <AICartBuilder />
+          <BulkImportDialog />
           <Badge variant="secondary" className="w-fit">
             {isLoading ? "..." : pagination?.totalCount || 0} products
           </Badge>

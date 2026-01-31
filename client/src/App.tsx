@@ -20,8 +20,10 @@ import ProductsPage from "@/pages/products";
 import CartPage from "@/pages/cart";
 import CheckoutPage from "@/pages/checkout";
 import OrdersPage from "@/pages/orders";
+import OrderDetailPage from "@/pages/order-detail";
 import AdminUsersPage from "@/pages/admin-users";
 import AdminOrdersPage from "@/pages/admin-orders";
+import AdminAnalyticsPage from "@/pages/admin-analytics";
 import AdminSettingsPage from "@/pages/admin-settings";
 import PendingApprovalPage from "@/pages/pending-approval";
 
@@ -113,8 +115,10 @@ function AppRouter() {
         <Route path="/cart" component={CartPage} />
         <Route path="/checkout" component={CheckoutPage} />
         <Route path="/orders" component={OrdersPage} />
+        <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/admin/users" component={AdminUsersPage} />
         <Route path="/admin/orders" component={AdminOrdersPage} />
+        <Route path="/admin/analytics" component={AdminAnalyticsPage} />
         <Route path="/admin/settings" component={AdminSettingsPage} />
         <Route path="/settings" component={() => <PlaceholderPage title="Settings" />} />
         <Route component={NotFound} />

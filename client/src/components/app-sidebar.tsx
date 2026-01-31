@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { useQuery } from "@tanstack/react-query";
 import wwgLogo from "@assets/wwg-logo_1769841225412.jpg";
 import {
   Sidebar,
@@ -29,13 +30,10 @@ import {
   Settings,
   LogOut,
   ChevronUp,
-  Glasses,
-  Smartphone,
-  HardHat,
-  Sparkles,
-  Gift,
+  Tag,
   BarChart3,
 } from "lucide-react";
+import type { Category } from "@shared/schema";
 
 const mainNavItems = [
   {
@@ -55,13 +53,6 @@ const mainNavItems = [
   },
 ];
 
-const categoryItems = [
-  { title: "Sunglasses", url: "/products?category=sunglasses", icon: Glasses },
-  { title: "Phone Accessories", url: "/products?category=cellular", icon: Smartphone },
-  { title: "Headwear", url: "/products?category=caps", icon: HardHat },
-  { title: "Perfumes", url: "/products?category=perfumes", icon: Sparkles },
-  { title: "Novelty Items", url: "/products?category=novelty", icon: Gift },
-];
 
 const adminNavItems = [
   {
@@ -90,6 +81,12 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const isAdmin = user?.role === "admin";
+
+  // Fetch categories from Zoho
+  const { data: categoriesData } = useQuery<{ categories: Category[] }>({
+    queryKey: ["/api/categories"],
+  });
+  const categories = categoriesData?.categories || [];
 
   const getInitials = () => {
     if (user?.contactName) {
@@ -149,19 +146,24 @@ export function AppSidebar() {
           <SidebarGroupLabel>Categories</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {categoryItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+              {categories.map((category) => (
+                <SidebarMenuItem key={category.id}>
                   <SidebarMenuButton
                     asChild
-                    data-testid={`nav-category-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                    data-testid={`nav-category-${category.slug}`}
                   >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                    <Link href={`/products?category=${category.slug}`}>
+                      <Tag className="h-4 w-4" />
+                      <span>{category.name}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {categories.length === 0 && (
+                <SidebarMenuItem>
+                  <span className="text-sm text-muted-foreground px-2">No categories available</span>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

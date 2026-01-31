@@ -31,16 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Product } from "@shared/schema";
-
-const categories = [
-  { value: "all", label: "All Categories" },
-  { value: "sunglasses", label: "Sunglasses" },
-  { value: "cellular", label: "Cellular" },
-  { value: "caps", label: "Caps" },
-  { value: "perfumes", label: "Perfumes" },
-  { value: "novelty", label: "Novelty" },
-];
+import type { Product, Category } from "@shared/schema";
 
 const sortOptions = [
   { value: "newest", label: "Newest" },
@@ -264,6 +255,12 @@ export default function ProductsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
 
+  // Fetch categories from Zoho
+  const { data: categoriesData } = useQuery<{ categories: Category[] }>({
+    queryKey: ["/api/categories"],
+  });
+  const categories = categoriesData?.categories || [];
+
   useEffect(() => {
     setCategory(urlCategory);
   }, [urlCategory]);
@@ -390,13 +387,14 @@ export default function ProductsPage() {
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <Select value={category} onValueChange={handleCategoryChange}>
-              <SelectTrigger className="w-[160px]" data-testid="select-category">
+              <SelectTrigger className="w-[180px]" data-testid="select-category">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
                 {categories.map((cat) => (
-                  <SelectItem key={cat.value} value={cat.value}>
-                    {cat.label}
+                  <SelectItem key={cat.id} value={cat.slug}>
+                    {cat.name}
                   </SelectItem>
                 ))}
               </SelectContent>

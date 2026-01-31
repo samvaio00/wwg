@@ -165,6 +165,39 @@ export const products = pgTable("products", {
 }));
 
 // ================================================================
+// CATEGORIES TABLE (Synced from Zoho Inventory)
+// ================================================================
+
+export const categories = pgTable("categories", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Category identification
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(), // URL-friendly name for filtering
+  description: text("description"),
+  
+  // Zoho Integration
+  zohoCategoryId: text("zoho_category_id").unique(),
+  
+  // Display settings
+  displayOrder: integer("display_order").default(0),
+  isActive: boolean("is_active").default(true),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertCategorySchema = createInsertSchema(categories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCategory = z.infer<typeof insertCategorySchema>;
+export type Category = typeof categories.$inferSelect;
+
+// ================================================================
 // CARTS TABLE
 // ================================================================
 

@@ -480,6 +480,21 @@ export async function registerRoutes(
   });
 
   // ================================================================
+  // CATEGORY ROUTES
+  // ================================================================
+
+  // Get all categories (synced from Zoho)
+  app.get("/api/categories", async (req, res) => {
+    try {
+      const categories = await storage.getCategories();
+      res.json({ categories });
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      res.status(500).json({ message: "Failed to fetch categories" });
+    }
+  });
+
+  // ================================================================
   // PRODUCT ROUTES
   // ================================================================
 

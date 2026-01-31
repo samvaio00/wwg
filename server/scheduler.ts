@@ -1,4 +1,4 @@
-import { syncProductsFromZoho } from "./zoho-service";
+import { syncProductsFromZoho, syncCategoriesFromZoho } from "./zoho-service";
 import { syncCustomerStatusFromZoho } from "./zoho-books-service";
 import { generateProductEmbeddings } from "./ai-service";
 
@@ -91,6 +91,11 @@ export function getSchedulerStatus() {
 async function runZohoSync() {
   console.log("[Scheduler] Starting scheduled Zoho Inventory sync...");
   try {
+    // Sync categories first to ensure they exist before product sync
+    const catResult = await syncCategoriesFromZoho();
+    console.log(`[Scheduler] Category sync complete: ${catResult.synced} synced`);
+    
+    // Then sync products
     const result = await syncProductsFromZoho("scheduler");
     lastZohoSync = new Date();
     console.log(`[Scheduler] Zoho sync complete: ${result.created} created, ${result.updated} updated, ${result.delisted} delisted`);

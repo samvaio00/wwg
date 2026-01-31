@@ -1,6 +1,7 @@
 import { db } from "./db";
-import { products, syncRuns, SyncType, priceLists, customerPrices } from "@shared/schema";
+import { products, syncRuns, SyncType, priceLists, customerPrices, categories } from "@shared/schema";
 import { eq, isNotNull, desc, and, sql } from "drizzle-orm";
+import { storage } from "./storage";
 
 interface ZohoTokenResponse {
   access_token: string;
@@ -162,6 +163,104 @@ function mapZohoCategoryToLocal(categoryName?: string): string {
   return "novelty";
 }
 
+// Convert category name to URL-friendly slug
+function createCategorySlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .trim();
+}
+
+interface ZohoCategoriesResponse {
+  code: number;
+  message: string;
+  categories?: Array<{
+    category_id: string;
+    category_name?: string;
+    name?: string;
+    description?: string;
+    status?: string;
+  }>;
+}
+
+async function fetchZohoCategories(): Promise<ZohoCategoriesResponse> {
+  const accessToken = await getAccessToken();
+  const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
+
+  if (!organizationId) {
+    throw new Error("Zoho organization ID not configured");
+  }
+  
+  const url = `https://www.zohoapis.com/inventory/v1/categories?organization_id=${organizationId}`;
+  
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch Zoho categories: ${errorText}`);
+  }
+
+  return response.json();
+}
+
+export async function syncCategoriesFromZoho(): Promise<{ synced: number; errors: string[] }> {
+  console.log("[Zoho Category Sync] Starting category sync...");
+  const result = { synced: 0, errors: [] as string[] };
+  
+  try {
+    const response = await fetchZohoCategories();
+    
+    if (!response.categories || response.categories.length === 0) {
+      console.log("[Zoho Category Sync] No categories found in Zoho");
+      return result;
+    }
+    
+    console.log(`[Zoho Category Sync] Found ${response.categories.length} categories in Zoho`);
+    
+    for (let i = 0; i < response.categories.length; i++) {
+      const zohoCategory = response.categories[i];
+      
+      // Handle both possible property names from Zoho API
+      const categoryName = zohoCategory.category_name || zohoCategory.name;
+      
+      if (!categoryName) {
+        console.warn(`[Zoho Category Sync] Skipping category with no name: ${JSON.stringify(zohoCategory)}`);
+        continue;
+      }
+      
+      try {
+        await storage.upsertCategory({
+          name: categoryName,
+          slug: createCategorySlug(categoryName),
+          description: zohoCategory.description || null,
+          zohoCategoryId: zohoCategory.category_id,
+          displayOrder: i,
+          isActive: true,
+        });
+        result.synced++;
+      } catch (err) {
+        const errorMsg = `Failed to sync category ${categoryName}: ${err instanceof Error ? err.message : 'Unknown error'}`;
+        console.error(`[Zoho Category Sync] ${errorMsg}`);
+        result.errors.push(errorMsg);
+      }
+    }
+    
+    console.log(`[Zoho Category Sync] Completed - synced ${result.synced} categories`);
+  } catch (err) {
+    const errorMsg = `Category sync failed: ${err instanceof Error ? err.message : 'Unknown error'}`;
+    console.error(`[Zoho Category Sync] ${errorMsg}`);
+    result.errors.push(errorMsg);
+  }
+  
+  return result;
+}
+
 export interface SyncResult {
   created: number;
   updated: number;
@@ -251,6 +350,11 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual"): Prom
 
             const stockQuantity = showInOnlineStore ? Math.floor(item.stock_on_hand || 0) : (existingProduct.length > 0 ? existingProduct[0].stockQuantity : 0);
             const lowStockThreshold = showInOnlineStore ? (item.reorder_level || 10) : (existingProduct.length > 0 ? existingProduct[0].lowStockThreshold : 10);
+            
+            // Use Zoho category directly as slug (create slug from category name)
+            const categorySlug = item.category_name 
+              ? createCategorySlug(item.category_name) 
+              : "uncategorized";
 
             if (existingProduct.length > 0) {
               await db
@@ -259,7 +363,7 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual"): Prom
                   sku: item.sku || `ZOHO-${item.item_id}`,
                   name: item.name,
                   description: item.description || null,
-                  category: mapZohoCategoryToLocal(item.category_name),
+                  category: categorySlug,
                   subcategory: typeof subcategory === "string" ? subcategory : null,
                   brand: item.brand || item.manufacturer || null,
                   tags: typeof tags === "string" ? tags.split(",").map((t) => t.trim()) : [],
@@ -283,7 +387,7 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual"): Prom
                 sku: item.sku || `ZOHO-${item.item_id}`,
                 name: item.name,
                 description: item.description || null,
-                category: mapZohoCategoryToLocal(item.category_name),
+                category: categorySlug,
                 subcategory: typeof subcategory === "string" ? subcategory : null,
                 brand: item.brand || item.manufacturer || null,
                 tags: typeof tags === "string" ? tags.split(",").map((t) => t.trim()) : [],

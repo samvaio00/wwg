@@ -11,6 +11,8 @@ import {
   type SyncRun,
   type Job,
   type InsertJob,
+  type Category,
+  type InsertCategory,
   users,
   products,
   carts,
@@ -21,6 +23,7 @@ import {
   jobs,
   customerPrices,
   priceLists,
+  categories,
   toSafeUser,
   UserRole,
   UserStatus,
@@ -110,6 +113,12 @@ export interface IStorage {
   markJobProcessing(id: string): Promise<Job | undefined>;
   markJobCompleted(id: string): Promise<Job | undefined>;
   markJobFailed(id: string, errorMessage: string): Promise<Job | undefined>;
+  
+  // Category operations
+  getCategories(): Promise<Category[]>;
+  getCategoryBySlug(slug: string): Promise<Category | undefined>;
+  getCategoryByZohoId(zohoCategoryId: string): Promise<Category | undefined>;
+  upsertCategory(category: InsertCategory): Promise<Category>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -833,6 +842,82 @@ export class DatabaseStorage implements IStorage {
       .where(eq(jobs.id, id))
       .returning();
     return updated;
+  }
+  
+  // Category operations
+  async getCategories(): Promise<Category[]> {
+    return await db.select()
+      .from(categories)
+      .where(and(
+        eq(categories.isActive, true),
+        ne(categories.slug, 'root') // Exclude ROOT category from display
+      ))
+      .orderBy(asc(categories.displayOrder), asc(categories.name));
+  }
+  
+  async getCategoryBySlug(slug: string): Promise<Category | undefined> {
+    const [category] = await db.select()
+      .from(categories)
+      .where(eq(categories.slug, slug));
+    return category;
+  }
+  
+  async getCategoryByZohoId(zohoCategoryId: string): Promise<Category | undefined> {
+    const [category] = await db.select()
+      .from(categories)
+      .where(eq(categories.zohoCategoryId, zohoCategoryId));
+    return category;
+  }
+  
+  async upsertCategory(category: InsertCategory): Promise<Category> {
+    // Try to find existing by Zoho ID first
+    if (category.zohoCategoryId) {
+      const existing = await this.getCategoryByZohoId(category.zohoCategoryId);
+      if (existing) {
+        const [updated] = await db.update(categories)
+          .set({
+            name: category.name,
+            slug: category.slug,
+            description: category.description,
+            displayOrder: category.displayOrder,
+            isActive: category.isActive,
+            updatedAt: new Date()
+          })
+          .where(eq(categories.id, existing.id))
+          .returning();
+        return updated;
+      }
+    }
+    
+    // Check if slug exists
+    const existingSlug = await this.getCategoryBySlug(category.slug);
+    if (existingSlug) {
+      const [updated] = await db.update(categories)
+        .set({
+          name: category.name,
+          description: category.description,
+          zohoCategoryId: category.zohoCategoryId,
+          displayOrder: category.displayOrder,
+          isActive: category.isActive,
+          updatedAt: new Date()
+        })
+        .where(eq(categories.id, existingSlug.id))
+        .returning();
+      return updated;
+    }
+    
+    // Create new
+    const [created] = await db.insert(categories)
+      .values({
+        name: category.name,
+        slug: category.slug,
+        description: category.description,
+        zohoCategoryId: category.zohoCategoryId,
+        displayOrder: category.displayOrder ?? 0,
+        isActive: category.isActive ?? true,
+      })
+      .returning();
+    return created;
   }
 }
 

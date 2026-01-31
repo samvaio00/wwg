@@ -95,64 +95,51 @@ export async function checkZohoCustomerByEmail(email: string): Promise<ZohoCusto
     }
 
     const searchEmail = encodeURIComponent(email.toLowerCase());
-    console.log(`[Zoho Books] Searching for contact person with email: ${email}`);
+    console.log(`[Zoho Books] Searching for customer with email: ${email}`);
     
-    // Search contact persons by email (this searches all email fields)
-    const cpResponse = await fetch(
-      `https://www.zohoapis.com/books/v3/contacts/contactpersons?organization_id=${organizationId}&email=${searchEmail}`,
-      {
-        headers: {
-          Authorization: `Zoho-oauthtoken ${accessToken}`,
-        },
-      }
-    );
+    // Search BOTH main contacts AND contact persons simultaneously
+    const [contactsResponse, contactPersonsResponse] = await Promise.all([
+      fetch(
+        `https://www.zohoapis.com/books/v3/contacts?organization_id=${organizationId}&email=${searchEmail}`,
+        { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } }
+      ),
+      fetch(
+        `https://www.zohoapis.com/books/v3/contacts/contactpersons?organization_id=${organizationId}&email=${searchEmail}`,
+        { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } }
+      ),
+    ]);
 
-    if (!cpResponse.ok) {
-      const errorText = await cpResponse.text();
-      console.error("Zoho Books API error:", errorText);
-      throw new Error(`Failed to check Zoho Books customer: ${errorText}`);
+    let foundContactId: string | null = null;
+
+    // Check main contacts first
+    if (contactsResponse.ok) {
+      const contactsData: ZohoContactsResponse = await contactsResponse.json();
+      const contacts = contactsData.contacts || [];
+      console.log(`[Zoho Books] Found ${contacts.length} main contacts for email ${email}`);
+      
+      const matchingContact = contacts.find(
+        (c) => c.email?.toLowerCase() === email.toLowerCase() && c.contact_type === "customer"
+      );
+      
+      if (matchingContact) {
+        console.log(`[Zoho Books] Match found in main contact email: ${matchingContact.contact_name}`);
+        foundContactId = matchingContact.contact_id;
+      }
     }
 
-    const cpData: ZohoContactPersonsResponse = await cpResponse.json();
-    const contactPersons = cpData.contact_persons || [];
-    
-    console.log(`[Zoho Books] Found ${contactPersons.length} contact persons for email ${email}`);
-
-    if (contactPersons.length === 0) {
-      // Also check main contact email as fallback
-      console.log(`[Zoho Books] No contact persons found, checking main contacts...`);
-      const contactResponse = await fetch(
-        `https://www.zohoapis.com/books/v3/contacts?organization_id=${organizationId}&email=${searchEmail}`,
-        {
-          headers: {
-            Authorization: `Zoho-oauthtoken ${accessToken}`,
-          },
-        }
-      );
-
-      if (contactResponse.ok) {
-        const contactData: ZohoContactsResponse = await contactResponse.json();
-        const contacts = contactData.contacts || [];
-        const matchingContact = contacts.find(
-          (c) => c.email?.toLowerCase() === email.toLowerCase() && c.contact_type === "customer"
-        );
-        
-        if (matchingContact) {
-          const isActive = matchingContact.status === "active";
-          console.log(`[Zoho Books] Customer found via main email: ${matchingContact.contact_name}, active=${isActive}`);
-          return {
-            found: true,
-            active: isActive,
-            customerId: matchingContact.contact_id,
-            customerName: matchingContact.contact_name,
-            companyName: matchingContact.company_name,
-            message: isActive
-              ? "Customer account verified"
-              : "Your customer account is inactive. Please contact support to reactivate your account.",
-          };
-        }
+    // Check contact persons if not found in main contacts
+    if (!foundContactId && contactPersonsResponse.ok) {
+      const cpData: ZohoContactPersonsResponse = await contactPersonsResponse.json();
+      const contactPersons = cpData.contact_persons || [];
+      console.log(`[Zoho Books] Found ${contactPersons.length} contact persons for email ${email}`);
+      
+      if (contactPersons.length > 0) {
+        console.log(`[Zoho Books] Match found in contact person: ${contactPersons[0].first_name} ${contactPersons[0].last_name}`);
+        foundContactId = contactPersons[0].contact_id;
       }
+    }
 
+    if (!foundContactId) {
       console.log(`[Zoho Books] No matching customer found for email: ${email}`);
       return {
         found: false,
@@ -161,18 +148,10 @@ export async function checkZohoCustomerByEmail(email: string): Promise<ZohoCusto
       };
     }
 
-    // Found contact person - get the parent contact details
-    const contactPerson = contactPersons[0];
-    console.log(`[Zoho Books] Contact person found: ${contactPerson.first_name} ${contactPerson.last_name}, contact: ${contactPerson.contact_name}`);
-    
-    // Get the full contact details to check type and status
+    // Get full contact details to verify type and status
     const contactResponse = await fetch(
-      `https://www.zohoapis.com/books/v3/contacts/${contactPerson.contact_id}?organization_id=${organizationId}`,
-      {
-        headers: {
-          Authorization: `Zoho-oauthtoken ${accessToken}`,
-        },
-      }
+      `https://www.zohoapis.com/books/v3/contacts/${foundContactId}?organization_id=${organizationId}`,
+      { headers: { Authorization: `Zoho-oauthtoken ${accessToken}` } }
     );
 
     if (!contactResponse.ok) {

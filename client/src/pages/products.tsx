@@ -151,32 +151,35 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
           <span>Stock: {product.stockQuantity || 0}</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center border rounded-md">
+        <div className="flex items-center gap-1">
+          <div className="flex items-center border rounded text-xs">
             <Button 
               variant="ghost" 
-              size="sm"
+              size="icon"
+              className="h-6 w-6"
               onClick={decrementQuantity}
               disabled={isOutOfStock || quantity <= (product.minOrderQuantity || 1)}
               data-testid={`button-decrease-qty-${product.id}`}
             >
-              <Minus className="h-3 w-3" />
+              <Minus className="h-2.5 w-2.5" />
             </Button>
-            <span className="w-10 text-center text-sm font-medium" data-testid={`text-quantity-${product.id}`}>
+            <span className="w-6 text-center text-xs font-medium" data-testid={`text-quantity-${product.id}`}>
               {quantity}
             </span>
             <Button 
               variant="ghost" 
-              size="sm"
+              size="icon"
+              className="h-6 w-6"
               onClick={incrementQuantity}
               disabled={isOutOfStock || quantity >= stockQty}
               data-testid={`button-increase-qty-${product.id}`}
             >
-              <Plus className="h-3 w-3" />
+              <Plus className="h-2.5 w-2.5" />
             </Button>
           </div>
           <Button 
-            className="flex-1"
+            className="flex-1 h-6 text-xs"
+            size="sm"
             onClick={handleAddToCart}
             disabled={isAddingToCart || isOutOfStock}
             variant={isOutOfStock ? "secondary" : "default"}
@@ -184,18 +187,18 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
           >
             {isOutOfStock ? (
               <>
-                <Package className="h-4 w-4 mr-1" />
+                <Package className="h-3 w-3 mr-1" />
                 Unavailable
               </>
             ) : justAdded ? (
               <>
-                <Check className="h-4 w-4 mr-1" />
+                <Check className="h-3 w-3 mr-1" />
                 Added
               </>
             ) : (
               <>
-                <ShoppingCart className="h-4 w-4 mr-1" />
-                Add to Cart
+                <ShoppingCart className="h-3 w-3 mr-1" />
+                Add
               </>
             )}
           </Button>
@@ -212,10 +215,10 @@ function ProductSkeleton() {
       <CardContent className="p-3 space-y-2">
         <Skeleton className="h-3 w-16" />
         <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-5 w-20" />
-        <div className="flex gap-2">
-          <Skeleton className="h-8 flex-1" />
-          <Skeleton className="h-8 flex-1" />
+        <Skeleton className="h-4 w-20" />
+        <div className="flex gap-1">
+          <Skeleton className="h-6 w-20" />
+          <Skeleton className="h-6 flex-1" />
         </div>
       </CardContent>
     </Card>

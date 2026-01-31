@@ -128,6 +128,11 @@ npm run db:push
 - Pending approval page for new registrants
 - Admin user management portal (approve, reject, suspend, reactivate)
 - Role-based routing (pending users see approval page)
+- **Zoho Books Customer Validation**:
+  - On signup: Only allow registration if customer exists and is ACTIVE in Zoho Books
+  - On login: Check Zoho Books status; if inactive, suspend user and block login
+  - Backend service: `server/zoho-books-service.ts`
+  - Users table stores `zohoCustomerId` for linked Zoho Books customers
 
 ### Phase 4 (Complete) - Shopping Experience
 - Product catalog with responsive grid layout

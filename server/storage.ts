@@ -33,7 +33,7 @@ export interface IStorage {
   // User operations
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<SafeUser>;
+  createUser(user: InsertUser, zohoCustomerId?: string): Promise<SafeUser>;
   updateUserLastLogin(id: string): Promise<void>;
   
   // Admin user operations
@@ -83,7 +83,7 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async createUser(insertUser: InsertUser): Promise<SafeUser> {
+  async createUser(insertUser: InsertUser, zohoCustomerId?: string): Promise<SafeUser> {
     const hashedPassword = await this.hashPassword(insertUser.password);
     
     const [user] = await db.insert(users).values({
@@ -98,6 +98,7 @@ export class DatabaseStorage implements IStorage {
       zipCode: insertUser.zipCode,
       role: UserRole.PENDING,
       status: UserStatus.PENDING,
+      zohoCustomerId: zohoCustomerId || null,
     }).returning();
     
     return toSafeUser(user);

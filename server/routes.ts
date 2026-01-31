@@ -18,6 +18,7 @@ import { users, products } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch } from "./ai-service";
 import { syncProductsFromZoho, testZohoConnection } from "./zoho-service";
+import { checkZohoCustomerByEmail, checkZohoCustomerById } from "./zoho-books-service";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -62,7 +63,36 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Email already registered" });
       }
       
-      const user = await storage.createUser(data);
+      // Check Zoho Books for customer status
+      let zohoCustomerId: string | undefined;
+      try {
+        const zohoResult = await checkZohoCustomerByEmail(data.email);
+        
+        if (!zohoResult.found) {
+          return res.status(403).json({ 
+            message: "No customer account found with this email in our system. Please contact us to set up a wholesale account.",
+            zohoError: true
+          });
+        }
+        
+        if (!zohoResult.active) {
+          return res.status(403).json({ 
+            message: "Your customer account is inactive. Please contact support to reactivate your account.",
+            zohoError: true
+          });
+        }
+        
+        zohoCustomerId = zohoResult.customerId;
+      } catch (zohoError) {
+        console.error("Zoho Books check failed:", zohoError);
+        return res.status(503).json({ 
+          message: "Unable to verify customer account. Please try again later or contact support.",
+          zohoError: true
+        });
+      }
+      
+      // Create user with Zoho customer ID
+      const user = await storage.createUser(data, zohoCustomerId);
       
       // Set session
       req.session.userId = user.id;
@@ -98,6 +128,26 @@ export async function registerRoutes(
       // Check if user is suspended
       if (user.status === UserStatus.SUSPENDED) {
         return res.status(403).json({ message: "Account suspended. Contact support." });
+      }
+      
+      // Check Zoho Books customer status (if user has zohoCustomerId)
+      // Skip check for admin users
+      if (user.role !== UserRole.ADMIN && user.zohoCustomerId) {
+        try {
+          const zohoResult = await checkZohoCustomerById(user.zohoCustomerId);
+          
+          if (!zohoResult.found || !zohoResult.active) {
+            // Suspend the user in our system
+            await storage.updateUserStatus(user.id, UserStatus.SUSPENDED);
+            return res.status(403).json({ 
+              message: "Your customer account is inactive. Your access has been suspended. Please contact support to reactivate your account.",
+              zohoError: true
+            });
+          }
+        } catch (zohoError) {
+          // Log but don't block login if Zoho is temporarily unavailable
+          console.error("Zoho Books check failed during login:", zohoError);
+        }
       }
       
       // Update last login

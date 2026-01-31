@@ -125,11 +125,22 @@ npm run db:push
 - Admin user management portal (approve, reject, suspend, reactivate)
 - Role-based routing (pending users see approval page)
 
-### Phase 4 (Planned) - Full Features
-- Product discovery with search and filters
-- Cart and checkout
-- Zoho integration
-- AI features (search, cart builder, admin tools)
+### Phase 4 (Complete) - Shopping Experience
+- Product catalog with responsive grid layout
+- Search by product name, SKU, or brand
+- Category filtering via sidebar navigation and dropdown
+- Multiple sort options (newest, price, name)
+- Shopping cart with add/update/remove functionality
+- Checkout flow with shipping address collection
+- Order creation and confirmation page
+- Customer "My Orders" page with order history
+- Admin order management with approve/reject/status workflow
+- Cart ownership security verification
+
+### Phase 5 (Planned) - Integrations
+- Zoho Inventory integration for product sync (requires API credentials)
+- Zoho Books integration for order push
+- AI features: semantic search, cart builder (requires OpenAI key)
 
 ## Design Principles
 

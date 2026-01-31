@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { ProductDetailModal } from "@/components/product-detail-modal";
 import { 
   Search, 
   ShoppingCart, 
@@ -20,7 +21,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Tag
 } from "lucide-react";
 import {
   Select,
@@ -75,10 +77,11 @@ function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStoc
   );
 }
 
-function ProductCard({ product, onAddToCart, isAddingToCart }: { 
+function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: { 
   product: Product; 
   onAddToCart: (productId: string, quantity: number) => void;
   isAddingToCart: boolean;
+  onProductClick: (product: Product) => void;
 }) {
   const [quantity, setQuantity] = useState(product.minOrderQuantity || 1);
   const [justAdded, setJustAdded] = useState(false);
@@ -87,28 +90,32 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
   const isOutOfStock = stockQty <= 0;
   const isLowStock = stockQty > 0 && stockQty <= (product.lowStockThreshold || 10);
 
-  const handleAddToCart = () => {
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (isOutOfStock) return;
     onAddToCart(product.id, quantity);
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 2000);
   };
 
-  const incrementQuantity = () => {
+  const incrementQuantity = (e: React.MouseEvent) => {
+    e.stopPropagation();
     const newQty = quantity + (product.casePackSize || 1);
     if (newQty <= stockQty) {
       setQuantity(newQty);
     }
   };
 
-  const decrementQuantity = () => {
+  const decrementQuantity = (e: React.MouseEvent) => {
+    e.stopPropagation();
     setQuantity(prev => Math.max(product.minOrderQuantity || 1, prev - (product.casePackSize || 1)));
   };
 
   return (
     <Card 
-      className={`overflow-hidden ${isOutOfStock ? "opacity-60" : "hover-elevate"}`} 
+      className={`overflow-hidden cursor-pointer ${isOutOfStock ? "opacity-60" : "hover-elevate"}`} 
       data-testid={`card-product-${product.id}`}
+      onClick={() => onProductClick(product)}
     >
       <div className="h-32 relative bg-muted overflow-hidden">
         <ProductImage 
@@ -149,17 +156,17 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
           <span>Stock: {product.stockQuantity || 0}</span>
         </div>
 
-        <div className="flex items-center gap-1">
-          <div className="flex items-center border rounded text-xs flex-1">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center border rounded h-7">
             <Button 
               variant="ghost" 
               size="icon"
-              className="h-6 w-7"
+              className="h-7 w-7 rounded-r-none"
               onClick={decrementQuantity}
               disabled={isOutOfStock || quantity <= (product.minOrderQuantity || 1)}
               data-testid={`button-decrease-qty-${product.id}`}
             >
-              <Minus className="h-2.5 w-2.5" />
+              <Minus className="h-3 w-3" />
             </Button>
             <span className="w-8 text-center text-xs font-medium" data-testid={`text-quantity-${product.id}`}>
               {quantity}
@@ -167,16 +174,16 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
             <Button 
               variant="ghost" 
               size="icon"
-              className="h-6 w-7"
+              className="h-7 w-7 rounded-l-none"
               onClick={incrementQuantity}
               disabled={isOutOfStock || quantity >= stockQty}
               data-testid={`button-increase-qty-${product.id}`}
             >
-              <Plus className="h-2.5 w-2.5" />
+              <Plus className="h-3 w-3" />
             </Button>
           </div>
           <Button 
-            className="h-6 text-xs w-14 px-2"
+            className="h-7 flex-1"
             size="sm"
             onClick={handleAddToCart}
             disabled={isAddingToCart || isOutOfStock}
@@ -189,7 +196,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
               <Check className="h-3 w-3" />
             ) : (
               <>
-                <ShoppingCart className="h-3 w-3 mr-0.5" />
+                <ShoppingCart className="h-3 w-3 mr-1" />
                 Add
               </>
             )}
@@ -236,12 +243,24 @@ export default function ProductsPage() {
   const [sort, setSort] = useState("newest");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   // Fetch categories from Zoho
   const { data: categoriesData } = useQuery<{ categories: Category[] }>({
     queryKey: ["/api/categories"],
   });
   const categories = categoriesData?.categories || [];
+
+  // Get current category name for heading
+  const currentCategoryName = category === "all" 
+    ? "All Products" 
+    : categories.find(c => c.slug === category)?.name || category;
+
+  const handleProductClick = (product: Product) => {
+    setSelectedProduct(product);
+    setIsDetailModalOpen(true);
+  };
 
   useEffect(() => {
     setCategory(urlCategory);
@@ -338,6 +357,13 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-2">
+        <Tag className="h-5 w-5 text-primary" />
+        <h1 className="text-xl font-semibold" data-testid="heading-category">
+          {currentCategoryName}
+        </h1>
+      </div>
+
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -421,6 +447,7 @@ export default function ProductsPage() {
                 product={product} 
                 onAddToCart={handleAddToCart}
                 isAddingToCart={addToCartMutation.isPending}
+                onProductClick={handleProductClick}
               />
             ))}
           </div>
@@ -496,6 +523,12 @@ export default function ProductsPage() {
           )}
         </>
       )}
+
+      <ProductDetailModal
+        product={selectedProduct}
+        open={isDetailModalOpen}
+        onOpenChange={setIsDetailModalOpen}
+      />
     </div>
   );
 }

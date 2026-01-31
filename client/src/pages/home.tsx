@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { ProductDetailModal } from "@/components/product-detail-modal";
 import { 
   Package, 
   ShoppingCart, 
@@ -19,7 +20,8 @@ import {
   Star,
   Plus,
   Minus,
-  Check
+  Check,
+  Tag
 } from "lucide-react";
 import type { Product, Category } from "@shared/schema";
 
@@ -58,10 +60,11 @@ function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStoc
   );
 }
 
-function ProductCard({ product, onAddToCart, isAddingToCart }: { 
+function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: { 
   product: Product; 
   onAddToCart: (productId: string, quantity: number) => void;
   isAddingToCart: boolean;
+  onProductClick: (product: Product) => void;
 }) {
   const [quantity, setQuantity] = useState(product.minOrderQuantity || 1);
   const [justAdded, setJustAdded] = useState(false);
@@ -69,21 +72,24 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
   const stockQty = product.stockQuantity || 0;
   const isOutOfStock = stockQty <= 0;
 
-  const handleAddToCart = () => {
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (isOutOfStock) return;
     onAddToCart(product.id, quantity);
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 2000);
   };
 
-  const incrementQuantity = () => {
+  const incrementQuantity = (e: React.MouseEvent) => {
+    e.stopPropagation();
     const newQty = quantity + (product.casePackSize || 1);
     if (newQty <= stockQty) {
       setQuantity(newQty);
     }
   };
 
-  const decrementQuantity = () => {
+  const decrementQuantity = (e: React.MouseEvent) => {
+    e.stopPropagation();
     const newQty = quantity - (product.casePackSize || 1);
     if (newQty >= (product.minOrderQuantity || 1)) {
       setQuantity(newQty);
@@ -91,7 +97,11 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
   };
 
   return (
-    <Card className={`overflow-hidden h-full flex flex-col ${isOutOfStock ? "opacity-75" : ""}`} data-testid={`product-card-${product.id}`}>
+    <Card 
+      className={`overflow-hidden h-full flex flex-col cursor-pointer ${isOutOfStock ? "opacity-75" : "hover-elevate"}`} 
+      data-testid={`product-card-${product.id}`}
+      onClick={() => onProductClick(product)}
+    >
       <div className="relative h-32 bg-muted flex items-center justify-center overflow-hidden p-2">
         <ProductImage product={product} isOutOfStock={isOutOfStock} />
         {isOutOfStock && (
@@ -118,8 +128,8 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
           </div>
           
           {!isOutOfStock && (
-            <div className="flex items-center gap-1">
-              <div className="flex items-center border rounded">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center border rounded h-7">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -144,7 +154,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
               </div>
               <Button
                 size="sm"
-                className="flex-1 h-7 text-xs w-14"
+                className="flex-1 h-7"
                 onClick={handleAddToCart}
                 disabled={isAddingToCart || justAdded}
                 data-testid={`button-add-to-cart-${product.id}`}
@@ -152,7 +162,10 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
                 {justAdded ? (
                   <Check className="h-3 w-3" />
                 ) : (
-                  "Add"
+                  <>
+                    <ShoppingCart className="h-3 w-3 mr-1" />
+                    Add
+                  </>
                 )}
               </Button>
             </div>
@@ -165,6 +178,8 @@ function ProductCard({ product, onAddToCart, isAddingToCart }: {
 
 function CustomerHomePage() {
   const { toast } = useToast();
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   
   // Fetch highlighted products
   const { data: highlightedData, isLoading: highlightedLoading } = useQuery<{ products: Product[] }>({
@@ -192,6 +207,11 @@ function CustomerHomePage() {
     queryKey: [warnerQueryUrl],
     enabled: !!shouldFetchWarner && !!warnerQueryUrl,
   });
+
+  const handleProductClick = (product: Product) => {
+    setSelectedProduct(product);
+    setIsDetailModalOpen(true);
+  };
 
   const addToCartMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
@@ -226,14 +246,18 @@ function CustomerHomePage() {
   const showingHighlighted = hasEnoughHighlighted;
   const isLoading = highlightedLoading || (shouldFetchWarner && warnerLoading);
 
+  // Determine heading based on what's being displayed
+  const headingText = showingHighlighted ? "Featured Products" : (warnerCategory?.name || "Warner");
+  const HeadingIcon = showingHighlighted ? Star : Tag;
+
   return (
     <div className="space-y-6">
-      {showingHighlighted && (
-        <div className="flex items-center gap-2">
-          <Star className="h-5 w-5 text-amber-500" />
-          <h2 className="text-xl font-semibold">Featured Products</h2>
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        <HeadingIcon className={`h-5 w-5 ${showingHighlighted ? "text-amber-500" : "text-primary"}`} />
+        <h1 className="text-xl font-semibold" data-testid="heading-home-products">
+          {headingText}
+        </h1>
+      </div>
 
       {isLoading ? (
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
@@ -256,6 +280,7 @@ function CustomerHomePage() {
               product={product}
               onAddToCart={handleAddToCart}
               isAddingToCart={addToCartMutation.isPending}
+              onProductClick={handleProductClick}
             />
           ))}
         </div>
@@ -281,6 +306,12 @@ function CustomerHomePage() {
           </Button>
         </div>
       )}
+
+      <ProductDetailModal
+        product={selectedProduct}
+        open={isDetailModalOpen}
+        onOpenChange={setIsDetailModalOpen}
+      />
     </div>
   );
 }

@@ -93,77 +93,71 @@ function VariantCard({
 
   return (
     <Card className={`overflow-hidden ${isOutOfStock ? "opacity-60" : ""}`} data-testid={`card-variant-${variant.id}`}>
-      <CardContent className="p-3">
-        <div className="flex gap-3">
-          <div className="w-16 h-16 flex-shrink-0">
+      <CardContent className="p-2">
+        <div className="flex gap-2 items-center">
+          <div className="w-10 h-10 flex-shrink-0">
             <ProductImage product={variant} isOutOfStock={isOutOfStock} size="small" />
           </div>
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground font-mono">{variant.sku}</p>
-                <h4 className="font-medium text-sm line-clamp-1" data-testid={`text-variant-name-${variant.id}`}>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground font-mono truncate">{variant.sku}</p>
+                <h4 className="font-medium text-sm truncate" data-testid={`text-variant-name-${variant.id}`}>
                   {variant.name}
                 </h4>
               </div>
-              <span className="text-sm font-bold flex-shrink-0" data-testid={`text-variant-price-${variant.id}`}>
-                ${variant.basePrice}
-              </span>
+              <div className="flex-shrink-0 text-right">
+                <span className="text-sm font-bold" data-testid={`text-variant-price-${variant.id}`}>
+                  ${variant.basePrice}
+                </span>
+                <p className="text-xs text-muted-foreground">
+                  {isOutOfStock ? "Out" : `${stockQty} in stock`}
+                </p>
+              </div>
             </div>
-            
-            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-              <span>Pack: {variant.casePackSize || 1}</span>
-              <span className={isLowStock ? "text-amber-600" : ""}>
-                {isOutOfStock ? "Out of Stock" : `${stockQty} in stock`}
-              </span>
-            </div>
-
-            {!isOutOfStock && (
-              <div className="flex items-center gap-2">
-                <div className="flex items-center border rounded h-7">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-r-none"
-                    onClick={decrementQuantity}
-                    disabled={quantity <= (variant.minOrderQuantity || 1)}
-                    data-testid={`button-variant-decrease-${variant.id}`}
-                  >
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="w-8 text-center text-xs font-medium" data-testid={`text-variant-quantity-${variant.id}`}>
-                    {quantity}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 rounded-l-none"
-                    onClick={incrementQuantity}
-                    disabled={quantity >= stockQty}
-                    data-testid={`button-variant-increase-${variant.id}`}
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
+          </div>
+          {!isOutOfStock && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center border rounded h-7">
                 <Button
-                  size="sm"
-                  className="h-7 flex-1"
-                  onClick={handleAddToCart}
-                  disabled={isAddingToCart || justAdded}
-                  data-testid={`button-variant-add-to-cart-${variant.id}`}
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-6 rounded-r-none"
+                  onClick={decrementQuantity}
+                  disabled={quantity <= (variant.minOrderQuantity || 1)}
+                  data-testid={`button-variant-decrease-${variant.id}`}
                 >
-                  {justAdded ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    <>
-                      <ShoppingCart className="h-3 w-3 mr-1" />
-                      Add
-                    </>
-                  )}
+                  <Minus className="h-3 w-3" />
+                </Button>
+                <span className="w-6 text-center text-xs font-medium" data-testid={`text-variant-quantity-${variant.id}`}>
+                  {quantity}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-6 rounded-l-none"
+                  onClick={incrementQuantity}
+                  disabled={quantity >= stockQty}
+                  data-testid={`button-variant-increase-${variant.id}`}
+                >
+                  <Plus className="h-3 w-3" />
                 </Button>
               </div>
-            )}
-          </div>
+              <Button
+                size="sm"
+                className="h-7"
+                onClick={handleAddToCart}
+                disabled={isAddingToCart || justAdded}
+                data-testid={`button-variant-add-to-cart-${variant.id}`}
+              >
+                {justAdded ? (
+                  <Check className="h-3 w-3" />
+                ) : (
+                  <ShoppingCart className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

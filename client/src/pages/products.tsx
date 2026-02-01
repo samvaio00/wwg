@@ -136,9 +136,9 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
         )}
       </div>
       <CardContent className="p-3 space-y-2">
-        <div>
-          <p className="text-xs text-muted-foreground font-mono">{product.sku}</p>
-          <h3 className="font-semibold text-sm line-clamp-2" data-testid={`text-product-name-${product.id}`}>
+        <div className="h-12">
+          <p className="text-xs text-muted-foreground font-mono truncate">{product.sku}</p>
+          <h3 className="font-semibold text-sm line-clamp-2 leading-tight" data-testid={`text-product-name-${product.id}`}>
             {product.name}
           </h3>
         </div>

@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Loader2, ShoppingCart, TrendingUp } from "lucide-react";
+import { Loader2, ShoppingCart, TrendingUp } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -266,14 +266,13 @@ export function AISearchBox({
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="relative w-80 lg:w-96 ml-24">
-          <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600 fill-blue-600 transition-colors" />
           <Input
             type="search"
             placeholder={placeholder}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            className={`pl-9 pr-24 h-9 focus-ring-animate transition-all ${
+            className={`pr-24 h-9 focus-ring-animate transition-all ${
               showActionIndicator ? "border-primary/50 bg-primary/5" : ""
             }`}
             data-testid={testId}

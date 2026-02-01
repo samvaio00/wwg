@@ -310,31 +310,31 @@ function CustomerHomePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <HeadingIcon className={`h-5 w-5 ${showingHighlighted ? "text-amber-500" : "text-primary"}`} />
-        <h1 className="text-xl font-semibold" data-testid="heading-home-products">
-          {headingText}
-        </h1>
-      </div>
-
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search products by name, SKU, or description..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-            data-testid="input-search-home"
-          />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-2">
+          <HeadingIcon className={`h-6 w-6 ${showingHighlighted ? "text-amber-500" : "text-primary"}`} />
+          <h1 className="text-2xl font-black tracking-tight" data-testid="heading-home-products" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
+            {headingText}
+          </h1>
         </div>
-        
-        <div className="flex gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
+
+        <div className="flex gap-2 items-center flex-wrap">
+          <div className="relative w-48 lg:w-56">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-9"
+              data-testid="input-search-home"
+            />
+          </div>
+          
+          <div className="flex items-center gap-1">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <Select value="all" onValueChange={() => {}}>
-              <SelectTrigger className="w-[180px]" data-testid="select-category-home">
+              <SelectTrigger className="w-[140px] h-9" data-testid="select-category-home">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>

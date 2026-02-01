@@ -269,31 +269,31 @@ export default function WhatsNewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-5 w-5 text-primary" />
-        <h1 className="text-xl font-semibold" data-testid="heading-whats-new">
-          What's New
-        </h1>
-      </div>
-
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search new arrivals by name, SKU, or description..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-            data-testid="input-search-whats-new"
-          />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-black tracking-tight" data-testid="heading-whats-new" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
+            What's New
+          </h1>
         </div>
-        
-        <div className="flex gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
+
+        <div className="flex gap-2 items-center flex-wrap">
+          <div className="relative w-48 lg:w-56">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-9"
+              data-testid="input-search-whats-new"
+            />
+          </div>
+          
+          <div className="flex items-center gap-1">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <Select value="all" onValueChange={() => {}}>
-              <SelectTrigger className="w-[180px]" data-testid="select-category-whats-new">
+              <SelectTrigger className="w-[140px] h-9" data-testid="select-category-whats-new">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>

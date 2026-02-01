@@ -2,7 +2,7 @@ import { Link } from "wouter";
 
 export function Footer() {
   return (
-    <footer className="border-t bg-muted/30 py-3 px-6">
+    <footer className="border-t bg-muted/30 py-2 px-6">
       <div className="flex flex-wrap items-center justify-center gap-4 md:gap-8 text-sm text-muted-foreground">
         <Link href="/about" className="hover:text-foreground transition-colors" data-testid="link-about">
           About Us

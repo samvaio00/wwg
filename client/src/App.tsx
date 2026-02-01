@@ -166,7 +166,7 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
-          <header className="sticky top-0 z-50 flex h-14 items-center justify-between gap-4 glass-header px-4">
+          <header className="sticky top-0 z-50 flex h-12 items-center justify-between gap-4 glass-header px-4">
             <div className="flex items-center gap-2">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <AICartBuilder />

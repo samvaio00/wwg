@@ -56,6 +56,7 @@ function OrderRow({
   onUpdateStatus,
   onShip,
   onDeliver,
+  onUpdateTracking,
   isUpdating 
 }: { 
   order: OrderWithUser;
@@ -64,11 +65,13 @@ function OrderRow({
   onUpdateStatus: (id: string, status: string) => void;
   onShip: (id: string, trackingNumber: string, carrier: string) => void;
   onDeliver: (id: string) => void;
+  onUpdateTracking: (id: string, trackingNumber: string, carrier: string) => void;
   isUpdating: boolean;
 }) {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [showShipDialog, setShowShipDialog] = useState(false);
+  const [showEditTrackingDialog, setShowEditTrackingDialog] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState("");
   const [carrier, setCarrier] = useState("");
   
@@ -161,18 +164,34 @@ function OrderRow({
               )}
 
               {order.status === "shipped" && (
-                <Button 
-                  size="sm"
-                  onClick={() => onDeliver(order.id)}
-                  disabled={isUpdating}
-                  data-testid={`button-deliver-order-${order.id}`}
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-1" />
-                  Mark Delivered
-                </Button>
+                <>
+                  <Button 
+                    size="sm"
+                    onClick={() => onDeliver(order.id)}
+                    disabled={isUpdating}
+                    data-testid={`button-deliver-order-${order.id}`}
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                    Mark Delivered
+                  </Button>
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setTrackingNumber(order.trackingNumber || "");
+                      setCarrier(order.carrier || "");
+                      setShowEditTrackingDialog(true);
+                    }}
+                    disabled={isUpdating}
+                    data-testid={`button-edit-tracking-${order.id}`}
+                  >
+                    <Package className="h-4 w-4 mr-1" />
+                    Edit Tracking
+                  </Button>
+                </>
               )}
 
-              {order.trackingNumber && (
+              {order.trackingNumber && order.status !== "shipped" && (
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <Package className="h-3 w-3" />
                   {order.carrier ? `${order.carrier}: ` : ""}
@@ -287,6 +306,61 @@ function OrderRow({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showEditTrackingDialog} onOpenChange={setShowEditTrackingDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Tracking Information</DialogTitle>
+            <DialogDescription>
+              Update tracking information for order #{order.orderNumber}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Carrier</label>
+              <Select value={carrier} onValueChange={setCarrier}>
+                <SelectTrigger data-testid="select-edit-carrier">
+                  <SelectValue placeholder="Select carrier..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="UPS">UPS</SelectItem>
+                  <SelectItem value="FedEx">FedEx</SelectItem>
+                  <SelectItem value="USPS">USPS</SelectItem>
+                  <SelectItem value="DHL">DHL</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Tracking Number</label>
+              <Input
+                placeholder="Enter tracking number..."
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                data-testid="input-edit-tracking-number"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditTrackingDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                onUpdateTracking(order.id, trackingNumber, carrier);
+                setShowEditTrackingDialog(false);
+                setTrackingNumber("");
+                setCarrier("");
+              }}
+              disabled={!trackingNumber.trim()}
+              data-testid="button-confirm-update-tracking"
+            >
+              <Package className="h-4 w-4 mr-1" />
+              Update Tracking
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -385,14 +459,29 @@ export default function AdminOrdersPage() {
     },
   });
 
+  const updateTrackingMutation = useMutation({
+    mutationFn: async ({ id, trackingNumber, carrier }: { id: string; trackingNumber: string; carrier: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/orders/${id}/tracking`, { trackingNumber, carrier });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      toast({ title: "Tracking updated", description: "The tracking information has been updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update tracking.", variant: "destructive" });
+    },
+  });
+
   const handleApprove = (id: string) => approveMutation.mutate(id);
   const handleReject = (id: string, reason: string) => rejectMutation.mutate({ id, reason });
   const handleUpdateStatus = (id: string, status: string) => updateStatusMutation.mutate({ id, status });
   const handleShip = (id: string, trackingNumber: string, carrier: string) => shipMutation.mutate({ id, trackingNumber, carrier });
   const handleDeliver = (id: string) => deliverMutation.mutate(id);
+  const handleUpdateTracking = (id: string, trackingNumber: string, carrier: string) => updateTrackingMutation.mutate({ id, trackingNumber, carrier });
 
   const orders = data?.orders || [];
-  const isUpdating = approveMutation.isPending || rejectMutation.isPending || updateStatusMutation.isPending || shipMutation.isPending || deliverMutation.isPending;
+  const isUpdating = approveMutation.isPending || rejectMutation.isPending || updateStatusMutation.isPending || shipMutation.isPending || deliverMutation.isPending || updateTrackingMutation.isPending;
 
   const pendingOrders = orders.filter(o => o.status === "pending_approval");
   const activeOrders = orders.filter(o => ["approved", "processing", "shipped"].includes(o.status));
@@ -506,6 +595,7 @@ export default function AdminOrdersPage() {
                   onUpdateStatus={handleUpdateStatus}
                   onShip={handleShip}
                   onDeliver={handleDeliver}
+                  onUpdateTracking={handleUpdateTracking}
                   isUpdating={isUpdating}
                 />
               ))
@@ -529,6 +619,7 @@ export default function AdminOrdersPage() {
                   onUpdateStatus={handleUpdateStatus}
                   onShip={handleShip}
                   onDeliver={handleDeliver}
+                  onUpdateTracking={handleUpdateTracking}
                   isUpdating={isUpdating}
                 />
               ))
@@ -552,6 +643,7 @@ export default function AdminOrdersPage() {
                   onUpdateStatus={handleUpdateStatus}
                   onShip={handleShip}
                   onDeliver={handleDeliver}
+                  onUpdateTracking={handleUpdateTracking}
                   isUpdating={isUpdating}
                 />
               ))
@@ -568,6 +660,7 @@ export default function AdminOrdersPage() {
                 onUpdateStatus={handleUpdateStatus}
                 onShip={handleShip}
                 onDeliver={handleDeliver}
+                onUpdateTracking={handleUpdateTracking}
                 isUpdating={isUpdating}
               />
             ))}

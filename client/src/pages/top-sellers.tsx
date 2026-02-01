@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useAISearch } from "@/hooks/use-ai-search";
 import { ProductDetailModal } from "@/components/product-detail-modal";
 import { 
   Package, 
@@ -22,7 +23,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Sparkles
 } from "lucide-react";
 import {
   Select,
@@ -233,8 +235,15 @@ export default function TopSellersPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+
+  // AI-powered search
+  const { 
+    results: aiSearchResults, 
+    isSearching: isAISearching,
+    isAISearchActive,
+  } = useAISearch(search, { minQueryLength: 2 });
   
-  const { data: topSellersData, isLoading } = useQuery<{ products: Product[] }>({
+  const { data: topSellersData, isLoading: isTopSellersLoading } = useQuery<{ products: Product[] }>({
     queryKey: ["/api/products/top-sellers"],
   });
 
@@ -250,6 +259,11 @@ export default function TopSellersPage() {
   };
 
   const allFilteredProducts = useMemo(() => {
+    // Use AI search when active
+    if (isAISearchActive && aiSearchResults.length > 0) {
+      return aiSearchResults;
+    }
+
     const products = topSellersData?.products || [];
     if (!search.trim()) return products;
     
@@ -259,7 +273,9 @@ export default function TopSellersPage() {
       p.sku?.toLowerCase().includes(searchLower) ||
       p.description?.toLowerCase().includes(searchLower)
     );
-  }, [topSellersData?.products, search]);
+  }, [topSellersData?.products, search, isAISearchActive, aiSearchResults]);
+
+  const isLoading = isAISearchActive ? isAISearching : isTopSellersLoading;
 
   // Pagination
   const totalPages = Math.ceil(allFilteredProducts.length / ITEMS_PER_PAGE);
@@ -313,12 +329,18 @@ export default function TopSellersPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search products..."
+              placeholder="Try: 'cheap cables' or 'sunglasses under $5'..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 h-9"
               data-testid="input-search-top-sellers"
             />
+            {isAISearchActive && (
+              <Badge variant="secondary" className="absolute right-2 top-1/2 -translate-y-1/2 text-xs gap-1">
+                <Sparkles className="h-3 w-3" />
+                AI
+              </Badge>
+            )}
           </div>
           
           <div className="flex items-center gap-1">

@@ -43,7 +43,7 @@ import {
   type JobStatusValue
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, ne, ilike, or, asc, sql, lte, gte } from "drizzle-orm";
+import { eq, desc, and, ne, ilike, or, asc, sql, lte, gte, inArray } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 12;
@@ -70,6 +70,7 @@ export interface IStorage {
   getProduct(id: string): Promise<Product | undefined>;
   getProductInternal(id: string): Promise<Product | undefined>;
   getProductBySku(sku: string): Promise<Product | undefined>;
+  getProductsByIds(ids: string[]): Promise<Product[]>;
   getProductsByGroupId(groupId: string): Promise<Product[]>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product | undefined>;
@@ -438,6 +439,19 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
     return product;
+  }
+
+  async getProductsByIds(ids: string[]): Promise<Product[]> {
+    if (ids.length === 0) return [];
+    const result = await db.select().from(products).where(
+      and(
+        inArray(products.id, ids),
+        eq(products.isOnline, true)
+      )
+    );
+    // Preserve the order of the input IDs
+    const productMap = new Map(result.map(p => [p.id, p]));
+    return ids.map(id => productMap.get(id)).filter((p): p is Product => p !== undefined);
   }
 
   async getProductsByGroupId(groupId: string): Promise<Product[]> {

@@ -361,15 +361,7 @@ export default function ProductsPage() {
 
   // Use AI search results when searching, otherwise use regular API results
   const displayProducts = isAISearchActive 
-    ? aiSearchResults.map(p => ({
-        ...p,
-        stockQuantity: 0,
-        minOrderQuantity: 1,
-        isActive: true,
-        isOnline: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      } as Product)).slice((page - 1) * 12, page * 12)
+    ? aiSearchResults.slice((page - 1) * 12, page * 12)
     : data?.products || [];
 
   const totalPages = isAISearchActive 

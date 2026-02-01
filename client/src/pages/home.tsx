@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useAISearch } from "@/hooks/use-ai-search";
 import { ProductDetailModal } from "@/components/product-detail-modal";
 import { 
   Package, 
@@ -29,7 +30,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Sparkles
 } from "lucide-react";
 import {
   Select,
@@ -243,6 +245,13 @@ function CustomerHomePage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+
+  // AI-powered search
+  const { 
+    results: aiSearchResults, 
+    isSearching: isAISearching,
+    isAISearchActive,
+  } = useAISearch(search, { minQueryLength: 2 });
   
   // Fetch highlighted products
   const { data: highlightedData, isLoading: highlightedLoading } = useQuery<{ products: Product[] }>({
@@ -307,8 +316,12 @@ function CustomerHomePage() {
     ? highlightedProducts 
     : warnerData?.products || [];
   
-  // Filter products by search term
+  // Filter products - use AI search when active, otherwise fall back to basic filtering
   const filteredProducts = useMemo(() => {
+    if (isAISearchActive && aiSearchResults.length > 0) {
+      return aiSearchResults;
+    }
+    
     if (!search.trim()) return baseProducts.filter(p => p.isOnline);
     
     const searchLower = search.toLowerCase().trim();
@@ -319,7 +332,10 @@ function CustomerHomePage() {
         p.description?.toLowerCase().includes(searchLower)
       )
     );
-  }, [baseProducts, search]);
+  }, [baseProducts, search, isAISearchActive, aiSearchResults]);
+
+  // Loading state - consider AI search loading
+  const isLoading = isAISearchActive ? isAISearching : (highlightedLoading || (shouldFetchWarner && warnerLoading));
 
   // Pagination
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
@@ -334,7 +350,6 @@ function CustomerHomePage() {
   }, [search]);
   
   const showingHighlighted = hasEnoughHighlighted;
-  const isLoading = highlightedLoading || (shouldFetchWarner && warnerLoading);
 
   // Determine heading based on what's being displayed
   const headingText = showingHighlighted ? "Featured Products" : (warnerCategory?.name || "Warner");
@@ -355,12 +370,18 @@ function CustomerHomePage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search products..."
+              placeholder="Try: 'cheap cables' or 'sunglasses under $5'..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 h-9"
               data-testid="input-search-home"
             />
+            {isAISearchActive && (
+              <Badge variant="secondary" className="absolute right-2 top-1/2 -translate-y-1/2 text-xs gap-1">
+                <Sparkles className="h-3 w-3" />
+                AI
+              </Badge>
+            )}
           </div>
           
           <div className="flex items-center gap-1">

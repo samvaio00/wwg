@@ -1,20 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Product } from "@shared/schema";
 
 interface AISearchResult {
-  products: Array<{
-    id: string;
-    sku: string;
-    name: string;
-    category: string;
-    brand: string | null;
-    basePrice: string;
-    description: string | null;
-    tags: string[] | null;
-    imageUrl: string | null;
-    similarity?: number;
-  }>;
+  products: Product[];
   searchType: "semantic" | "keyword" | "hybrid";
   processingTime: number;
   totalResults: number;
@@ -75,7 +64,7 @@ export function useAISearch(
   });
 
   return {
-    results: data?.products || [],
+    results: (data?.products || []) as Product[],
     searchType: data?.searchType,
     processingTime: data?.processingTime,
     totalResults: data?.totalResults || 0,

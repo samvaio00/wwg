@@ -8,10 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useAISearch } from "@/hooks/use-ai-search";
 import { ProductDetailModal } from "@/components/product-detail-modal";
 import { 
   Package, 
   ShoppingCart, 
+  Gift,
   Sparkles,
   Plus,
   Minus,
@@ -236,8 +238,15 @@ export default function WhatsNewPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+
+  // AI-powered search
+  const { 
+    results: aiSearchResults, 
+    isSearching: isAISearching,
+    isAISearchActive,
+  } = useAISearch(search, { minQueryLength: 2 });
   
-  const { data: latestData, isLoading } = useQuery<{ products: Product[] }>({
+  const { data: latestData, isLoading: isLatestLoading } = useQuery<{ products: Product[] }>({
     queryKey: ["/api/latest-products"],
   });
 
@@ -252,8 +261,13 @@ export default function WhatsNewPage() {
     setIsDetailModalOpen(true);
   };
 
-  // Filter products by search term
+  // Filter products - use AI search when active, otherwise fall back to basic filtering
   const allFilteredProducts = useMemo(() => {
+    // Use AI search when active
+    if (isAISearchActive && aiSearchResults.length > 0) {
+      return aiSearchResults;
+    }
+
     const products = latestData?.products || [];
     if (!search.trim()) return products;
     
@@ -263,7 +277,9 @@ export default function WhatsNewPage() {
       p.sku?.toLowerCase().includes(searchLower) ||
       p.description?.toLowerCase().includes(searchLower)
     );
-  }, [latestData?.products, search]);
+  }, [latestData?.products, search, isAISearchActive, aiSearchResults]);
+
+  const isLoading = isAISearchActive ? isAISearching : isLatestLoading;
 
   // Pagination
   const totalPages = Math.ceil(allFilteredProducts.length / ITEMS_PER_PAGE);
@@ -317,12 +333,18 @@ export default function WhatsNewPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search products..."
+              placeholder="Try: 'cheap cables' or 'sunglasses under $5'..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 h-9"
               data-testid="input-search-whats-new"
             />
+            {isAISearchActive && (
+              <Badge variant="secondary" className="absolute right-2 top-1/2 -translate-y-1/2 text-xs gap-1">
+                <Sparkles className="h-3 w-3" />
+                AI
+              </Badge>
+            )}
           </div>
           
           <div className="flex items-center gap-1">

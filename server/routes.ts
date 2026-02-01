@@ -1255,7 +1255,7 @@ export async function registerRoutes(
     }
   });
 
-  // AI Enhanced Search - semantic product search
+  // AI Enhanced Search - semantic product search (POST)
   app.post("/api/ai/search", requireAuth, async (req, res) => {
     try {
       const { query, category } = req.body;
@@ -1268,6 +1268,52 @@ export async function registerRoutes(
       const result = await aiEnhancedSearch(userId, query.trim(), category);
       
       res.json(result);
+    } catch (error) {
+      console.error("AI Search error:", error);
+      res.status(500).json({ message: "AI search is temporarily unavailable. Please try again." });
+    }
+  });
+
+  // AI Enhanced Search - semantic product search (GET for frontend use)
+  app.get("/api/ai/search", async (req, res) => {
+    try {
+      const { query, category } = req.query;
+      
+      if (!query || typeof query !== 'string' || query.trim().length === 0) {
+        return res.status(400).json({ message: "Please provide a search query" });
+      }
+
+      const userId = req.session?.userId || null;
+      const result = await aiEnhancedSearch(userId, query.trim(), category as string | undefined);
+      
+      // Fetch full product records for the matched SKUs to ensure all fields are present
+      if (result.products && result.products.length > 0) {
+        const productIds = result.products.map(p => p.id);
+        const fullProducts = await storage.getProductsByIds(productIds);
+        
+        // Apply customer-specific pricing if user has a price list
+        let productsWithPricing = fullProducts;
+        if (req.session?.userId) {
+          const user = await storage.getUser(req.session.userId);
+          if (user?.priceListId) {
+            const customerPriceMap = await storage.getCustomerPricesForProducts(
+              user.priceListId,
+              fullProducts.map(p => p.id)
+            );
+            productsWithPricing = fullProducts.map(product => ({
+              ...product,
+              customerPrice: customerPriceMap[product.id] || null,
+            }));
+          }
+        }
+
+        res.json({
+          ...result,
+          products: productsWithPricing,
+        });
+      } else {
+        res.json(result);
+      }
     } catch (error) {
       console.error("AI Search error:", error);
       res.status(500).json({ message: "AI search is temporarily unavailable. Please try again." });

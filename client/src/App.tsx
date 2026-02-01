@@ -183,8 +183,13 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
           </header>
           <div className="relative w-full h-[88px] md:h-[120px] overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-r from-sky-100 via-blue-50 to-amber-50 dark:from-slate-800 dark:via-slate-700 dark:to-stone-700" />
+            {/* Subtle floating product images */}
+            <img src={heroSunglasses} alt="" className="hidden md:block absolute right-[45%] top-[10%] h-16 w-16 object-contain opacity-[0.12] rotate-[-8deg]" />
+            <img src={heroCap} alt="" className="hidden md:block absolute right-[28%] bottom-[5%] h-20 w-20 object-contain opacity-[0.10] rotate-[5deg]" />
+            <img src={heroCarCharger} alt="" className="hidden md:block absolute right-[12%] top-[15%] h-14 w-14 object-contain opacity-[0.14] rotate-[12deg]" />
+            <img src={heroCable} alt="" className="hidden md:block absolute right-[3%] bottom-[10%] h-18 w-18 object-contain opacity-[0.11] rotate-[-5deg]" />
             <div className="absolute inset-0 flex items-center">
-              <div className="px-6 md:px-10 flex-1">
+              <div className="px-6 md:px-10 flex-1 relative z-10">
                 <h2 className="text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
                   Warner Wireless Gears
                 </h2>
@@ -194,12 +199,6 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
                 <p className="text-slate-600 dark:text-white/70 text-xs md:text-sm mt-0.5 hidden md:block">
                   Serving gas stations, convenience stores, smoke shops, gift shops and retailers
                 </p>
-              </div>
-              <div className="hidden md:flex items-center gap-6 pr-8 opacity-20">
-                <img src={heroSunglasses} alt="" className="h-12 w-12 object-contain" />
-                <img src={heroCarCharger} alt="" className="h-12 w-12 object-contain" />
-                <img src={heroCable} alt="" className="h-12 w-12 object-contain" />
-                <img src={heroCap} alt="" className="h-12 w-12 object-contain" />
               </div>
             </div>
           </div>

@@ -22,6 +22,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ShoppingCart, User, LogOut, Settings, ClipboardList, UserCircle, Mail } from "lucide-react";
 import heroBanner from "@/assets/images/hero-banner.png";
+import heroSunglasses from "@/assets/images/hero-sunglasses.png";
+import heroCarCharger from "@/assets/images/hero-car-charger.png";
+import heroCable from "@/assets/images/hero-cable.png";
+import heroCap from "@/assets/images/hero-cap.png";
 
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
@@ -177,7 +181,7 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               <CartButton />
             </div>
           </header>
-          <div className="relative w-full h-28 md:h-36 overflow-hidden">
+          <div className="relative w-full h-[88px] md:h-[120px] overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-r from-sky-100 via-blue-50 to-amber-50 dark:from-slate-800 dark:via-slate-700 dark:to-stone-700" />
             <div className="absolute inset-0 flex items-center">
               <div className="px-6 md:px-10 flex-1">
@@ -187,9 +191,15 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
                 <p className="text-slate-700 dark:text-white/90 text-sm md:text-base font-semibold mt-1">
                   Premium B2B Wholesale Distributors
                 </p>
-                <p className="text-slate-600 dark:text-white/70 text-xs md:text-sm mt-0.5">
+                <p className="text-slate-600 dark:text-white/70 text-xs md:text-sm mt-0.5 hidden md:block">
                   Serving gas stations, convenience stores, smoke shops, gift shops and retailers
                 </p>
+              </div>
+              <div className="hidden md:flex items-center gap-6 pr-8 opacity-20">
+                <img src={heroSunglasses} alt="" className="h-12 w-12 object-contain" />
+                <img src={heroCarCharger} alt="" className="h-12 w-12 object-contain" />
+                <img src={heroCable} alt="" className="h-12 w-12 object-contain" />
+                <img src={heroCap} alt="" className="h-12 w-12 object-contain" />
               </div>
             </div>
           </div>

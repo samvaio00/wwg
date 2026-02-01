@@ -21,11 +21,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ShoppingCart, User, LogOut, Settings, ClipboardList, UserCircle, Mail } from "lucide-react";
-import heroBanner from "@/assets/images/hero-banner.png";
-import heroSunglasses from "@/assets/images/hero-sunglasses.png";
-import heroCarCharger from "@/assets/images/hero-car-charger.png";
-import heroCable from "@/assets/images/hero-cable.png";
-import heroCap from "@/assets/images/hero-cap.png";
 
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
@@ -214,30 +209,6 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               {!isAdmin && <CartButton />}
             </div>
           </header>
-          {/* Only show hero banner for customers */}
-          {!isAdmin && (
-            <div className="relative w-full h-[88px] md:h-[120px] overflow-hidden -mt-1">
-              <div className="absolute inset-0 bg-gradient-to-r from-sky-100 via-blue-50 to-amber-50" />
-              {/* Subtle floating product images - same for light and dark mode */}
-              <img src={heroSunglasses} alt="" className="hidden md:block absolute right-[45%] top-[10%] h-16 w-16 object-contain opacity-[0.12] rotate-[-8deg] mix-blend-multiply" />
-              <img src={heroCap} alt="" className="hidden md:block absolute right-[28%] bottom-[5%] h-20 w-20 object-contain opacity-[0.10] rotate-[5deg] mix-blend-multiply" />
-              <img src={heroCarCharger} alt="" className="hidden md:block absolute right-[12%] top-[15%] h-14 w-14 object-contain opacity-[0.14] rotate-[12deg] mix-blend-multiply" />
-              <img src={heroCable} alt="" className="hidden md:block absolute right-[5%] bottom-[15%] h-[72px] w-[72px] object-contain opacity-[0.13] rotate-[-5deg] mix-blend-multiply" />
-              <div className="absolute inset-0 flex items-center">
-                <div className="px-6 md:px-10 flex-1 relative z-10">
-                  <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
-                    Warner Wireless Gears
-                  </h2>
-                  <p className="text-slate-700 text-sm md:text-base font-semibold mt-1">
-                    Premium B2B Wholesale Distributors
-                  </p>
-                  <p className="text-slate-600 text-xs md:text-sm mt-0.5 hidden md:block">
-                    Serving gas stations, convenience stores, smoke shops, gift shops and retailers
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
           <main className="flex-1 overflow-auto p-6">
             {children}
           </main>

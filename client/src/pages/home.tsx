@@ -30,8 +30,8 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  ArrowDownCircle,
-  ArrowUpCircle
+  Download,
+  Upload
 } from "lucide-react";
 import {
   Select,
@@ -657,7 +657,7 @@ function AdminDashboard() {
           <Card className="hover-elevate cursor-pointer">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">New Records from Zoho</CardTitle>
-              <ArrowDownCircle className="h-4 w-4 text-muted-foreground" />
+              <Download className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{recordsPulled}</div>
@@ -670,7 +670,7 @@ function AdminDashboard() {
           <Card className="hover-elevate cursor-pointer">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Records Updated from Zoho</CardTitle>
-              <ArrowDownCircle className="h-4 w-4 text-muted-foreground" />
+              <Download className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{recordsUpdated}</div>
@@ -685,7 +685,7 @@ function AdminDashboard() {
           <Card className="hover-elevate cursor-pointer">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">New Customers Sent to Zoho</CardTitle>
-              <ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
+              <Upload className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{customersSentToZoho}</div>
@@ -698,7 +698,7 @@ function AdminDashboard() {
           <Card className="hover-elevate cursor-pointer">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Orders Sent to Zoho</CardTitle>
-              <ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
+              <Upload className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{ordersSentToZoho}</div>

@@ -57,7 +57,13 @@ export default function AdminSettingsPage() {
   });
 
   const { data: allProductsData, isLoading: productsLoading } = useQuery<{ products: Product[]; pagination: { totalCount: number } }>({
-    queryKey: ["/api/products", { search: productSearch, limit: 20 }],
+    queryKey: ["/api/products", "search", productSearch],
+    queryFn: async () => {
+      const params = new URLSearchParams({ search: productSearch, limit: "20" });
+      const res = await fetch(`/api/products?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch products");
+      return res.json();
+    },
     enabled: productSearch.length >= 2,
   });
 

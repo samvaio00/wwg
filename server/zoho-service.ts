@@ -813,7 +813,7 @@ export async function getCustomerPriceForProduct(
 interface ZohoItemGroupsResponse {
   code: number;
   message: string;
-  item_groups?: Array<{
+  itemgroups?: Array<{
     group_id: string;
     group_name: string;
     status: string;
@@ -904,7 +904,7 @@ export async function syncItemGroupsFromZoho(): Promise<{ synced: number; update
 
     while (hasMore) {
       const response = await fetchZohoItemGroups(page);
-      const itemGroups = response.item_groups || [];
+      const itemGroups = response.itemgroups || [];
 
       console.log(`[Zoho Item Groups Sync] Processing page ${page}, found ${itemGroups.length} groups`);
 

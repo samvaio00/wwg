@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileWarning, Scale, ShieldAlert } from "lucide-react";
+import { FileWarning, Scale, ShieldAlert, UserCheck, Truck } from "lucide-react";
 
 export default function DisclaimerPage() {
   return (
@@ -31,6 +31,44 @@ export default function DisclaimerPage() {
             Product images are for illustrative purposes only and may not exactly represent the actual 
             product. Colors, sizes, and other attributes may vary slightly from what is displayed.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserCheck className="h-5 w-5" />
+            Age Requirement
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p>
+            <strong>You must be at least 21 years of age</strong> to access and use this website. 
+            By using this site, you confirm that you meet this age requirement.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Truck className="h-5 w-5" />
+            Regulated Products Shipping Policy
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p>
+            <strong>Vape, THC/CBD, and Kratom products</strong> are subject to special shipping restrictions:
+          </p>
+          <ul className="list-disc list-inside space-y-2 text-muted-foreground">
+            <li>These products will only be shipped to states where they are legal to sell from Texas</li>
+            <li>Customers must provide appropriate licenses to purchase these products</li>
+            <li>
+              <strong>PACT Act Compliance:</strong> These products will only be shipped to the address 
+              listed on the customer's business license. No exceptions will be made for alternate 
+              shipping addresses.
+            </li>
+          </ul>
         </CardContent>
       </Card>
 

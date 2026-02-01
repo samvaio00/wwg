@@ -26,6 +26,7 @@ import {
   ShoppingCart,
   Mail,
   RefreshCw,
+  Star,
 } from "lucide-react";
 import type { Category } from "@shared/schema";
 
@@ -59,6 +60,11 @@ const adminNavItems = [
     title: "Email Templates",
     url: "/admin/email-templates",
     icon: Mail,
+  },
+  {
+    title: "Highlighted Products",
+    url: "/admin/highlighted-products",
+    icon: Star,
   },
   {
     title: "Zoho Status",
@@ -97,6 +103,11 @@ const staffNavItems = [
     title: "Email Templates",
     url: "/admin/email-templates",
     icon: Mail,
+  },
+  {
+    title: "Highlighted Products",
+    url: "/admin/highlighted-products",
+    icon: Star,
   },
   {
     title: "Settings",

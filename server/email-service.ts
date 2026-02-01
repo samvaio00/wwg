@@ -344,3 +344,189 @@ export function isEmailConfigured(): boolean {
   const config = getEmailConfig();
   return config.provider !== "console";
 }
+
+const ADMIN_EMAIL = "warnergears@gmail.com";
+
+interface ProfileUpdateData {
+  businessName?: string;
+  contactName?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+}
+
+export async function sendProfileUpdateNotification(
+  user: { id: string; email: string; businessName?: string | null; contactName?: string | null },
+  pendingData: ProfileUpdateData
+): Promise<SendEmailResult> {
+  const subject = `Profile Update Request - ${user.businessName || user.email}`;
+  
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background: #f9f9f9; }
+    .data-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+    .data-table td { padding: 8px; border-bottom: 1px solid #ddd; }
+    .data-table td:first-child { font-weight: bold; width: 40%; }
+    .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Profile Update Request</h1>
+    </div>
+    <div class="content">
+      <p>A customer has requested profile changes:</p>
+      
+      <table class="data-table">
+        <tr><td>Customer Email:</td><td>${user.email}</td></tr>
+        <tr><td>Business Name:</td><td>${pendingData.businessName || '-'}</td></tr>
+        <tr><td>Contact Name:</td><td>${pendingData.contactName || '-'}</td></tr>
+        <tr><td>Phone:</td><td>${pendingData.phone || '-'}</td></tr>
+        <tr><td>Address:</td><td>${pendingData.address || '-'}</td></tr>
+        <tr><td>City:</td><td>${pendingData.city || '-'}</td></tr>
+        <tr><td>State:</td><td>${pendingData.state || '-'}</td></tr>
+        <tr><td>ZIP Code:</td><td>${pendingData.zipCode || '-'}</td></tr>
+      </table>
+      
+      <p>Please review and approve or reject this request in the admin panel.</p>
+    </div>
+    <div class="footer">
+      <p>&copy; ${new Date().getFullYear()} Warner Wireless Gears. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+  
+  console.log(`[Email] Sending profile update notification for user ${user.email}`);
+  return sendEmail(ADMIN_EMAIL, subject, htmlContent);
+}
+
+interface ContactFormData {
+  name?: string;
+  email?: string;
+  subject: string;
+  message: string;
+}
+
+export async function sendContactFormEmail(data: ContactFormData): Promise<SendEmailResult> {
+  const subject = `Contact Form: ${data.subject}`;
+  
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background: #f9f9f9; }
+    .message-box { background: white; border: 1px solid #ddd; padding: 15px; margin: 15px 0; }
+    .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Contact Form Message</h1>
+    </div>
+    <div class="content">
+      <p><strong>From:</strong> ${data.name || 'Not provided'} (${data.email || 'No email'})</p>
+      <p><strong>Subject:</strong> ${data.subject}</p>
+      
+      <div class="message-box">
+        <p><strong>Message:</strong></p>
+        <p>${data.message.replace(/\n/g, '<br>')}</p>
+      </div>
+      
+      ${data.email ? `<p>Reply directly to: <a href="mailto:${data.email}">${data.email}</a></p>` : ''}
+    </div>
+    <div class="footer">
+      <p>&copy; ${new Date().getFullYear()} Warner Wireless Gears. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+  
+  console.log(`[Email] Sending contact form message from ${data.email || 'anonymous'}`);
+  return sendEmail(ADMIN_EMAIL, subject, htmlContent);
+}
+
+export async function sendNewOrderNotification(
+  orderId: string
+): Promise<SendEmailResult> {
+  try {
+    const [order] = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!order) {
+      return { success: false, error: "Order not found" };
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, order.userId))
+      .limit(1);
+
+    const subject = `New Order Pending Approval - ${order.orderNumber}`;
+    
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background: #f9f9f9; }
+    .order-details { background: white; border: 1px solid #ddd; padding: 15px; margin: 15px 0; }
+    .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>New Order Pending Approval</h1>
+    </div>
+    <div class="content">
+      <p>A new order has been placed and requires approval:</p>
+      
+      <div class="order-details">
+        <p><strong>Order Number:</strong> ${order.orderNumber}</p>
+        <p><strong>Customer:</strong> ${user?.businessName || user?.email || 'Unknown'}</p>
+        <p><strong>Total Amount:</strong> $${order.totalAmount}</p>
+        <p><strong>Items:</strong> ${order.itemCount || 0}</p>
+        <p><strong>Date:</strong> ${new Date(order.createdAt).toLocaleString()}</p>
+      </div>
+      
+      <p>Please review and approve this order in the admin panel.</p>
+    </div>
+    <div class="footer">
+      <p>&copy; ${new Date().getFullYear()} Warner Wireless Gears. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    console.log(`[Email] Sending new order notification for ${order.orderNumber}`);
+    return sendEmail(ADMIN_EMAIL, subject, htmlContent);
+  } catch (error) {
+    console.error("[Email] New order notification error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}

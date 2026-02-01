@@ -22,6 +22,10 @@ import {
   BarChart3,
   Home,
   Sparkles,
+  TrendingUp,
+  ClipboardList,
+  UserCircle,
+  Mail,
 } from "lucide-react";
 import type { Category } from "@shared/schema";
 
@@ -105,6 +109,18 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location === "/top-sellers"}
+                  data-testid="nav-top-sellers"
+                >
+                  <Link href="/top-sellers">
+                    <TrendingUp className="h-4 w-4" />
+                    <span>Top Sellers</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               
               {/* Separator between Browse items and Categories */}
               <div className="my-2 mx-2 border-t border-sidebar-border" />
@@ -131,6 +147,52 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {!isAdmin && user && (
+          <SidebarGroup>
+            <SidebarGroupLabel>My Account</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === "/order-history"}
+                    data-testid="nav-order-history"
+                  >
+                    <Link href="/order-history">
+                      <ClipboardList className="h-4 w-4" />
+                      <span>Order History</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === "/profile"}
+                    data-testid="nav-profile"
+                  >
+                    <Link href="/profile">
+                      <UserCircle className="h-4 w-4" />
+                      <span>Edit Profile</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === "/contact"}
+                    data-testid="nav-contact"
+                  >
+                    <Link href="/contact">
+                      <Mail className="h-4 w-4" />
+                      <span>Contact Us</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {isAdmin && (
           <SidebarGroup>

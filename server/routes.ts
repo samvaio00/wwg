@@ -558,6 +558,18 @@ export async function registerRoutes(
     }
   });
 
+  // Get top selling products from the last 3 months
+  app.get("/api/products/top-sellers", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 24;
+      const topSellers = await storage.getTopSellingProducts(Math.min(limit, 24));
+      res.json({ products: topSellers });
+    } catch (error) {
+      console.error("[API] Error fetching top sellers:", error);
+      res.status(500).json({ message: "Failed to fetch top sellers" });
+    }
+  });
+
   // Get products by group ID (for variant products) - must be before :id route
   app.get("/api/products/group/:groupId", async (req, res) => {
     try {
@@ -872,6 +884,77 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching order:", error);
       res.status(500).json({ message: "Failed to fetch order" });
+    }
+  });
+
+  // ================================================================
+  // USER PROFILE ROUTES
+  // ================================================================
+
+  // Get user profile
+  app.get("/api/user/profile", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json({ user });
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ message: "Failed to fetch profile" });
+    }
+  });
+
+  // Submit profile update request
+  app.post("/api/user/profile/update-request", requireAuth, async (req, res) => {
+    try {
+      const { businessName, contactName, phone, address, city, state, zipCode } = req.body;
+      
+      // Store pending profile data
+      const pendingData = { businessName, contactName, phone, address, city, state, zipCode };
+      
+      await storage.updateUser(req.session.userId!, {
+        profileUpdatePending: true,
+        pendingProfileData: pendingData,
+      });
+      
+      // Send email notification to admin
+      try {
+        const emailService = await import("./email-service");
+        const user = await storage.getUser(req.session.userId!);
+        await emailService.sendProfileUpdateNotification(user!, pendingData);
+      } catch (emailError) {
+        console.error("[API] Failed to send profile update notification:", emailError);
+      }
+      
+      res.json({ message: "Profile update request submitted for approval" });
+    } catch (error) {
+      console.error("Error submitting profile update:", error);
+      res.status(500).json({ message: "Failed to submit profile update" });
+    }
+  });
+
+  // Contact form submission
+  app.post("/api/contact", async (req, res) => {
+    try {
+      const { name, email, subject, message } = req.body;
+      
+      if (!subject?.trim() || !message?.trim()) {
+        return res.status(400).json({ message: "Subject and message are required" });
+      }
+      
+      // Send email notification
+      try {
+        const emailService = await import("./email-service");
+        await emailService.sendContactFormEmail({ name, email, subject, message });
+      } catch (emailError) {
+        console.error("[API] Failed to send contact form email:", emailError);
+      }
+      
+      res.json({ message: "Message sent successfully" });
+    } catch (error) {
+      console.error("Error sending contact form:", error);
+      res.status(500).json({ message: "Failed to send message" });
     }
   });
 

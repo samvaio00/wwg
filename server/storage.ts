@@ -816,6 +816,59 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async getTopSellingProducts(limit: number = 24): Promise<Product[]> {
+    // Get products from orders in the last 3 months
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+    // Get top selling product IDs based on total quantity sold
+    const topSelling = await db
+      .select({
+        productId: orderItems.productId,
+        totalQuantity: sql<number>`sum(${orderItems.quantity})`.as('total_quantity'),
+      })
+      .from(orderItems)
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .where(
+        and(
+          gte(orders.createdAt, threeMonthsAgo),
+          // Only count approved/completed orders
+          or(
+            eq(orders.status, OrderStatus.APPROVED),
+            eq(orders.status, OrderStatus.PROCESSING),
+            eq(orders.status, OrderStatus.SHIPPED),
+            eq(orders.status, OrderStatus.DELIVERED)
+          )
+        )
+      )
+      .groupBy(orderItems.productId)
+      .orderBy(sql`sum(${orderItems.quantity}) DESC`)
+      .limit(limit);
+
+    if (topSelling.length === 0) {
+      return [];
+    }
+
+    // Get product details for top sellers
+    const productIds = topSelling.map(ts => ts.productId);
+    const productResults = await db
+      .select()
+      .from(products)
+      .where(
+        and(
+          sql`${products.id} IN (${sql.join(productIds.map(id => sql`${id}`), sql`, `)})`,
+          eq(products.isOnline, true),
+          eq(products.isActive, true)
+        )
+      );
+
+    // Sort by sales order
+    const productMap = new Map(productResults.map(p => [p.id, p]));
+    return productIds
+      .map(id => productMap.get(id))
+      .filter((p): p is Product => p !== undefined);
+  }
+
   async getHiddenProducts(): Promise<Product[]> {
     return db.select()
       .from(products)

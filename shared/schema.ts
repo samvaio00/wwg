@@ -99,6 +99,10 @@ export const users = pgTable("users", {
   zohoIsActive: boolean("zoho_is_active").default(true), // Reflects Zoho Books customer active status
   zohoLastCheckedAt: timestamp("zoho_last_checked_at"), // Last time status was verified
   
+  // Profile update request
+  profileUpdatePending: boolean("profile_update_pending").default(false),
+  pendingProfileData: jsonb("pending_profile_data"), // Stores pending profile changes as JSON
+  
   // Timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

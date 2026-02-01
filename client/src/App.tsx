@@ -27,6 +27,10 @@ import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import HomePage from "@/pages/home";
 import WhatsNewPage from "@/pages/whats-new";
+import TopSellersPage from "@/pages/top-sellers";
+import OrderHistoryPage from "@/pages/order-history";
+import ProfilePage from "@/pages/profile";
+import ContactPage from "@/pages/contact";
 import ProductsPage from "@/pages/products";
 import CartPage from "@/pages/cart";
 import CheckoutPage from "@/pages/checkout";
@@ -207,6 +211,10 @@ function AppRouter() {
       <Switch>
         <Route path="/" component={HomePage} />
         <Route path="/whats-new" component={WhatsNewPage} />
+        <Route path="/top-sellers" component={TopSellersPage} />
+        <Route path="/order-history" component={OrderHistoryPage} />
+        <Route path="/profile" component={ProfilePage} />
+        <Route path="/contact" component={ContactPage} />
         <Route path="/products" component={ProductsPage} />
         <Route path="/cart" component={CartPage} />
         <Route path="/checkout" component={CheckoutPage} />

@@ -6,6 +6,7 @@ import { createServer } from "http";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
 import { startScheduler } from "./scheduler";
+import path from "path";
 
 const app = express();
 const httpServer = createServer(app);

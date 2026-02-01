@@ -40,3 +40,18 @@ The platform is built with a modern web stack:
 - **Replit AI Integrations**: Used for AI Cart Builder and AI Enhanced Search functionalities (specifically `gpt-4o-mini`).
 - **OpenAI API**: Optionally integrated for true vector embeddings in semantic search (text-embedding-3-small model) if an API key is provided.
 - **Email Service (Resend, SendGrid)**: Supports sending shipment and delivery notifications, with a console logging fallback for development.
+
+## Recent Changes (Feb 2026)
+
+- **Hero Section Redesign**: Updated hero section with subtle light blue/milk coffee gradient background and subtle sunglasses image (removed human image).
+- **Pagination**: Added pagination (12 items per page) to Home, What's New, and Top Sellers pages with Previous/Next navigation.
+- **Footer Component**: Created footer with links to About Us, Return Policy, and Disclaimer pages.
+- **Registration Enhancements**: Added date of birth field (21+ age verification) and file upload for Sales Tax Certificate/Business License during new customer registration.
+- **New Pages**: Created About Us, Return Policy, and Disclaimer static content pages.
+- **UI/UX Updates**: My Account menu items (Order History, Edit Profile, Contact Us) moved from sidebar to header user dropdown. AI Order button displays text next to sparkles icon for better visibility. What's New uses Gift icon instead of Sparkles.
+
+## File Upload Configuration
+
+- Certificate uploads are stored in `/uploads/certificates/` directory.
+- Supported file types: PDF, JPEG, PNG, GIF (max 5MB).
+- Static file serving configured at `/uploads` route.

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Building2, User, Phone, Mail, Lock, MapPin, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react";
+import { Loader2, Building2, User, Phone, Mail, Lock, MapPin, CheckCircle, AlertCircle, ArrowLeft, CalendarDays, Upload, FileText, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import wwgLogo from "@assets/wwg-logo_1769841225412.jpg";
 
@@ -39,6 +39,15 @@ const existingCustomerSchema = z.object({
 const newCustomerSchema = z.object({
   businessName: z.string().min(2, "Business name is required"),
   contactName: z.string().min(2, "Contact name is required"),
+  dateOfBirth: z.string().min(1, "Date of birth is required").refine((date) => {
+    const birthDate = new Date(date);
+    const today = new Date();
+    const age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    const dayDiff = today.getDate() - birthDate.getDate();
+    const actualAge = monthDiff < 0 || (monthDiff === 0 && dayDiff < 0) ? age - 1 : age;
+    return actualAge >= 21;
+  }, "You must be at least 21 years old to register"),
   phone: z.string().optional(),
   address: z.string().optional(),
   city: z.string().optional(),
@@ -70,11 +79,15 @@ export default function RegisterPage() {
     defaultValues: { zohoCustomerId: "", password: "", confirmPassword: "" },
   });
 
+  const [certificateFile, setCertificateFile] = useState<File | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+
   const newForm = useForm<z.infer<typeof newCustomerSchema>>({
     resolver: zodResolver(newCustomerSchema),
     defaultValues: {
       businessName: "",
       contactName: "",
+      dateOfBirth: "",
       phone: "",
       address: "",
       city: "",
@@ -145,19 +158,70 @@ export default function RegisterPage() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif'];
+      if (!validTypes.includes(file.type)) {
+        toast({
+          variant: "destructive",
+          title: "Invalid file type",
+          description: "Please upload a PDF, JPEG, PNG, or GIF file.",
+        });
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          variant: "destructive",
+          title: "File too large",
+          description: "File size must be less than 5MB.",
+        });
+        return;
+      }
+      setCertificateFile(file);
+    }
+  };
+
+  const removeFile = () => {
+    setCertificateFile(null);
+  };
+
   const registerNewCustomer = async (data: z.infer<typeof newCustomerSchema>) => {
     setIsLoading(true);
     try {
+      let certificateUrl = "";
+      
+      if (certificateFile) {
+        setIsUploadingFile(true);
+        const formData = new FormData();
+        formData.append("file", certificateFile);
+        
+        const uploadResponse = await fetch("/api/upload/certificate", {
+          method: "POST",
+          body: formData,
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error("Failed to upload certificate");
+        }
+        
+        const uploadResult = await uploadResponse.json();
+        certificateUrl = uploadResult.url;
+        setIsUploadingFile(false);
+      }
+
       await register({
         email,
         password: data.password,
         businessName: data.businessName,
         contactName: data.contactName,
+        dateOfBirth: data.dateOfBirth,
         phone: data.phone,
         address: data.address,
         city: data.city,
         state: data.state,
         zipCode: data.zipCode,
+        certificateUrl,
       });
       toast({
         title: "Registration submitted!",
@@ -432,6 +496,28 @@ export default function RegisterPage() {
 
                   <FormField
                     control={newForm.control}
+                    name="dateOfBirth"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                          Date of Birth (Must be 21+)
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            type="date"
+                            max={new Date(new Date().setFullYear(new Date().getFullYear() - 21)).toISOString().split('T')[0]}
+                            data-testid="input-date-of-birth"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={newForm.control}
                     name="phone"
                     render={({ field }) => (
                       <FormItem>
@@ -525,6 +611,57 @@ export default function RegisterPage() {
                         </FormItem>
                       )}
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <FormLabel className="flex items-center gap-2">
+                      <Upload className="h-4 w-4 text-muted-foreground" />
+                      Sales Tax Certificate / Business License (Optional)
+                    </FormLabel>
+                    <p className="text-xs text-muted-foreground">
+                      Upload a copy of your Sales Tax Certificate or Business License for faster approval.
+                    </p>
+                    {!certificateFile ? (
+                      <div className="border-2 border-dashed rounded-md p-4">
+                        <label className="flex flex-col items-center cursor-pointer">
+                          <FileText className="h-8 w-8 text-muted-foreground mb-2" />
+                          <span className="text-sm text-muted-foreground mb-1">
+                            Click to upload or drag and drop
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            PDF, JPEG, PNG, or GIF (max 5MB)
+                          </span>
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.gif"
+                            onChange={handleFileChange}
+                            className="hidden"
+                            data-testid="input-certificate"
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="border rounded-md p-3 flex items-center justify-between bg-muted/50">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-primary" />
+                          <div>
+                            <p className="text-sm font-medium truncate max-w-[200px]">{certificateFile.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(certificateFile.size / 1024).toFixed(1)} KB
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={removeFile}
+                          data-testid="button-remove-certificate"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   <FormField

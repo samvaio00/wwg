@@ -87,6 +87,12 @@ export const users = pgTable("users", {
   contactName: text("contact_name"),
   phone: text("phone"),
   
+  // Date of birth (for 21+ verification)
+  dateOfBirth: text("date_of_birth"),
+  
+  // Business documentation
+  certificateUrl: text("certificate_url"), // Sales Tax Certificate / Business License
+
   // Address (for future phases)
   address: text("address"),
   city: text("city"),
@@ -601,21 +607,25 @@ export const insertUserSchema = createInsertSchema(users).pick({
   password: true,
   businessName: true,
   contactName: true,
+  dateOfBirth: true,
   phone: true,
   address: true,
   city: true,
   state: true,
   zipCode: true,
+  certificateUrl: true,
 }).extend({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   businessName: z.string().optional(),
   contactName: z.string().optional(),
+  dateOfBirth: z.string().optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
   zipCode: z.string().optional(),
+  certificateUrl: z.string().optional(),
 });
 
 export const loginSchema = z.object({

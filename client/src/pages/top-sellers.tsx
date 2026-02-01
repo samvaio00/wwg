@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -17,7 +17,9 @@ import {
   Minus,
   Check,
   Eye,
-  Search
+  Search,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import type { Product } from "@shared/schema";
 
@@ -213,11 +215,14 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
   );
 }
 
+const ITEMS_PER_PAGE = 12;
+
 export default function TopSellersPage() {
   const { toast } = useToast();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   
   const { data: topSellersData, isLoading } = useQuery<{ products: Product[] }>({
     queryKey: ["/api/products/top-sellers"],
@@ -228,7 +233,7 @@ export default function TopSellersPage() {
     setIsDetailModalOpen(true);
   };
 
-  const filteredProducts = useMemo(() => {
+  const allFilteredProducts = useMemo(() => {
     const products = topSellersData?.products || [];
     if (!search.trim()) return products;
     
@@ -239,6 +244,18 @@ export default function TopSellersPage() {
       p.description?.toLowerCase().includes(searchLower)
     );
   }, [topSellersData?.products, search]);
+
+  // Pagination
+  const totalPages = Math.ceil(allFilteredProducts.length / ITEMS_PER_PAGE);
+  const filteredProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return allFilteredProducts.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [allFilteredProducts, currentPage]);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
 
   const addToCartMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
@@ -333,6 +350,34 @@ export default function TopSellersPage() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            data-testid="button-prev-page"
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground px-3">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            data-testid="button-next-page"
+          >
+            Next
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
       )}
 
       {filteredProducts.length > 0 && (

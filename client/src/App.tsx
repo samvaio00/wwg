@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/lib/theme";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/app-sidebar";
+import { Footer } from "@/components/footer";
 import { AICartBuilder } from "@/components/ai-cart-builder";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,9 @@ import AdminOrdersPage from "@/pages/admin-orders";
 import AdminAnalyticsPage from "@/pages/admin-analytics";
 import AdminSettingsPage from "@/pages/admin-settings";
 import PendingApprovalPage from "@/pages/pending-approval";
+import AboutPage from "@/pages/about";
+import ReturnPolicyPage from "@/pages/return-policy";
+import DisclaimerPage from "@/pages/disclaimer";
 
 function LoadingScreen() {
   return (
@@ -175,28 +179,24 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
             </div>
           </header>
           <div className="relative w-full h-36 md:h-44 overflow-hidden">
-            <img 
-              src={heroBanner} 
-              alt="Warner Wireless Gears - Premium Wholesale Accessories" 
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-600/95 via-violet-600/85 to-cyan-500/70 dark:from-purple-900/95 dark:via-fuchsia-800/85 dark:to-cyan-600/60 flex items-center justify-between">
+            <div className="absolute inset-0 bg-gradient-to-r from-sky-100 via-blue-50 to-amber-50 dark:from-slate-800 dark:via-slate-700 dark:to-stone-700" />
+            <div className="absolute inset-0 flex items-center justify-between">
               <div className="px-6 md:px-10 flex-1">
-                <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight drop-shadow-lg" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
+                <h2 className="text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
                   Warner Wireless Gears
                 </h2>
-                <p className="text-white text-sm md:text-base font-semibold mt-1">
+                <p className="text-slate-700 dark:text-white/90 text-sm md:text-base font-semibold mt-1">
                   Premium B2B Wholesale Distributors
                 </p>
-                <p className="text-white/80 text-xs md:text-sm mt-0.5">
+                <p className="text-slate-600 dark:text-white/70 text-xs md:text-sm mt-0.5">
                   Serving gas stations, convenience stores, smoke shops, gift shops and retailers
                 </p>
               </div>
-              <div className="hidden md:block pr-8">
+              <div className="hidden md:block pr-8 opacity-30">
                 <img 
                   src={sunglassesHero} 
-                  alt="Premium Sunglasses Collection"
-                  className="h-28 w-auto object-contain drop-shadow-2xl rounded-lg"
+                  alt="Premium Sunglasses"
+                  className="h-24 w-auto object-contain"
                 />
               </div>
             </div>
@@ -204,6 +204,7 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
           <main className="flex-1 overflow-auto p-6">
             {children}
           </main>
+          <Footer />
         </SidebarInset>
       </div>
     </SidebarProvider>
@@ -250,6 +251,9 @@ function AppRouter() {
         <Route path="/admin/orders" component={AdminOrdersPage} />
         <Route path="/admin/analytics" component={AdminAnalyticsPage} />
         <Route path="/admin/settings" component={AdminSettingsPage} />
+        <Route path="/about" component={AboutPage} />
+        <Route path="/return-policy" component={ReturnPolicyPage} />
+        <Route path="/disclaimer" component={DisclaimerPage} />
         <Route path="/settings" component={() => <PlaceholderPage title="Settings" />} />
         <Route component={NotFound} />
       </Switch>

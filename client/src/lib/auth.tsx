@@ -18,11 +18,13 @@ interface RegisterData {
   password: string;
   businessName?: string;
   contactName?: string;
+  dateOfBirth?: string;
   phone?: string;
   address?: string;
   city?: string;
   state?: string;
   zipCode?: string;
+  certificateUrl?: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

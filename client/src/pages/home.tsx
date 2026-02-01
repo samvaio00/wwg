@@ -25,7 +25,9 @@ import {
   Tag,
   Eye,
   Search,
-  Filter
+  Filter,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import {
   Select,
@@ -218,11 +220,14 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
   );
 }
 
+const ITEMS_PER_PAGE = 12;
+
 function CustomerHomePage() {
   const { toast } = useToast();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Fetch highlighted products
   const { data: highlightedData, isLoading: highlightedLoading } = useQuery<{ products: Product[] }>({
@@ -288,7 +293,7 @@ function CustomerHomePage() {
     : warnerData?.products || [];
   
   // Filter products by search term
-  const displayProducts = useMemo(() => {
+  const filteredProducts = useMemo(() => {
     if (!search.trim()) return baseProducts.filter(p => p.isOnline);
     
     const searchLower = search.toLowerCase().trim();
@@ -300,6 +305,18 @@ function CustomerHomePage() {
       )
     );
   }, [baseProducts, search]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
+  const displayProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredProducts.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredProducts, currentPage]);
+
+  // Reset to page 1 when search changes
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [search]);
   
   const showingHighlighted = hasEnoughHighlighted;
   const isLoading = highlightedLoading || (shouldFetchWarner && warnerLoading);
@@ -405,6 +422,34 @@ function CustomerHomePage() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            data-testid="button-prev-page"
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground px-3">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            data-testid="button-next-page"
+          >
+            Next
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
       )}
 
       {displayProducts.length > 0 && (

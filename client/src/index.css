@@ -581,22 +581,6 @@
   animation: subtlePulse 2s ease-in-out infinite;
 }
 
-/* Dropdown/Select open animation */
-@keyframes dropIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-[data-state="open"] > [data-radix-collection-item] {
-  animation: dropIn 0.15s ease-out;
-}
-
 /* Icon spin on interaction */
 .icon-spin {
   transition: transform 0.3s ease;

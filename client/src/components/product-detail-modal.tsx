@@ -93,71 +93,73 @@ function VariantCard({
 
   return (
     <Card className={`overflow-hidden ${isOutOfStock ? "opacity-60" : ""}`} data-testid={`card-variant-${variant.id}`}>
-      <CardContent className="p-2">
-        <div className="flex gap-2 items-center">
-          <div className="w-10 h-10 flex-shrink-0">
-            <ProductImage product={variant} isOutOfStock={isOutOfStock} size="small" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground font-mono truncate">{variant.sku}</p>
-                <h4 className="font-medium text-sm truncate" data-testid={`text-variant-name-${variant.id}`}>
-                  {variant.name}
-                </h4>
-              </div>
-              <div className="flex-shrink-0 text-right">
-                <span className="text-sm font-bold" data-testid={`text-variant-price-${variant.id}`}>
-                  ${variant.basePrice}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {isOutOfStock ? "Out" : `${stockQty} in stock`}
-                </p>
-              </div>
+      <CardContent className="p-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2 items-start">
+            <div className="w-12 h-12 flex-shrink-0">
+              <ProductImage product={variant} isOutOfStock={isOutOfStock} size="small" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground font-mono truncate">{variant.sku}</p>
+              <h4 className="font-medium text-sm line-clamp-2 leading-tight min-h-[2.5rem]" data-testid={`text-variant-name-${variant.id}`}>
+                {variant.name}
+              </h4>
             </div>
           </div>
-          {!isOutOfStock && (
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <div className="flex items-center border rounded h-7">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold" data-testid={`text-variant-price-${variant.id}`}>
+                ${variant.basePrice}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {isOutOfStock ? "Out of stock" : `${stockQty} in stock`}
+              </span>
+            </div>
+            {!isOutOfStock ? (
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex items-center border rounded h-7">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-6 rounded-r-none"
+                    onClick={decrementQuantity}
+                    disabled={quantity <= (variant.minOrderQuantity || 1)}
+                    data-testid={`button-variant-decrease-${variant.id}`}
+                  >
+                    <Minus className="h-3 w-3" />
+                  </Button>
+                  <span className="w-6 text-center text-xs font-medium" data-testid={`text-variant-quantity-${variant.id}`}>
+                    {quantity}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-6 rounded-l-none"
+                    onClick={incrementQuantity}
+                    disabled={quantity >= stockQty}
+                    data-testid={`button-variant-increase-${variant.id}`}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-6 rounded-r-none"
-                  onClick={decrementQuantity}
-                  disabled={quantity <= (variant.minOrderQuantity || 1)}
-                  data-testid={`button-variant-decrease-${variant.id}`}
+                  size="sm"
+                  className="h-7"
+                  onClick={handleAddToCart}
+                  disabled={isAddingToCart || justAdded}
+                  data-testid={`button-variant-add-to-cart-${variant.id}`}
                 >
-                  <Minus className="h-3 w-3" />
-                </Button>
-                <span className="w-6 text-center text-xs font-medium" data-testid={`text-variant-quantity-${variant.id}`}>
-                  {quantity}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-6 rounded-l-none"
-                  onClick={incrementQuantity}
-                  disabled={quantity >= stockQty}
-                  data-testid={`button-variant-increase-${variant.id}`}
-                >
-                  <Plus className="h-3 w-3" />
+                  {justAdded ? (
+                    <Check className="h-3 w-3" />
+                  ) : (
+                    <ShoppingCart className="h-3 w-3" />
+                  )}
                 </Button>
               </div>
-              <Button
-                size="sm"
-                className="h-7"
-                onClick={handleAddToCart}
-                disabled={isAddingToCart || justAdded}
-                data-testid={`button-variant-add-to-cart-${variant.id}`}
-              >
-                {justAdded ? (
-                  <Check className="h-3 w-3" />
-                ) : (
-                  <ShoppingCart className="h-3 w-3" />
-                )}
-              </Button>
-            </div>
-          )}
+            ) : (
+              <Badge variant="destructive" className="text-xs">Out of Stock</Badge>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

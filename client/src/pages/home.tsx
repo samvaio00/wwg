@@ -668,8 +668,8 @@ function AdminDashboard() {
 export default function HomePage() {
   const { user } = useAuth();
   
-  // Show admin dashboard for admins, customer homepage for customers
-  if (user?.role === "admin") {
+  // Show admin dashboard for admins and staff, customer homepage for customers
+  if (user?.role === "admin" || user?.role === "staff") {
     return <AdminDashboard />;
   }
   

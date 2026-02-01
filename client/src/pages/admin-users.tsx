@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -186,7 +187,10 @@ function UserCard({ user, onApprove, onReject, onSuspend, onReactivate, onDelete
 
 export default function AdminUsersPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [actioningId, setActioningId] = useState<string | null>(null);
+  
+  const isAdmin = user?.role === "admin";
 
   const form = useForm<InsertAdminStaff>({
     resolver: zodResolver(insertAdminStaffSchema),
@@ -354,10 +358,12 @@ export default function AdminUsersPage() {
           <TabsTrigger value="approved" data-testid="tab-approved">
             Customers ({approvedUsers.length})
           </TabsTrigger>
-          <TabsTrigger value="staff" data-testid="tab-staff">
-            <Shield className="h-4 w-4 mr-1" />
-            Admin & Staff ({adminStaffUsers.length})
-          </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="staff" data-testid="tab-staff">
+              <Shield className="h-4 w-4 mr-1" />
+              Admin & Staff ({adminStaffUsers.length})
+            </TabsTrigger>
+          )}
           <TabsTrigger value="other" data-testid="tab-other">
             Other ({otherUsers.length})
           </TabsTrigger>
@@ -409,122 +415,124 @@ export default function AdminUsersPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="staff" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <UserPlus className="h-5 w-5" />
-                Add Admin or Staff User
-              </CardTitle>
-              <CardDescription>
-                Create a new administrator or staff member account
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <FormField
-                      control={form.control}
-                      name="contactName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Full name" data-testid="input-new-user-name" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input type="email" placeholder="email@example.com" data-testid="input-new-user-email" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Password</FormLabel>
-                          <FormControl>
-                            <Input type="password" placeholder="Min 6 characters" data-testid="input-new-user-password" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="role"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Role</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger data-testid="select-new-user-role">
-                                <SelectValue placeholder="Select role" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="staff">Staff</SelectItem>
-                              <SelectItem value="admin">Admin</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <Button 
-                    type="submit" 
-                    disabled={createStaffMutation.isPending}
-                    data-testid="button-create-user"
-                  >
-                    {createStaffMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <UserPlus className="h-4 w-4 mr-2" />
-                    )}
-                    Create User
-                  </Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
-
-          {adminStaffUsers.length === 0 ? (
+        {isAdmin && (
+          <TabsContent value="staff" className="space-y-4">
             <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Shield className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No admin or staff users</p>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UserPlus className="h-5 w-5" />
+                  Add Admin or Staff User
+                </CardTitle>
+                <CardDescription>
+                  Create a new administrator or staff member account
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="contactName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Name</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Full name" data-testid="input-new-user-name" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="email"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Email</FormLabel>
+                            <FormControl>
+                              <Input type="email" placeholder="email@example.com" data-testid="input-new-user-email" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="password"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Password</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="Min 6 characters" data-testid="input-new-user-password" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="role"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Role</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-new-user-role">
+                                  <SelectValue placeholder="Select role" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="staff">Staff</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <Button 
+                      type="submit" 
+                      disabled={createStaffMutation.isPending}
+                      data-testid="button-create-user"
+                    >
+                      {createStaffMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <UserPlus className="h-4 w-4 mr-2" />
+                      )}
+                      Create User
+                    </Button>
+                  </form>
+                </Form>
               </CardContent>
             </Card>
-          ) : (
-            adminStaffUsers.map(user => (
-              <UserCard 
-                key={user.id} 
-                user={user} 
-                onApprove={(id) => approveMutation.mutate(id)}
-                onReject={(id) => rejectMutation.mutate(id)}
-                onSuspend={(id) => suspendMutation.mutate(id)}
-                onReactivate={(id) => reactivateMutation.mutate(id)}
-                onDelete={(id) => deleteMutation.mutate(id)}
-                isActioning={actioningId === user.id}
-                showDelete={true}
-              />
-            ))
-          )}
-        </TabsContent>
+
+            {adminStaffUsers.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <Shield className="h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">No admin or staff users</p>
+                </CardContent>
+              </Card>
+            ) : (
+              adminStaffUsers.map(u => (
+                <UserCard 
+                  key={u.id} 
+                  user={u} 
+                  onApprove={(id) => approveMutation.mutate(id)}
+                  onReject={(id) => rejectMutation.mutate(id)}
+                  onSuspend={(id) => suspendMutation.mutate(id)}
+                  onReactivate={(id) => reactivateMutation.mutate(id)}
+                  onDelete={(id) => deleteMutation.mutate(id)}
+                  isActioning={actioningId === u.id}
+                  showDelete={true}
+                />
+              ))
+            )}
+          </TabsContent>
+        )}
 
         <TabsContent value="other" className="space-y-4">
           {otherUsers.length === 0 ? (

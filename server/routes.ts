@@ -503,12 +503,13 @@ export async function registerRoutes(
     try {
       const { category, search, sortBy, sortOrder, limit, page } = req.query;
       
-      // Default to 24 products per page (fits nicely in 4-column grid)
-      const pageSize = limit ? parseInt(limit as string, 10) : 24;
+      // Default to 12 products per page for storefront display
+      const pageSize = limit ? parseInt(limit as string, 10) : 12;
       const pageNum = page ? parseInt(page as string, 10) : 1;
       const offset = (pageNum - 1) * pageSize;
       
-      const result = await storage.getProducts({
+      // Use consolidated products for storefront - groups appear as single tiles
+      const result = await storage.getConsolidatedProducts({
         category: category as string | undefined,
         search: search as string | undefined,
         sortBy: sortBy as string | undefined,

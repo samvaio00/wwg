@@ -301,6 +301,107 @@ export class DatabaseStorage implements IStorage {
     return { products: productList, totalCount };
   }
 
+  async getConsolidatedProducts(options?: { 
+    category?: string; 
+    search?: string; 
+    sortBy?: string; 
+    sortOrder?: string; 
+    limit?: number;
+    offset?: number;
+  }): Promise<{ products: Product[]; totalCount: number }> {
+    const conditions = [
+      eq(products.isActive, true),
+      eq(products.isOnline, true),
+      gte(products.stockQuantity, 0)
+    ];
+    
+    if (options?.category) {
+      conditions.push(eq(products.category, options.category));
+    }
+    
+    if (options?.search) {
+      const searchTerm = `%${options.search}%`;
+      conditions.push(
+        or(
+          ilike(products.name, searchTerm),
+          ilike(products.sku, searchTerm),
+          ilike(products.description, searchTerm),
+          ilike(products.brand, searchTerm),
+          ilike(products.zohoGroupName, searchTerm)
+        )!
+      );
+    }
+
+    // Get all matching products (we need to consolidate before pagination)
+    const allProducts = await db.select()
+      .from(products)
+      .where(and(...conditions));
+
+    // Consolidate: one entry per group, individual items stay as-is
+    const groupMap = new Map<string, Product>();
+    const ungrouped: Product[] = [];
+
+    for (const product of allProducts) {
+      if (product.zohoGroupId && product.zohoGroupName) {
+        if (!groupMap.has(product.zohoGroupId)) {
+          // Create representative with group name
+          const representative = {
+            ...product,
+            name: product.zohoGroupName,
+          };
+          groupMap.set(product.zohoGroupId, representative);
+        } else {
+          // Aggregate: lowest price, sum stock
+          const existing = groupMap.get(product.zohoGroupId)!;
+          const existingPrice = parseFloat(existing.basePrice || "0");
+          const productPrice = parseFloat(product.basePrice || "0");
+          if (productPrice < existingPrice) {
+            existing.basePrice = product.basePrice;
+          }
+          existing.stockQuantity = (existing.stockQuantity || 0) + (product.stockQuantity || 0);
+        }
+      } else {
+        ungrouped.push(product);
+      }
+    }
+
+    // Combine and sort
+    let consolidated = [...ungrouped, ...Array.from(groupMap.values())];
+    
+    // Apply sorting
+    if (options?.sortBy === 'price') {
+      consolidated.sort((a, b) => {
+        const priceA = parseFloat(a.basePrice || "0");
+        const priceB = parseFloat(b.basePrice || "0");
+        return options.sortOrder === 'desc' ? priceB - priceA : priceA - priceB;
+      });
+    } else if (options?.sortBy === 'name') {
+      consolidated.sort((a, b) => {
+        const cmp = a.name.localeCompare(b.name);
+        return options.sortOrder === 'desc' ? -cmp : cmp;
+      });
+    } else {
+      // Default: newest first
+      consolidated.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+    }
+
+    const totalCount = consolidated.length;
+
+    // Apply pagination
+    if (options?.offset !== undefined) {
+      consolidated = consolidated.slice(options.offset);
+    }
+    if (options?.limit !== undefined) {
+      consolidated = consolidated.slice(0, options.limit);
+    }
+
+    return { products: consolidated, totalCount };
+  }
+
   async getProduct(id: string): Promise<Product | undefined> {
     const [product] = await db.select().from(products).where(eq(products.id, id));
     // Return undefined for offline products (treated as 404 by API)

@@ -375,49 +375,12 @@ export default function ProductsPage() {
     addToCartMutation.mutate({ productId, quantity });
   };
 
-  // Belt-and-suspenders: UI also filters by isOnline even though API already filters
-  // This ensures offline products never appear even if API changes or data comes from other sources
-  // Also apply "In Stock Only" filter if enabled
-  // Additionally, consolidate grouped products into a single tile per group
-  const products = (() => {
-    const filtered = (data?.products || []).filter(p => {
-      if (!p.isOnline) return false;
-      if (inStockOnly && (p.stockQuantity || 0) <= 0) return false;
-      return true;
-    });
-
-    // Consolidate grouped products: show one tile per group with group name
-    const groupMap = new Map<string, Product>();
-    const ungrouped: Product[] = [];
-
-    for (const product of filtered) {
-      if (product.zohoGroupId && product.zohoGroupName) {
-        // For grouped products, keep the first one as representative but use group name
-        if (!groupMap.has(product.zohoGroupId)) {
-          // Create a representative product with group name as display name
-          const representative = {
-            ...product,
-            name: product.zohoGroupName, // Use group name as display name
-          };
-          groupMap.set(product.zohoGroupId, representative);
-        } else {
-          // Aggregate: use lowest price and sum stock
-          const existing = groupMap.get(product.zohoGroupId)!;
-          const existingPrice = parseFloat(existing.basePrice || "0");
-          const productPrice = parseFloat(product.basePrice || "0");
-          if (productPrice < existingPrice) {
-            existing.basePrice = product.basePrice;
-          }
-          existing.stockQuantity = (existing.stockQuantity || 0) + (product.stockQuantity || 0);
-        }
-      } else {
-        ungrouped.push(product);
-      }
-    }
-
-    // Combine ungrouped products with group representatives
-    return [...ungrouped, ...Array.from(groupMap.values())];
-  })();
+  // Backend now returns consolidated products (groups as single tiles)
+  // Apply client-side filtering for in-stock only toggle
+  const products = (data?.products || []).filter(p => {
+    if (inStockOnly && (p.stockQuantity || 0) <= 0) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-6">

@@ -636,6 +636,36 @@ export type CustomerPrice = typeof customerPrices.$inferSelect;
 export type InsertCustomerPrice = typeof customerPrices.$inferInsert;
 
 // ================================================================
+// EMAIL ACTION TOKENS TABLE (for approve/reject from email)
+// ================================================================
+
+export const EmailActionType = {
+  APPROVE_USER: 'approve_user',
+  REJECT_USER: 'reject_user',
+  APPROVE_ORDER: 'approve_order',
+  REJECT_ORDER: 'reject_order',
+  APPROVE_PROFILE: 'approve_profile',
+  REJECT_PROFILE: 'reject_profile',
+} as const;
+
+export type EmailActionTypeValue = typeof EmailActionType[keyof typeof EmailActionType];
+
+export const emailActionTokens = pgTable("email_action_tokens", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(),
+  actionType: text("action_type").notNull(), // approve_user, reject_user, approve_order, etc.
+  targetId: text("target_id").notNull(), // userId or orderId
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: index("email_action_tokens_token_idx").on(table.token),
+}));
+
+export type EmailActionToken = typeof emailActionTokens.$inferSelect;
+export type InsertEmailActionToken = typeof emailActionTokens.$inferInsert;
+
+// ================================================================
 // ZOD SCHEMAS & TYPES
 // ================================================================
 

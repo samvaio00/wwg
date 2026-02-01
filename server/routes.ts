@@ -10,18 +10,20 @@ import {
   OrderStatus,
   insertCartItemSchema,
   createOrderSchema,
-  ProductCategory
+  ProductCategory,
+  emailActionTokens,
+  EmailActionType
 } from "@shared/schema";
 import { z } from "zod";
 import { db } from "./db";
 import { users, products, orders } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, gt, isNull } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
 import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, syncItemGroupsFromZoho } from "./zoho-service";
 import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, syncTopSellersFromZoho, type ZohoLineItem } from "./zoho-books-service";
 import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
-import { sendShipmentNotification, sendDeliveryNotification } from "./email-service";
+import { sendShipmentNotification, sendDeliveryNotification, sendNewUserNotification, sendNewOrderNotification } from "./email-service";
 import { processJobQueue } from "./job-worker";
 import multer from "multer";
 import path from "path";
@@ -86,6 +88,167 @@ export async function registerRoutes(
   // Health check
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Email action handler - processes approve/reject actions from email links
+  app.get("/api/email-action/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      // Find the token and verify it's valid
+      const [tokenRecord] = await db
+        .select()
+        .from(emailActionTokens)
+        .where(
+          and(
+            eq(emailActionTokens.token, token),
+            gt(emailActionTokens.expiresAt, new Date()),
+            isNull(emailActionTokens.usedAt)
+          )
+        )
+        .limit(1);
+
+      if (!tokenRecord) {
+        return res.status(400).send(`
+          <!DOCTYPE html>
+          <html><head><title>Invalid or Expired Link</title>
+          <style>body{font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5}
+          .card{background:white;padding:40px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;max-width:400px}
+          h1{color:#dc2626;margin-bottom:16px}p{color:#666}</style></head>
+          <body><div class="card"><h1>Invalid or Expired Link</h1><p>This action link has expired or has already been used. Please log in to the admin panel to take action.</p></div></body></html>
+        `);
+      }
+
+      const { actionType, targetId } = tokenRecord;
+      let resultMessage = "";
+      let success = true;
+
+      // Handle different action types - mark token as used only after successful action
+      try {
+        switch (actionType) {
+          case EmailActionType.APPROVE_ORDER: {
+            const order = await storage.getOrder(targetId);
+            if (order && order.status === OrderStatus.PENDING_APPROVAL) {
+              await storage.updateOrderStatus(targetId, OrderStatus.APPROVED);
+              resultMessage = `Order ${order.orderNumber} has been approved successfully.`;
+            } else {
+              resultMessage = order ? "Order has already been processed." : "Order not found.";
+              success = false;
+            }
+            break;
+          }
+          case EmailActionType.REJECT_ORDER: {
+            const order = await storage.getOrder(targetId);
+            if (order && order.status === OrderStatus.PENDING_APPROVAL) {
+              await storage.updateOrderStatus(targetId, OrderStatus.REJECTED);
+              resultMessage = `Order ${order.orderNumber} has been rejected.`;
+            } else {
+              resultMessage = order ? "Order has already been processed." : "Order not found.";
+              success = false;
+            }
+            break;
+          }
+          case EmailActionType.APPROVE_USER: {
+            const user = await storage.getUser(targetId);
+            if (user && user.status === UserStatus.PENDING) {
+              await db.update(users).set({ status: UserStatus.APPROVED }).where(eq(users.id, targetId));
+              resultMessage = `Customer ${user.businessName || user.email} has been approved.`;
+            } else {
+              resultMessage = user ? "User has already been processed." : "User not found.";
+              success = false;
+            }
+            break;
+          }
+          case EmailActionType.REJECT_USER: {
+            const user = await storage.getUser(targetId);
+            if (user && user.status === UserStatus.PENDING) {
+              await db.update(users).set({ status: UserStatus.REJECTED }).where(eq(users.id, targetId));
+              resultMessage = `Customer ${user.businessName || user.email} has been rejected.`;
+            } else {
+              resultMessage = user ? "User has already been processed." : "User not found.";
+              success = false;
+            }
+            break;
+          }
+          case EmailActionType.APPROVE_PROFILE: {
+            const user = await storage.getUser(targetId);
+            if (user && user.pendingProfileData) {
+              let pendingData;
+              try {
+                pendingData = typeof user.pendingProfileData === 'string' 
+                  ? JSON.parse(user.pendingProfileData) 
+                  : user.pendingProfileData;
+              } catch (parseError) {
+                console.error("[Email Action] Failed to parse pending profile data:", parseError);
+                resultMessage = "Invalid pending profile data. Please review in admin panel.";
+                success = false;
+                break;
+              }
+              await db.update(users).set({ 
+                ...pendingData,
+                pendingProfileData: null 
+              }).where(eq(users.id, targetId));
+              resultMessage = `Profile update for ${user.businessName || user.email} has been approved.`;
+            } else {
+              resultMessage = user ? "No pending profile update found." : "User not found.";
+              success = false;
+            }
+            break;
+          }
+          case EmailActionType.REJECT_PROFILE: {
+            const user = await storage.getUser(targetId);
+            if (user && user.pendingProfileData) {
+              await db.update(users).set({ pendingProfileData: null }).where(eq(users.id, targetId));
+              resultMessage = `Profile update for ${user.businessName || user.email} has been rejected.`;
+            } else {
+              resultMessage = user ? "No pending profile update found." : "User not found.";
+              success = false;
+            }
+            break;
+          }
+          default:
+            resultMessage = "Unknown action type.";
+            success = false;
+        }
+
+        // Mark token as used only after successful action processing
+        if (success) {
+          await db
+            .update(emailActionTokens)
+            .set({ usedAt: new Date() })
+            .where(eq(emailActionTokens.id, tokenRecord.id));
+          console.log(`[Email Action] ${actionType} completed for target ${targetId}`);
+        }
+      } catch (actionError) {
+        console.error(`[Email Action] Error processing ${actionType}:`, actionError);
+        resultMessage = "An error occurred while processing your request. The link remains valid - please try again.";
+        success = false;
+      }
+
+      // Return success/error page
+      const bgColor = success ? "#22c55e" : "#ef4444";
+      const title = success ? "Action Completed" : "Action Failed";
+      
+      return res.send(`
+        <!DOCTYPE html>
+        <html><head><title>${title}</title>
+        <style>body{font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5}
+        .card{background:white;padding:40px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;max-width:500px}
+        .icon{width:60px;height:60px;border-radius:50%;background:${bgColor};color:white;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:30px}
+        h1{color:#333;margin-bottom:16px}p{color:#666}</style></head>
+        <body><div class="card"><div class="icon">${success ? '✓' : '✗'}</div><h1>${title}</h1><p>${resultMessage}</p></div></body></html>
+      `);
+    } catch (error) {
+      console.error("Email action error:", error);
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html><head><title>Error</title>
+        <style>body{font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5}
+        .card{background:white;padding:40px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;max-width:400px}
+        h1{color:#dc2626;margin-bottom:16px}p{color:#666}</style></head>
+        <body><div class="card"><h1>Error</h1><p>An error occurred while processing your request. Please try again or use the admin panel.</p></div></body></html>
+      `);
+    }
   });
 
   // Check customer status by email (for registration flow)
@@ -235,6 +398,11 @@ export async function registerRoutes(
       
       // Create user as pending (requires admin approval)
       const user = await storage.createUser(data);
+      
+      // Send admin notification email about new registration
+      sendNewUserNotification(user.id).catch(err => {
+        console.error("[Registration] Failed to send admin notification:", err);
+      });
       
       // Set session
       req.session.userId = user.id;
@@ -912,6 +1080,12 @@ export async function registerRoutes(
         state: data.shippingState,
         zipCode: data.shippingZipCode
       });
+      
+      // Send admin notification email about new order
+      sendNewOrderNotification(order.id).catch(err => {
+        console.error("[Order] Failed to send admin notification:", err);
+      });
+      
       res.status(201).json({ order });
     } catch (error) {
       if (error instanceof z.ZodError) {

@@ -1,6 +1,56 @@
 import { db } from "./db";
-import { orders, users } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { orders, users, emailActionTokens, EmailActionType, type EmailActionTypeValue } from "@shared/schema";
+import { eq, and, gt } from "drizzle-orm";
+import crypto from "crypto";
+
+// Get base URL from environment or default
+function getBaseUrl(): string {
+  if (process.env.REPLIT_DEPLOYMENT_URL) {
+    return process.env.REPLIT_DEPLOYMENT_URL;
+  }
+  if (process.env.REPL_SLUG) {
+    return `https://${process.env.REPL_SLUG}.repl.co`;
+  }
+  return "http://localhost:5000";
+}
+
+// Generate secure token for email actions
+async function generateActionToken(actionType: EmailActionTypeValue, targetId: string): Promise<string> {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+  await db.insert(emailActionTokens).values({
+    token,
+    actionType,
+    targetId,
+    expiresAt,
+  });
+
+  return token;
+}
+
+// Generate action button HTML for emails
+function generateActionButtons(approveUrl: string, rejectUrl: string): string {
+  return `
+    <div style="margin: 25px 0; text-align: center;">
+      <a href="${approveUrl}" 
+         style="display: inline-block; background-color: #22c55e; color: white; padding: 12px 32px; 
+                text-decoration: none; border-radius: 6px; font-weight: bold; margin-right: 12px;
+                font-size: 14px;">
+        ✓ Approve
+      </a>
+      <a href="${rejectUrl}" 
+         style="display: inline-block; background-color: #ef4444; color: white; padding: 12px 32px; 
+                text-decoration: none; border-radius: 6px; font-weight: bold;
+                font-size: 14px;">
+        ✗ Reject
+      </a>
+    </div>
+    <p style="color: #666; font-size: 12px; text-align: center;">
+      These links expire in 7 days. Click to take action directly.
+    </p>
+  `;
+}
 
 interface EmailConfig {
   provider: "resend" | "sendgrid" | "console" | null;
@@ -361,6 +411,15 @@ export async function sendProfileUpdateNotification(
   user: { id: string; email: string; businessName?: string | null; contactName?: string | null },
   pendingData: ProfileUpdateData
 ): Promise<SendEmailResult> {
+  // Generate action tokens for approve/reject buttons
+  const approveToken = await generateActionToken(EmailActionType.APPROVE_PROFILE, user.id);
+  const rejectToken = await generateActionToken(EmailActionType.REJECT_PROFILE, user.id);
+  
+  const baseUrl = getBaseUrl();
+  const approveUrl = `${baseUrl}/api/email-action/${approveToken}`;
+  const rejectUrl = `${baseUrl}/api/email-action/${rejectToken}`;
+  const actionButtons = generateActionButtons(approveUrl, rejectUrl);
+
   const subject = `Profile Update Request - ${user.businessName || user.email}`;
   
   const htmlContent = `
@@ -397,7 +456,9 @@ export async function sendProfileUpdateNotification(
         <tr><td>ZIP Code:</td><td>${pendingData.zipCode || '-'}</td></tr>
       </table>
       
-      <p>Please review and approve or reject this request in the admin panel.</p>
+      ${actionButtons}
+      
+      <p style="text-align: center; color: #666; font-size: 13px;">Or review in the <a href="${baseUrl}/admin/users">admin panel</a>.</p>
     </div>
     <div class="footer">
       <p>&copy; ${new Date().getFullYear()} Warner Wireless Gears. All rights reserved.</p>
@@ -482,6 +543,15 @@ export async function sendNewOrderNotification(
       .where(eq(users.id, order.userId))
       .limit(1);
 
+    // Generate action tokens for approve/reject buttons
+    const approveToken = await generateActionToken(EmailActionType.APPROVE_ORDER, orderId);
+    const rejectToken = await generateActionToken(EmailActionType.REJECT_ORDER, orderId);
+    
+    const baseUrl = getBaseUrl();
+    const approveUrl = `${baseUrl}/api/email-action/${approveToken}`;
+    const rejectUrl = `${baseUrl}/api/email-action/${rejectToken}`;
+    const actionButtons = generateActionButtons(approveUrl, rejectUrl);
+
     const subject = `New Order Pending Approval - ${order.orderNumber}`;
     
     const htmlContent = `
@@ -513,7 +583,9 @@ export async function sendNewOrderNotification(
         <p><strong>Date:</strong> ${new Date(order.createdAt).toLocaleString()}</p>
       </div>
       
-      <p>Please review and approve this order in the admin panel.</p>
+      ${actionButtons}
+      
+      <p style="text-align: center; color: #666; font-size: 13px;">Or review in the <a href="${baseUrl}/admin/orders">admin panel</a>.</p>
     </div>
     <div class="footer">
       <p>&copy; ${new Date().getFullYear()} Warner Wireless Gears. All rights reserved.</p>
@@ -527,6 +599,83 @@ export async function sendNewOrderNotification(
     return sendEmail(ADMIN_EMAIL, subject, htmlContent);
   } catch (error) {
     console.error("[Email] New order notification error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+export async function sendNewUserNotification(
+  userId: string
+): Promise<SendEmailResult> {
+  try {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!user) {
+      return { success: false, error: "User not found" };
+    }
+
+    // Generate action tokens for approve/reject buttons
+    const approveToken = await generateActionToken(EmailActionType.APPROVE_USER, userId);
+    const rejectToken = await generateActionToken(EmailActionType.REJECT_USER, userId);
+    
+    const baseUrl = getBaseUrl();
+    const approveUrl = `${baseUrl}/api/email-action/${approveToken}`;
+    const rejectUrl = `${baseUrl}/api/email-action/${rejectToken}`;
+    const actionButtons = generateActionButtons(approveUrl, rejectUrl);
+
+    const subject = `New Customer Registration - ${user.businessName || user.email}`;
+    
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background: #f9f9f9; }
+    .user-details { background: white; border: 1px solid #ddd; padding: 15px; margin: 15px 0; }
+    .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>New Customer Registration</h1>
+    </div>
+    <div class="content">
+      <p>A new customer has registered and requires approval:</p>
+      
+      <div class="user-details">
+        <p><strong>Email:</strong> ${user.email}</p>
+        <p><strong>Business Name:</strong> ${user.businessName || '-'}</p>
+        <p><strong>Contact Name:</strong> ${user.contactName || '-'}</p>
+        <p><strong>Phone:</strong> ${user.phone || '-'}</p>
+        <p><strong>Date of Birth:</strong> ${user.dateOfBirth || '-'}</p>
+        <p><strong>Address:</strong> ${user.address || '-'}, ${user.city || '-'}, ${user.state || '-'} ${user.zipCode || '-'}</p>
+        ${user.certificateUrl ? `<p><strong>Certificate:</strong> <a href="${baseUrl}${user.certificateUrl}">View Document</a></p>` : ''}
+        <p><strong>Registered:</strong> ${new Date(user.createdAt).toLocaleString()}</p>
+      </div>
+      
+      ${actionButtons}
+      
+      <p style="text-align: center; color: #666; font-size: 13px;">Or review in the <a href="${baseUrl}/admin/users">admin panel</a>.</p>
+    </div>
+    <div class="footer">
+      <p>&copy; ${new Date().getFullYear()} Warner Wireless Gears. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    console.log(`[Email] Sending new user notification for ${user.email}`);
+    return sendEmail(ADMIN_EMAIL, subject, htmlContent);
+  } catch (error) {
+    console.error("[Email] New user notification error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }

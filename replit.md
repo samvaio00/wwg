@@ -58,6 +58,23 @@ The platform is built with a modern web stack:
 - Supported file types: PDF, JPEG, PNG, GIF (max 5MB).
 - Certificate files served only via protected admin endpoint `/api/admin/certificates/:filename`.
 
+## Email Action Tokens
+
+- **Purpose**: Allows admin to approve/reject directly from email notification links without logging in.
+- **Token Types**: 
+  - `approve_order`, `reject_order` - For order management
+  - `approve_user`, `reject_user` - For new customer registration approval
+  - `approve_profile`, `reject_profile` - For profile update requests
+- **Expiration**: Tokens expire after 7 days and can only be used once.
+- **Storage**: `email_action_tokens` table with token, action_type, target_id, expires_at, used_at fields.
+- **Endpoint**: `GET /api/email-action/:token` - Validates token, performs action, returns success/error HTML page.
+- **Email Notifications**: 
+  - New orders: Sent to admin with Approve/Reject buttons
+  - New user registrations: Sent to admin with Approve/Reject buttons
+  - Profile update requests: Sent to admin with Approve/Reject buttons
+- **Admin Email**: warnergears@gmail.com (hardcoded in email-service.ts)
+- **Email Providers**: Supports Resend (RESEND_API_KEY) or SendGrid (SENDGRID_API_KEY), falls back to console logging.
+
 ## Scheduler Configuration
 
 - **Zoho Inventory Sync**: Dynamic intervals - 2 hours during business hours (8 AM - 6 PM weekdays), 6 hours off-hours/weekends.

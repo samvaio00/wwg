@@ -83,6 +83,7 @@ function CartButton() {
 
 function HeaderUserMenu() {
   const { user, logout } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   const getInitials = () => {
     if (user?.contactName) {
@@ -118,32 +119,59 @@ function HeaderUserMenu() {
         <div className="px-2 py-1.5">
           <p className="text-sm font-medium">{user?.contactName || user?.businessName}</p>
           <p className="text-xs text-muted-foreground">{user?.email}</p>
+          {isAdmin && <p className="text-xs text-primary font-medium">Administrator</p>}
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/orders" className="cursor-pointer" data-testid="menu-item-orders">
-            <ShoppingCart className="mr-2 h-4 w-4" />
-            My Orders
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/order-history" className="cursor-pointer" data-testid="menu-item-order-history">
-            <ClipboardList className="mr-2 h-4 w-4" />
-            Order History
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/profile" className="cursor-pointer" data-testid="menu-item-profile">
-            <UserCircle className="mr-2 h-4 w-4" />
-            Edit Profile
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/contact" className="cursor-pointer" data-testid="menu-item-contact">
-            <Mail className="mr-2 h-4 w-4" />
-            Contact Us
-          </Link>
-        </DropdownMenuItem>
+        {/* Show different menu items based on role */}
+        {isAdmin ? (
+          <>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/users" className="cursor-pointer" data-testid="menu-item-users">
+                <User className="mr-2 h-4 w-4" />
+                User Management
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/orders" className="cursor-pointer" data-testid="menu-item-admin-orders">
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Order Management
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/settings" className="cursor-pointer" data-testid="menu-item-admin-settings">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <>
+            <DropdownMenuItem asChild>
+              <Link href="/orders" className="cursor-pointer" data-testid="menu-item-orders">
+                <ShoppingCart className="mr-2 h-4 w-4" />
+                My Orders
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/order-history" className="cursor-pointer" data-testid="menu-item-order-history">
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Order History
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/profile" className="cursor-pointer" data-testid="menu-item-profile">
+                <UserCircle className="mr-2 h-4 w-4" />
+                Edit Profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/contact" className="cursor-pointer" data-testid="menu-item-contact">
+                <Mail className="mr-2 h-4 w-4" />
+                Contact Us
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={handleLogout}
@@ -159,6 +187,9 @@ function HeaderUserMenu() {
 }
 
 function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
@@ -172,36 +203,41 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
           <header className="sticky top-0 z-50 flex h-12 items-center justify-between gap-4 glass-header px-4">
             <div className="flex items-center gap-2">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
-              <AICartBuilder />
+              {/* Only show AI Cart Builder for customers */}
+              {!isAdmin && <AICartBuilder />}
             </div>
             <div className="flex-1" />
             <div className="flex items-center gap-2">
               <HeaderUserMenu />
               <ThemeToggle />
-              <CartButton />
+              {/* Only show cart for customers */}
+              {!isAdmin && <CartButton />}
             </div>
           </header>
-          <div className="relative w-full h-[88px] md:h-[120px] overflow-hidden -mt-1">
-            <div className="absolute inset-0 bg-gradient-to-r from-sky-100 via-blue-50 to-amber-50" />
-            {/* Subtle floating product images - same for light and dark mode */}
-            <img src={heroSunglasses} alt="" className="hidden md:block absolute right-[45%] top-[10%] h-16 w-16 object-contain opacity-[0.12] rotate-[-8deg] mix-blend-multiply" />
-            <img src={heroCap} alt="" className="hidden md:block absolute right-[28%] bottom-[5%] h-20 w-20 object-contain opacity-[0.10] rotate-[5deg] mix-blend-multiply" />
-            <img src={heroCarCharger} alt="" className="hidden md:block absolute right-[12%] top-[15%] h-14 w-14 object-contain opacity-[0.14] rotate-[12deg] mix-blend-multiply" />
-            <img src={heroCable} alt="" className="hidden md:block absolute right-[5%] bottom-[15%] h-[72px] w-[72px] object-contain opacity-[0.13] rotate-[-5deg] mix-blend-multiply" />
-            <div className="absolute inset-0 flex items-center">
-              <div className="px-6 md:px-10 flex-1 relative z-10">
-                <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
-                  Warner Wireless Gears
-                </h2>
-                <p className="text-slate-700 text-sm md:text-base font-semibold mt-1">
-                  Premium B2B Wholesale Distributors
-                </p>
-                <p className="text-slate-600 text-xs md:text-sm mt-0.5 hidden md:block">
-                  Serving gas stations, convenience stores, smoke shops, gift shops and retailers
-                </p>
+          {/* Only show hero banner for customers */}
+          {!isAdmin && (
+            <div className="relative w-full h-[88px] md:h-[120px] overflow-hidden -mt-1">
+              <div className="absolute inset-0 bg-gradient-to-r from-sky-100 via-blue-50 to-amber-50" />
+              {/* Subtle floating product images - same for light and dark mode */}
+              <img src={heroSunglasses} alt="" className="hidden md:block absolute right-[45%] top-[10%] h-16 w-16 object-contain opacity-[0.12] rotate-[-8deg] mix-blend-multiply" />
+              <img src={heroCap} alt="" className="hidden md:block absolute right-[28%] bottom-[5%] h-20 w-20 object-contain opacity-[0.10] rotate-[5deg] mix-blend-multiply" />
+              <img src={heroCarCharger} alt="" className="hidden md:block absolute right-[12%] top-[15%] h-14 w-14 object-contain opacity-[0.14] rotate-[12deg] mix-blend-multiply" />
+              <img src={heroCable} alt="" className="hidden md:block absolute right-[5%] bottom-[15%] h-[72px] w-[72px] object-contain opacity-[0.13] rotate-[-5deg] mix-blend-multiply" />
+              <div className="absolute inset-0 flex items-center">
+                <div className="px-6 md:px-10 flex-1 relative z-10">
+                  <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
+                    Warner Wireless Gears
+                  </h2>
+                  <p className="text-slate-700 text-sm md:text-base font-semibold mt-1">
+                    Premium B2B Wholesale Distributors
+                  </p>
+                  <p className="text-slate-600 text-xs md:text-sm mt-0.5 hidden md:block">
+                    Serving gas stations, convenience stores, smoke shops, gift shops and retailers
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
           <main className="flex-1 overflow-auto p-6">
             {children}
           </main>

@@ -537,6 +537,27 @@ function CustomerHomePage() {
 function AdminDashboard() {
   const { user } = useAuth();
 
+  const { data: pendingUsersData } = useQuery<{ users: Array<{ id: string }> }>({
+    queryKey: ['/api/admin/users/pending'],
+  });
+
+  const { data: ordersData } = useQuery<{ orders: Array<{ id: string; status: string }> }>({
+    queryKey: ['/api/admin/orders'],
+  });
+
+  const { data: cartsData } = useQuery<{ carts: Array<{ id: string }> }>({
+    queryKey: ['/api/admin/active-carts'],
+  });
+
+  const { data: usersData } = useQuery<{ users: Array<{ id: string; role: string; status: string }> }>({
+    queryKey: ['/api/admin/users'],
+  });
+
+  const pendingUsersCount = pendingUsersData?.users?.length || 0;
+  const pendingOrdersCount = ordersData?.orders?.filter(o => o.status === 'pending')?.length || 0;
+  const activeCartsCount = cartsData?.carts?.length || 0;
+  const adminStaffCount = usersData?.users?.filter(u => u.role === 'admin' || u.role === 'staff')?.length || 0;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -550,49 +571,57 @@ function AdminDashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Products</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">--</div>
-            <p className="text-xs text-muted-foreground">Available for order</p>
-          </CardContent>
-        </Card>
+        <Link href="/admin/users">
+          <Card className="hover-elevate cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Pending User Approvals</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{pendingUsersCount}</div>
+              <p className="text-xs text-muted-foreground">Users awaiting approval</p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Orders</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">--</div>
-            <p className="text-xs text-muted-foreground">This month</p>
-          </CardContent>
-        </Card>
+        <Link href="/admin/orders">
+          <Card className="hover-elevate cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Pending Order Approvals</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{pendingOrdersCount}</div>
+              <p className="text-xs text-muted-foreground">Orders awaiting approval</p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Customers</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">--</div>
-            <p className="text-xs text-muted-foreground">Registered retailers</p>
-          </CardContent>
-        </Card>
+        <Link href="/admin/carts">
+          <Card className="hover-elevate cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Active Carts</CardTitle>
+              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{activeCartsCount}</div>
+              <p className="text-xs text-muted-foreground">Customers with items in cart</p>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Revenue</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">--</div>
-            <p className="text-xs text-muted-foreground">This month</p>
-          </CardContent>
-        </Card>
+        <Link href="/admin/users">
+          <Card className="hover-elevate cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Admin & Staff</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{adminStaffCount}</div>
+              <p className="text-xs text-muted-foreground">Team members</p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -606,19 +635,31 @@ function AdminDashboard() {
               <Link href="/admin/users">
                 <Button variant="outline" className="w-full justify-start" data-testid="button-manage-users">
                   <Users className="h-4 w-4 mr-2" />
-                  Manage Users
+                  User Management
                 </Button>
               </Link>
               <Link href="/admin/orders">
                 <Button variant="outline" className="w-full justify-start" data-testid="button-manage-orders">
                   <Package className="h-4 w-4 mr-2" />
-                  Manage Orders
+                  Order Management
                 </Button>
               </Link>
               <Link href="/admin/analytics">
                 <Button variant="outline" className="w-full justify-start" data-testid="button-view-analytics">
                   <TrendingUp className="h-4 w-4 mr-2" />
-                  View Analytics
+                  Analytics
+                </Button>
+              </Link>
+              <Link href="/admin/email-templates">
+                <Button variant="outline" className="w-full justify-start" data-testid="button-email-templates">
+                  <Star className="h-4 w-4 mr-2" />
+                  Email Templates
+                </Button>
+              </Link>
+              <Link href="/admin/settings">
+                <Button variant="outline" className="w-full justify-start" data-testid="button-settings">
+                  <Eye className="h-4 w-4 mr-2" />
+                  Settings
                 </Button>
               </Link>
             </div>
@@ -627,13 +668,24 @@ function AdminDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Your latest actions</CardDescription>
+            <CardTitle>System Status</CardTitle>
+            <CardDescription>Platform overview</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
-              No recent activity to display.
-            </p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Zoho Inventory Sync</span>
+                <Badge variant="outline" className="text-green-600 border-green-600">Active</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Email Campaigns</span>
+                <Badge variant="outline" className="text-green-600 border-green-600">Wed & Sat 9AM</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Customer Status Sync</span>
+                <Badge variant="outline" className="text-green-600 border-green-600">Active</Badge>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

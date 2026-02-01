@@ -373,7 +373,6 @@ function CustomerHomePage() {
           />
           
           <div className="flex items-center gap-1">
-            <Filter className="h-4 w-4 text-muted-foreground" />
             <Select value="all" onValueChange={() => {}}>
               <SelectTrigger className="w-[140px] h-9" data-testid="select-category-home">
                 <SelectValue placeholder="Category" />

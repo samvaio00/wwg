@@ -955,6 +955,57 @@ export class DatabaseStorage implements IStorage {
       .filter((p): p is Product => p !== undefined);
   }
 
+  async getTopSellersByCategory(categorySlug: string, limit: number = 10): Promise<Product[]> {
+    // Get category-filtered top sellers from the cache
+    const cachedTopSellers = await db.select()
+      .from(topSellersCache)
+      .orderBy(asc(topSellersCache.rank));
+
+    if (cachedTopSellers.length === 0) {
+      return [];
+    }
+
+    // Get product IDs from cache
+    const productIds = Array.from(new Set(cachedTopSellers.map(c => c.productId).filter(Boolean) as string[]));
+    
+    if (productIds.length === 0) {
+      return [];
+    }
+
+    // Normalize the search slug for matching
+    const normalizedSlug = categorySlug.toLowerCase().trim();
+
+    // Get products filtered by category slug (exact word match within category)
+    // Also filter out negative stock to prevent predictable failures
+    const categoryProducts = await db.select()
+      .from(products)
+      .where(and(
+        sql`${products.id} IN (${sql.join(productIds.map(id => sql`${id}`), sql`, `)})`,
+        or(
+          ilike(products.category, `${normalizedSlug}`),
+          ilike(products.category, `${normalizedSlug}-%`),
+          ilike(products.category, `%-${normalizedSlug}`),
+          ilike(products.category, `%-${normalizedSlug}-%`)
+        ),
+        eq(products.isOnline, true),
+        eq(products.isActive, true),
+        gte(products.stockQuantity, 0)
+      ));
+
+    // Create a map for ordering by rank
+    const rankMap = new Map<string, number>();
+    cachedTopSellers.forEach(c => {
+      if (c.productId) {
+        rankMap.set(c.productId, c.rank);
+      }
+    });
+
+    // Sort by rank and limit
+    return categoryProducts
+      .sort((a, b) => (rankMap.get(a.id) || 999) - (rankMap.get(b.id) || 999))
+      .slice(0, limit);
+  }
+
   async getHiddenProducts(): Promise<Product[]> {
     return db.select()
       .from(products)

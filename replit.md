@@ -50,6 +50,7 @@ The platform is built with a modern web stack:
 - **New Pages**: Created About Us, Return Policy, and Disclaimer static content pages.
 - **UI/UX Updates**: My Account menu items (Order History, Edit Profile, Contact Us) moved from sidebar to header user dropdown. AI Order button displays text next to sparkles icon for better visibility. What's New uses Gift icon instead of Sparkles.
 - **Top Sellers Zoho Books Sync**: Top Sellers now uses Zoho Books invoice data (last 30 days). Sync runs weekly on Sundays at midnight. Displays 24 top sellers with group-aware display (grouped products show group tile). Cached in `top_sellers_cache` table.
+- **AI Search Top Sellers Commands**: AI search box now supports natural language commands for adding top sellers by category to cart. Example: "add the 3 top selling caps to my cart, 5 pieces each". Parses count, category, and quantity from command. Uses `/api/top-sellers/by-category/:category` endpoint. Only returns in-stock products (stockQuantity >= 0). Shows "Top Sellers" badge when command is recognized. Handles partial success with informative messages showing which items were added.
 
 ## File Upload Configuration
 

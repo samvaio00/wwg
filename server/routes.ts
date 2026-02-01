@@ -1321,6 +1321,45 @@ export async function registerRoutes(
   });
 
   // ================================================================
+  // TOP SELLERS BY CATEGORY (for AI search commands)
+  // ================================================================
+
+  // Get top selling products by category
+  app.get("/api/top-sellers/by-category/:category", async (req, res) => {
+    try {
+      const { category } = req.params;
+      const limit = parseInt(req.query.limit as string) || 10;
+      
+      if (!category) {
+        return res.status(400).json({ message: "Category is required" });
+      }
+
+      const topSellers = await storage.getTopSellersByCategory(category, limit);
+      
+      // Apply customer-specific pricing if user has a price list
+      let productsWithPricing = topSellers;
+      if (req.session?.userId) {
+        const user = await storage.getUser(req.session.userId);
+        if (user?.priceListId) {
+          const customerPriceMap = await storage.getCustomerPricesForProducts(
+            user.priceListId,
+            topSellers.map(p => p.id)
+          );
+          productsWithPricing = topSellers.map(product => ({
+            ...product,
+            customerPrice: customerPriceMap[product.id] || null,
+          }));
+        }
+      }
+
+      res.json({ products: productsWithPricing, category, count: productsWithPricing.length });
+    } catch (error) {
+      console.error("Get top sellers by category error:", error);
+      res.status(500).json({ message: "Failed to get top sellers" });
+    }
+  });
+
+  // ================================================================
   // HIGHLIGHTED PRODUCTS MANAGEMENT
   // ================================================================
 

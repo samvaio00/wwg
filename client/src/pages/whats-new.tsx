@@ -20,7 +20,9 @@ import {
   Search,
   Filter,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from "lucide-react";
 import {
   Select,
@@ -101,82 +103,98 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
     setQuantity(prev => Math.max(product.minOrderQuantity || 1, prev - (product.casePackSize || 1)));
   };
 
+  const isGroupOutOfStock = isGroupedProduct && isOutOfStock;
+
   return (
     <Card 
-      className={`overflow-hidden cursor-pointer ${isOutOfStock ? "opacity-60" : "hover-elevate"}`} 
-      onClick={() => onProductClick(product)}
+      className={`overflow-hidden ${isGroupOutOfStock ? "opacity-60 cursor-not-allowed" : isOutOfStock ? "opacity-60 cursor-pointer" : "cursor-pointer hover-elevate"}`} 
+      onClick={() => !isGroupOutOfStock && onProductClick(product)}
       data-testid={`card-product-${product.id}`}
     >
-      <div className="h-32 bg-muted/30 relative">
+      <div className="h-32 relative bg-muted overflow-hidden">
         <ProductImage product={product} isOutOfStock={isOutOfStock} />
         {isOutOfStock ? (
-          <Badge variant="destructive" className="absolute top-2 right-2 text-xs">
+          <Badge className="absolute top-2 right-2" variant="destructive" data-testid={`badge-out-of-stock-${product.id}`}>
             Out of Stock
           </Badge>
-        ) : isLowStock ? (
-          <Badge variant="secondary" className="absolute bottom-2 left-2 text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+        ) : isLowStock && (
+          <Badge className="absolute bottom-2 left-2" variant="destructive">
             Low Stock
-          </Badge>
-        ) : null}
-        {isGroupedProduct && (
-          <Badge variant="outline" className="absolute top-2 left-2 text-xs bg-background/80">
-            {product.zohoGroupName || "Variants"}
           </Badge>
         )}
       </div>
       <CardContent className="p-3 space-y-2">
-        <p className="text-xs text-muted-foreground font-mono">{product.sku}</p>
-        <h3 className="font-medium text-sm line-clamp-2 min-h-[2.5rem]" data-testid={`text-product-name-${product.id}`}>
-          {product.name}
-        </h3>
-        <div className="flex items-center justify-between">
-          <span className="text-base font-bold" data-testid={`text-product-price-${product.id}`}>
+        <div className="h-12">
+          <p className="text-xs text-muted-foreground font-mono truncate">{product.sku}</p>
+          <h3 className="font-semibold text-sm line-clamp-2 leading-tight" data-testid={`text-product-name-${product.id}`}>
+            {product.name}
+          </h3>
+        </div>
+
+        <div className="flex items-baseline gap-2">
+          {isGroupedProduct && <span className="text-xs text-muted-foreground">from</span>}
+          <span className="text-lg font-bold" data-testid={`text-product-price-${product.id}`}>
             ${product.basePrice}
           </span>
-          {product.casePackSize && product.casePackSize > 1 && (
-            <span className="text-xs text-muted-foreground">
-              Pack: {product.casePackSize}
+          {product.compareAtPrice && (
+            <span className="text-xs text-muted-foreground line-through">
+              ${product.compareAtPrice}
             </span>
           )}
         </div>
-        
+
+        <div className="text-xs text-muted-foreground flex gap-3">
+          {!isGroupedProduct && <span>Pack: {product.casePackSize || 1}</span>}
+          <span>{isGroupedProduct ? "Total Stock:" : "Stock:"} {product.stockQuantity || 0}</span>
+        </div>
+
         {isGroupedProduct ? (
           <Button 
             className="w-full h-7"
             size="sm"
-            variant="outline"
+            variant={isGroupOutOfStock ? "destructive" : "outline"}
+            disabled={isGroupOutOfStock}
             onClick={(e) => {
               e.stopPropagation();
-              onProductClick(product);
+              if (!isGroupOutOfStock) onProductClick(product);
             }}
             data-testid={`button-view-variants-${product.id}`}
           >
-            <Eye className="h-3 w-3 mr-1" />
-            View Variants
+            {isGroupOutOfStock ? (
+              <>
+                <Package className="h-3 w-3 mr-1" />
+                Out of Stock
+              </>
+            ) : (
+              <>
+                <Eye className="h-3 w-3 mr-1" />
+                View Variants
+              </>
+            )}
           </Button>
         ) : (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <div className="flex items-center border rounded h-7">
-              <Button
-                variant="ghost"
+              <Button 
+                variant="ghost" 
                 size="icon"
                 className="h-7 w-7 rounded-r-none"
                 onClick={decrementQuantity}
                 disabled={isOutOfStock || quantity <= (product.minOrderQuantity || 1)}
-                data-testid={`button-decrease-${product.id}`}
+                data-testid={`button-decrease-qty-${product.id}`}
               >
                 <Minus className="h-3 w-3" />
               </Button>
-              <span className="w-6 text-center text-xs font-medium" data-testid={`text-quantity-${product.id}`}>
+              <span className="w-8 text-center text-xs font-medium" data-testid={`text-quantity-${product.id}`}>
                 {quantity}
               </span>
-              <Button
-                variant="ghost"
+              <Button 
+                variant="ghost" 
                 size="icon"
                 className="h-7 w-7 rounded-l-none"
                 onClick={incrementQuantity}
                 disabled={isOutOfStock || quantity >= stockQty}
-                data-testid={`button-increase-${product.id}`}
+                data-testid={`button-increase-qty-${product.id}`}
               >
                 <Plus className="h-3 w-3" />
               </Button>
@@ -383,31 +401,73 @@ export default function WhatsNewPage() {
         </Card>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            data-testid="button-prev-page"
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground px-3">
-            Page {currentPage} of {totalPages}
+      {/* Pagination Controls */}
+      {totalPages > 0 && (
+        <div className="flex items-center justify-center gap-4 pt-6 flex-wrap" data-testid="pagination-controls">
+          <span className="text-sm text-muted-foreground">
+            {allFilteredProducts.length} products
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-            data-testid="button-next-page"
-          >
-            Next
-            <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                data-testid="button-first-page"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                data-testid="button-prev-page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <div className="flex items-center gap-1 px-2">
+                <span className="text-sm text-muted-foreground">Page</span>
+                <Select 
+                  value={currentPage.toString()} 
+                  onValueChange={(v) => setCurrentPage(parseInt(v, 10))}
+                >
+                  <SelectTrigger className="w-[70px] h-8" data-testid="select-page">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                      <SelectItem key={p} value={p.toString()}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground">of {totalPages}</span>
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                data-testid="button-next-page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                data-testid="button-last-page"
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

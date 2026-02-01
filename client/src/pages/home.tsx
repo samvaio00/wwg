@@ -27,7 +27,9 @@ import {
   Search,
   Filter,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from "lucide-react";
 import {
   Select,
@@ -108,11 +110,13 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
     setQuantity(prev => Math.max(product.minOrderQuantity || 1, prev - (product.casePackSize || 1)));
   };
 
+  const isGroupOutOfStock = isGroupedProduct && isOutOfStock;
+
   return (
     <Card 
-      className={`overflow-hidden cursor-pointer ${isOutOfStock ? "opacity-60" : "hover-elevate"}`} 
+      className={`overflow-hidden ${isGroupOutOfStock ? "opacity-60 cursor-not-allowed" : isOutOfStock ? "opacity-60 cursor-pointer" : "cursor-pointer hover-elevate"}`} 
       data-testid={`card-product-${product.id}`}
-      onClick={() => onProductClick(product)}
+      onClick={() => !isGroupOutOfStock && onProductClick(product)}
     >
       <div className="h-32 relative bg-muted overflow-hidden">
         <ProductImage product={product} isOutOfStock={isOutOfStock} />
@@ -127,14 +131,15 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
         )}
       </div>
       <CardContent className="p-3 space-y-2">
-        <div>
-          <p className="text-xs text-muted-foreground font-mono">{product.sku}</p>
-          <h3 className="font-semibold text-sm line-clamp-2" data-testid={`text-product-name-${product.id}`}>
+        <div className="h-12">
+          <p className="text-xs text-muted-foreground font-mono truncate">{product.sku}</p>
+          <h3 className="font-semibold text-sm line-clamp-2 leading-tight" data-testid={`text-product-name-${product.id}`}>
             {product.name}
           </h3>
         </div>
 
         <div className="flex items-baseline gap-2">
+          {isGroupedProduct && <span className="text-xs text-muted-foreground">from</span>}
           <span className="text-lg font-bold" data-testid={`text-product-price-${product.id}`}>
             ${product.basePrice}
           </span>
@@ -146,23 +151,33 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
         </div>
 
         <div className="text-xs text-muted-foreground flex gap-3">
-          <span>Pack: {product.casePackSize || 1}</span>
-          <span>Stock: {stockQty}</span>
+          {!isGroupedProduct && <span>Pack: {product.casePackSize || 1}</span>}
+          <span>{isGroupedProduct ? "Total Stock:" : "Stock:"} {product.stockQuantity || 0}</span>
         </div>
 
         {isGroupedProduct ? (
           <Button 
             className="w-full h-7"
             size="sm"
-            variant="outline"
+            variant={isGroupOutOfStock ? "destructive" : "outline"}
+            disabled={isGroupOutOfStock}
             onClick={(e) => {
               e.stopPropagation();
-              onProductClick(product);
+              if (!isGroupOutOfStock) onProductClick(product);
             }}
             data-testid={`button-view-variants-${product.id}`}
           >
-            <Eye className="h-3 w-3 mr-1" />
-            View Variants
+            {isGroupOutOfStock ? (
+              <>
+                <Package className="h-3 w-3 mr-1" />
+                Out of Stock
+              </>
+            ) : (
+              <>
+                <Eye className="h-3 w-3 mr-1" />
+                View Variants
+              </>
+            )}
           </Button>
         ) : (
           <div className="flex items-center gap-2">
@@ -424,31 +439,73 @@ function CustomerHomePage() {
         </Card>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            data-testid="button-prev-page"
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground px-3">
-            Page {currentPage} of {totalPages}
+      {/* Pagination Controls */}
+      {totalPages > 0 && (
+        <div className="flex items-center justify-center gap-4 pt-6 flex-wrap" data-testid="pagination-controls">
+          <span className="text-sm text-muted-foreground">
+            {filteredProducts.length} products
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-            data-testid="button-next-page"
-          >
-            Next
-            <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                data-testid="button-first-page"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                data-testid="button-prev-page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <div className="flex items-center gap-1 px-2">
+                <span className="text-sm text-muted-foreground">Page</span>
+                <Select 
+                  value={currentPage.toString()} 
+                  onValueChange={(v) => setCurrentPage(parseInt(v, 10))}
+                >
+                  <SelectTrigger className="w-[70px] h-8" data-testid="select-page">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                      <SelectItem key={p} value={p.toString()}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground">of {totalPages}</span>
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                data-testid="button-next-page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                data-testid="button-last-page"
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

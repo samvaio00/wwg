@@ -18,10 +18,20 @@ import {
   Check,
   Eye,
   Search,
+  Filter,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from "lucide-react";
-import type { Product } from "@shared/schema";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { Product, Category } from "@shared/schema";
 
 function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {
   const [imageError, setImageError] = useState(false);
@@ -228,6 +238,12 @@ export default function TopSellersPage() {
     queryKey: ["/api/products/top-sellers"],
   });
 
+  // Fetch categories for filter dropdown
+  const { data: categoriesData } = useQuery<{ categories: Category[] }>({
+    queryKey: ["/api/categories"],
+  });
+  const categories = categoriesData?.categories || [];
+
   const handleProductClick = (product: Product) => {
     setSelectedProduct(product);
     setIsDetailModalOpen(true);
@@ -290,7 +306,6 @@ export default function TopSellersPage() {
           <h1 className="text-2xl font-black tracking-tight" data-testid="heading-top-sellers" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
             Top Sellers
           </h1>
-          <Badge variant="secondary" className="ml-2">Last 3 Months</Badge>
         </div>
 
         <div className="flex gap-2 items-center flex-wrap">
@@ -298,13 +313,43 @@ export default function TopSellersPage() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search top sellers..."
+              placeholder="Search products..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-8 h-9"
               data-testid="input-search-top-sellers"
             />
           </div>
+          
+          <div className="flex items-center gap-1">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value="all" onValueChange={() => {}}>
+              <SelectTrigger className="w-[140px] h-9" data-testid="select-category-top-sellers">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.slug}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Select value="bestselling" onValueChange={() => {}}>
+            <SelectTrigger className="w-[140px] h-9" data-testid="select-sort-top-sellers">
+              <SelectValue placeholder="Sort" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="bestselling">Best Selling</SelectItem>
+              <SelectItem value="price-low">Price: Low</SelectItem>
+              <SelectItem value="price-high">Price: High</SelectItem>
+              <SelectItem value="name-asc">Name: A-Z</SelectItem>
+              <SelectItem value="instock">In Stock Only</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -352,31 +397,73 @@ export default function TopSellersPage() {
         </Card>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            data-testid="button-prev-page"
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground px-3">
-            Page {currentPage} of {totalPages}
+      {/* Pagination Controls */}
+      {totalPages > 0 && (
+        <div className="flex items-center justify-center gap-4 pt-6 flex-wrap" data-testid="pagination-controls">
+          <span className="text-sm text-muted-foreground">
+            {allFilteredProducts.length} products
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-            data-testid="button-next-page"
-          >
-            Next
-            <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                data-testid="button-first-page"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                data-testid="button-prev-page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <div className="flex items-center gap-1 px-2">
+                <span className="text-sm text-muted-foreground">Page</span>
+                <Select 
+                  value={currentPage.toString()} 
+                  onValueChange={(v) => setCurrentPage(parseInt(v, 10))}
+                >
+                  <SelectTrigger className="w-[70px] h-8" data-testid="select-page">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                      <SelectItem key={p} value={p.toString()}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground">of {totalPages}</span>
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                data-testid="button-next-page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                data-testid="button-last-page"
+              >
+                <ChevronsRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

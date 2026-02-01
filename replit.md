@@ -84,3 +84,32 @@ The platform is built with a modern web stack:
 - **Customer Status Sync**: Every 60 minutes.
 - **Embeddings Update**: Every 120 minutes.
 - **Top Sellers Sync**: Weekly on Sundays at midnight (fetches last 30 days of invoice data from Zoho Books).
+- **Email Campaigns**: Every 6 hours (360 minutes). Runs three campaign types automatically.
+
+## AI Email Campaigns
+
+The platform includes AI-generated promotional email campaigns powered by OpenAI (gpt-4o-mini via Replit AI Integrations).
+
+### Campaign Types
+1. **New Highlighted Items**: Sends when new products are marked as highlighted/featured. Tracks previously promoted items to avoid duplicates.
+2. **New SKUs**: Sends when new products are added to the catalog. Only promotes items added since the last campaign run.
+3. **Cart Abandonment**: Sends reminder emails to customers who haven't checked out after 24+ hours. Limited to once per week per customer.
+
+### Email Opt-In System
+- **Default**: New customers are opted-in (`emailOptIn: true`)
+- **Unsubscribe**: Secure token-based unsubscribe links in every promotional email (`/api/unsubscribe/:token`)
+- **Tracking Tables**:
+  - `email_unsubscribe_tokens`: Stores permanent unsubscribe tokens per user
+  - `email_campaign_logs`: Logs all sent campaign emails with success/error status
+  - `email_campaign_tracking`: Tracks last sync times and promoted product IDs to prevent duplicates
+
+### Email Content
+- AI generates personalized subject lines, headlines, and introductions based on campaign type and customer name
+- Emails include product cards with images, names, and prices (up to 6 products)
+- Professional HTML template with Warner Wireless Gears branding
+- Unsubscribe footer in all promotional emails
+
+### Email Providers
+- **Resend** (RESEND_API_KEY): Primary provider
+- **SendGrid** (SENDGRID_API_KEY): Fallback provider
+- **Console**: Development fallback (logs email details to console)

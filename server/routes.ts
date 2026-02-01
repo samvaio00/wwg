@@ -2161,8 +2161,8 @@ export async function registerRoutes(
   app.post("/api/admin/scheduler/sync", requireStaffOrAdmin, async (req, res) => {
     try {
       const { type = "all" } = req.body;
-      if (!["zoho", "embeddings", "customers", "topsellers", "all"].includes(type)) {
-        return res.status(400).json({ message: "Invalid sync type. Use: zoho, embeddings, customers, topsellers, or all" });
+      if (!["zoho", "embeddings", "customers", "topsellers", "emailcampaigns", "all"].includes(type)) {
+        return res.status(400).json({ message: "Invalid sync type. Use: zoho, embeddings, customers, topsellers, emailcampaigns, or all" });
       }
       const results = await triggerManualSync(type);
       res.json({ success: true, results });

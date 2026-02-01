@@ -1,11 +1,13 @@
 import { syncProductsFromZoho, syncCategoriesFromZoho, syncItemGroupsFromZoho } from "./zoho-service";
 import { syncCustomerStatusFromZoho, syncTopSellersFromZoho } from "./zoho-books-service";
 import { generateProductEmbeddings } from "./ai-service";
+import { sendNewHighlightedItemsEmail, sendNewSkusEmail, sendCartAbandonmentEmails } from "./email-campaign-service";
 
 interface SchedulerConfig {
   zohoSyncIntervalMinutes: number;
   customerSyncIntervalMinutes: number;
   embeddingsUpdateIntervalMinutes: number;
+  emailCampaignIntervalMinutes: number;
   enabled: boolean;
   useBusinessHours: boolean;
   businessHoursIntervalMinutes: number;
@@ -18,6 +20,7 @@ const DEFAULT_CONFIG: SchedulerConfig = {
   zohoSyncIntervalMinutes: 60,
   customerSyncIntervalMinutes: 60,
   embeddingsUpdateIntervalMinutes: 120,
+  emailCampaignIntervalMinutes: 360,
   enabled: true,
   useBusinessHours: true,
   businessHoursIntervalMinutes: 120,
@@ -49,10 +52,12 @@ let zohoSyncInterval: NodeJS.Timeout | null = null;
 let customerSyncInterval: NodeJS.Timeout | null = null;
 let embeddingsInterval: NodeJS.Timeout | null = null;
 let topSellersInterval: NodeJS.Timeout | null = null;
+let emailCampaignInterval: NodeJS.Timeout | null = null;
 let lastZohoSync: Date | null = null;
 let lastCustomerSync: Date | null = null;
 let lastEmbeddingsUpdate: Date | null = null;
 let lastTopSellersSync: Date | null = null;
+let lastEmailCampaignRun: Date | null = null;
 
 export function getSchedulerStatus() {
   const currentInterval = getCurrentSyncInterval();
@@ -92,6 +97,14 @@ export function getSchedulerStatus() {
       lastRun: lastTopSellersSync,
       nextRun: getNextSundayMidnight(),
       running: topSellersInterval !== null,
+    },
+    emailCampaigns: {
+      intervalMinutes: config.emailCampaignIntervalMinutes,
+      lastRun: lastEmailCampaignRun,
+      nextRun: lastEmailCampaignRun && config.enabled
+        ? new Date(lastEmailCampaignRun.getTime() + config.emailCampaignIntervalMinutes * 60 * 1000)
+        : null,
+      running: emailCampaignInterval !== null,
     },
   };
 }
@@ -177,6 +190,44 @@ async function runTopSellersSync() {
   }
 }
 
+async function runEmailCampaigns() {
+  console.log("[Scheduler] Starting scheduled email campaigns...");
+  try {
+    const results = {
+      highlightedItems: { sent: 0, errors: 0 },
+      newSkus: { sent: 0, errors: 0 },
+      cartAbandonment: { sent: 0, errors: 0 },
+    };
+
+    try {
+      results.highlightedItems = await sendNewHighlightedItemsEmail();
+    } catch (error) {
+      console.error("[Scheduler] New highlighted items email error:", error);
+    }
+
+    try {
+      results.newSkus = await sendNewSkusEmail();
+    } catch (error) {
+      console.error("[Scheduler] New SKUs email error:", error);
+    }
+
+    try {
+      results.cartAbandonment = await sendCartAbandonmentEmails();
+    } catch (error) {
+      console.error("[Scheduler] Cart abandonment email error:", error);
+    }
+
+    lastEmailCampaignRun = new Date();
+    const totalSent = results.highlightedItems.sent + results.newSkus.sent + results.cartAbandonment.sent;
+    const totalErrors = results.highlightedItems.errors + results.newSkus.errors + results.cartAbandonment.errors;
+    console.log(`[Scheduler] Email campaigns complete: ${totalSent} sent, ${totalErrors} errors`);
+    return results;
+  } catch (error) {
+    console.error("[Scheduler] Email campaigns error:", error);
+    throw error;
+  }
+}
+
 function scheduleNextTopSellersSync() {
   const msUntilSunday = getMsUntilNextSunday();
   const hoursUntil = Math.round(msUntilSunday / (1000 * 60 * 60));
@@ -245,6 +296,13 @@ export function startScheduler(newConfig?: Partial<SchedulerConfig>) {
   // Schedule weekly top sellers sync (Sundays at midnight)
   scheduleNextTopSellersSync();
 
+  // Schedule email campaigns
+  console.log(`[Scheduler] Email campaigns every ${config.emailCampaignIntervalMinutes} minutes`);
+  emailCampaignInterval = setInterval(
+    runEmailCampaigns,
+    config.emailCampaignIntervalMinutes * 60 * 1000
+  );
+
   setTimeout(() => {
     console.log("[Scheduler] Running initial sync on startup...");
     runZohoSync()
@@ -276,6 +334,11 @@ export function stopScheduler() {
     topSellersInterval = null;
     console.log("[Scheduler] Top sellers sync stopped");
   }
+  if (emailCampaignInterval) {
+    clearInterval(emailCampaignInterval);
+    emailCampaignInterval = null;
+    console.log("[Scheduler] Email campaigns interval stopped");
+  }
 }
 
 export function updateSchedulerConfig(newConfig: Partial<SchedulerConfig>) {
@@ -287,7 +350,7 @@ export function updateSchedulerConfig(newConfig: Partial<SchedulerConfig>) {
   }
 }
 
-export async function triggerManualSync(type: "zoho" | "customers" | "embeddings" | "topsellers" | "all") {
+export async function triggerManualSync(type: "zoho" | "customers" | "embeddings" | "topsellers" | "emailcampaigns" | "all") {
   const results: Record<string, unknown> = {};
   
   if (type === "zoho" || type === "all") {
@@ -304,6 +367,10 @@ export async function triggerManualSync(type: "zoho" | "customers" | "embeddings
   
   if (type === "topsellers" || type === "all") {
     results.topsellers = await runTopSellersSync();
+  }
+  
+  if (type === "emailcampaigns" || type === "all") {
+    results.emailcampaigns = await runEmailCampaigns();
   }
   
   return results;

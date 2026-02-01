@@ -141,6 +141,7 @@ export interface IStorage {
   // Zoho API log operations
   logZohoApiCall(log: InsertZohoApiLog): Promise<ZohoApiLog>;
   getZohoApiCallStats(sinceDate: Date): Promise<{ total: number; success: number; failed: number }>;
+  getSyncRunStats(sinceDate: Date): Promise<{ totalCreated: number; totalUpdated: number; totalSyncs: number }>;
   
   // Email campaign template operations
   getEmailTemplates(): Promise<EmailCampaignTemplate[]>;
@@ -1378,6 +1379,22 @@ export class DatabaseStorage implements IStorage {
       total: result[0]?.total || 0,
       success: result[0]?.success || 0,
       failed: result[0]?.failed || 0,
+    };
+  }
+
+  async getSyncRunStats(sinceDate: Date): Promise<{ totalCreated: number; totalUpdated: number; totalSyncs: number }> {
+    const result = await db.select({
+      totalCreated: sql<number>`COALESCE(SUM(${syncRuns.created}), 0)::int`,
+      totalUpdated: sql<number>`COALESCE(SUM(${syncRuns.updated}), 0)::int`,
+      totalSyncs: sql<number>`COUNT(*)::int`,
+    })
+    .from(syncRuns)
+    .where(gte(syncRuns.startedAt, sinceDate));
+    
+    return {
+      totalCreated: result[0]?.totalCreated || 0,
+      totalUpdated: result[0]?.totalUpdated || 0,
+      totalSyncs: result[0]?.totalSyncs || 0,
     };
   }
 

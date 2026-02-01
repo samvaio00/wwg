@@ -2106,18 +2106,30 @@ export async function registerRoutes(
     try {
       const now = new Date();
       
-      // Stats for last hour
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-      const lastHourStats = await storage.getZohoApiCallStats(oneHourAgo);
-      
       // Stats for today (start of day)
       const startOfDay = new Date(now);
       startOfDay.setHours(0, 0, 0, 0);
-      const todayStats = await storage.getZohoApiCallStats(startOfDay);
+      const todayApiStats = await storage.getZohoApiCallStats(startOfDay);
+      const todaySyncStats = await storage.getSyncRunStats(startOfDay);
+      
+      // Stats for this month (start of month)
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthApiStats = await storage.getZohoApiCallStats(startOfMonth);
       
       res.json({
-        lastHour: lastHourStats,
-        today: todayStats,
+        today: {
+          apiCalls: todayApiStats.total,
+          successfulCalls: todayApiStats.success,
+          failedCalls: todayApiStats.failed,
+          recordsPulled: todaySyncStats.totalCreated,
+          recordsUpdated: todaySyncStats.totalUpdated,
+          syncs: todaySyncStats.totalSyncs,
+        },
+        month: {
+          apiCalls: monthApiStats.total,
+          successfulCalls: monthApiStats.success,
+          failedCalls: monthApiStats.failed,
+        },
       });
     } catch (error) {
       console.error("Zoho API stats error:", error);

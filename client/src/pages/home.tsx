@@ -534,6 +534,92 @@ function CustomerHomePage() {
   );
 }
 
+interface ZohoStats {
+  today: {
+    apiCalls: number;
+    successfulCalls: number;
+    failedCalls: number;
+    recordsPulled: number;
+    recordsUpdated: number;
+    syncs: number;
+  };
+  month: {
+    apiCalls: number;
+    successfulCalls: number;
+    failedCalls: number;
+  };
+}
+
+function ZohoIntegrationStatus() {
+  const { data: zohoStats, isLoading } = useQuery<ZohoStats>({
+    queryKey: ['/api/admin/analytics/zoho-api-stats'],
+    refetchInterval: 60000,
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Zoho Integration Status</CardTitle>
+        <CardDescription>API calls and sync activity</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-3">
+              <h4 className="font-medium text-sm">Today</h4>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">API Calls</span>
+                  <span className="font-medium">{zohoStats?.today?.apiCalls || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Successful</span>
+                  <span className="font-medium text-green-600">{zohoStats?.today?.successfulCalls || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Failed</span>
+                  <span className="font-medium text-red-600">{zohoStats?.today?.failedCalls || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Records Pulled</span>
+                  <span className="font-medium">{zohoStats?.today?.recordsPulled || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Records Updated</span>
+                  <span className="font-medium">{zohoStats?.today?.recordsUpdated || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Sync Operations</span>
+                  <span className="font-medium">{zohoStats?.today?.syncs || 0}</span>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <h4 className="font-medium text-sm">This Month</h4>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Total API Calls</span>
+                  <span className="font-medium">{zohoStats?.month?.apiCalls || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Successful</span>
+                  <span className="font-medium text-green-600">{zohoStats?.month?.successfulCalls || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Failed</span>
+                  <span className="font-medium text-red-600">{zohoStats?.month?.failedCalls || 0}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function AdminDashboard() {
   const { user } = useAuth();
 
@@ -624,71 +710,7 @@ function AdminDashboard() {
         </Link>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common administrative tasks</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex flex-col gap-2">
-              <Link href="/admin/users">
-                <Button variant="outline" className="w-full justify-start" data-testid="button-manage-users">
-                  <Users className="h-4 w-4 mr-2" />
-                  User Management
-                </Button>
-              </Link>
-              <Link href="/admin/orders">
-                <Button variant="outline" className="w-full justify-start" data-testid="button-manage-orders">
-                  <Package className="h-4 w-4 mr-2" />
-                  Order Management
-                </Button>
-              </Link>
-              <Link href="/admin/analytics">
-                <Button variant="outline" className="w-full justify-start" data-testid="button-view-analytics">
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Analytics
-                </Button>
-              </Link>
-              <Link href="/admin/email-templates">
-                <Button variant="outline" className="w-full justify-start" data-testid="button-email-templates">
-                  <Star className="h-4 w-4 mr-2" />
-                  Email Templates
-                </Button>
-              </Link>
-              <Link href="/admin/settings">
-                <Button variant="outline" className="w-full justify-start" data-testid="button-settings">
-                  <Eye className="h-4 w-4 mr-2" />
-                  Settings
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>System Status</CardTitle>
-            <CardDescription>Platform overview</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Zoho Inventory Sync</span>
-                <Badge variant="outline" className="text-green-600 border-green-600">Active</Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Email Campaigns</span>
-                <Badge variant="outline" className="text-green-600 border-green-600">Wed & Sat 9AM</Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Customer Status Sync</span>
-                <Badge variant="outline" className="text-green-600 border-green-600">Active</Badge>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <ZohoIntegrationStatus />
     </div>
   );
 }

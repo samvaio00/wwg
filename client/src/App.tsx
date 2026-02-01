@@ -40,6 +40,7 @@ import AdminUsersPage from "@/pages/admin-users";
 import AdminOrdersPage from "@/pages/admin-orders";
 import AdminAnalyticsPage from "@/pages/admin-analytics";
 import AdminSettingsPage from "@/pages/admin-settings";
+import AdminCartsPage from "@/pages/admin-carts";
 import PendingApprovalPage from "@/pages/pending-approval";
 import AboutPage from "@/pages/about";
 import ReturnPolicyPage from "@/pages/return-policy";
@@ -262,6 +263,7 @@ function AppRouter() {
         <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/admin/users" component={AdminUsersPage} />
         <Route path="/admin/orders" component={AdminOrdersPage} />
+        <Route path="/admin/carts" component={AdminCartsPage} />
         <Route path="/admin/analytics" component={AdminAnalyticsPage} />
         <Route path="/admin/settings" component={AdminSettingsPage} />
         <Route path="/about" component={AboutPage} />

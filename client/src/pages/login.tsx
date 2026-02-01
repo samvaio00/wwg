@@ -57,7 +57,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center space-y-2 text-center">
-          <img src={wwgLogo} alt="Warner Wireless Gears" className="h-24 w-auto object-contain" />
+          <img src={wwgLogo} alt="Warner Wireless Gears" className="h-48 w-48 object-contain" />
           <p className="text-muted-foreground">B2B Distribution</p>
         </div>
 

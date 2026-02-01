@@ -23,6 +23,7 @@ import {
   Home,
   Gift,
   TrendingUp,
+  ShoppingCart,
 } from "lucide-react";
 import type { Category } from "@shared/schema";
 
@@ -41,6 +42,11 @@ const adminNavItems = [
     title: "Order Management",
     url: "/admin/orders",
     icon: Package,
+  },
+  {
+    title: "Active Carts",
+    url: "/admin/carts",
+    icon: ShoppingCart,
   },
   {
     title: "Analytics",
@@ -69,6 +75,11 @@ const staffNavItems = [
     title: "Order Approvals",
     url: "/admin/orders",
     icon: Package,
+  },
+  {
+    title: "Active Carts",
+    url: "/admin/carts",
+    icon: ShoppingCart,
   },
   {
     title: "Settings",

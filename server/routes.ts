@@ -1288,6 +1288,17 @@ export async function registerRoutes(
     }
   });
 
+  // Get all active shopping carts (admin/staff)
+  app.get("/api/admin/active-carts", requireStaffOrAdmin, async (_req, res) => {
+    try {
+      const activeCarts = await storage.getAllActiveCarts();
+      res.json({ carts: activeCarts });
+    } catch (error) {
+      console.error("Error fetching active carts:", error);
+      res.status(500).json({ message: "Failed to fetch active carts" });
+    }
+  });
+
   // Approve order
   app.post("/api/admin/orders/:id/approve", requireStaffOrAdmin, async (req, res) => {
     try {

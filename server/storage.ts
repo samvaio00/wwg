@@ -43,7 +43,7 @@ import {
   type JobStatusValue
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, ne, ilike, or, asc, sql, lte, gte, inArray } from "drizzle-orm";
+import { eq, desc, and, ne, ilike, or, asc, sql, lte, gte, gt, inArray } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 12;
@@ -83,6 +83,7 @@ export interface IStorage {
   getOrCreateCart(userId: string): Promise<Cart>;
   getCartItem(id: string): Promise<CartItem | undefined>;
   getCartItems(cartId: string): Promise<(CartItem & { product: Product })[]>;
+  getAllActiveCarts(): Promise<{ cart: Cart; user: SafeUser; items: (CartItem & { product: Product })[] }[]>;
   addToCart(cartId: string, productId: string, quantity: number): Promise<CartItem>;
   updateCartItem(cartItemId: string, quantity: number): Promise<CartItem | undefined>;
   removeCartItem(cartItemId: string): Promise<void>;
@@ -566,6 +567,26 @@ export class DatabaseStorage implements IStorage {
       ...item.cart_items,
       product: item.products
     }));
+  }
+
+  async getAllActiveCarts(): Promise<{ cart: Cart; user: SafeUser; items: (CartItem & { product: Product })[] }[]> {
+    const allCarts = await db.select()
+      .from(carts)
+      .innerJoin(users, eq(carts.userId, users.id))
+      .where(gt(carts.itemCount, 0))
+      .orderBy(desc(carts.updatedAt));
+    
+    const result = await Promise.all(allCarts.map(async (row) => {
+      const items = await this.getCartItems(row.carts.id);
+      const { password, ...safeUser } = row.users;
+      return {
+        cart: row.carts,
+        user: safeUser as SafeUser,
+        items
+      };
+    }));
+    
+    return result;
   }
 
   async getEffectivePriceForCart(cartId: string, productId: string, basePrice: string): Promise<string> {

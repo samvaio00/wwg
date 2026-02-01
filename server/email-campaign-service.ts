@@ -1,0 +1,740 @@
+import OpenAI from "openai";
+import { db } from "./db";
+import { 
+  users, 
+  products, 
+  carts, 
+  cartItems,
+  emailUnsubscribeTokens,
+  emailCampaignLogs,
+  emailCampaignTracking,
+  EmailCampaignType,
+  type Product
+} from "@shared/schema";
+import { eq, and, lt, gt, isNull, inArray, desc } from "drizzle-orm";
+import crypto from "crypto";
+
+const openai = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
+
+function getBaseUrl(): string {
+  if (process.env.REPLIT_DEPLOYMENT_URL) {
+    return process.env.REPLIT_DEPLOYMENT_URL;
+  }
+  if (process.env.REPL_SLUG) {
+    return `https://${process.env.REPL_SLUG}.repl.co`;
+  }
+  return "http://localhost:5000";
+}
+
+interface EmailConfig {
+  provider: "resend" | "sendgrid" | "console" | null;
+  apiKey: string | null;
+  fromEmail: string;
+  fromName: string;
+}
+
+function getEmailConfig(): EmailConfig {
+  if (process.env.RESEND_API_KEY) {
+    return {
+      provider: "resend",
+      apiKey: process.env.RESEND_API_KEY,
+      fromEmail: process.env.EMAIL_FROM || "notifications@warnerwireless.com",
+      fromName: process.env.EMAIL_FROM_NAME || "Warner Wireless Gears",
+    };
+  }
+
+  if (process.env.SENDGRID_API_KEY) {
+    return {
+      provider: "sendgrid",
+      apiKey: process.env.SENDGRID_API_KEY,
+      fromEmail: process.env.EMAIL_FROM || "notifications@warnerwireless.com",
+      fromName: process.env.EMAIL_FROM_NAME || "Warner Wireless Gears",
+    };
+  }
+
+  return {
+    provider: "console",
+    apiKey: null,
+    fromEmail: "notifications@warnerwireless.com",
+    fromName: "Warner Wireless Gears",
+  };
+}
+
+interface SendEmailResult {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
+
+async function sendEmail(
+  to: string,
+  subject: string,
+  htmlContent: string,
+  textContent?: string
+): Promise<SendEmailResult> {
+  const config = getEmailConfig();
+
+  if (config.provider === "resend" && config.apiKey) {
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${config.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: `${config.fromName} <${config.fromEmail}>`,
+          to: [to],
+          subject,
+          html: htmlContent,
+          text: textContent,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error("[Email Campaign] Resend error:", error);
+        return { success: false, error };
+      }
+
+      const data = await response.json() as { id: string };
+      return { success: true, messageId: data.id };
+    } catch (error) {
+      console.error("[Email Campaign] Resend error:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  }
+
+  if (config.provider === "sendgrid" && config.apiKey) {
+    try {
+      const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${config.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: to }] }],
+          from: { email: config.fromEmail, name: config.fromName },
+          subject,
+          content: [
+            { type: "text/html", value: htmlContent },
+            ...(textContent ? [{ type: "text/plain", value: textContent }] : []),
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error("[Email Campaign] SendGrid error:", error);
+        return { success: false, error };
+      }
+
+      const messageId = response.headers.get("X-Message-Id") || "";
+      return { success: true, messageId };
+    } catch (error) {
+      console.error("[Email Campaign] SendGrid error:", error);
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    }
+  }
+
+  console.log("[Email Campaign] No email provider configured. Would send:");
+  console.log(`  To: ${to}`);
+  console.log(`  Subject: ${subject}`);
+  console.log(`  Content preview: ${htmlContent.substring(0, 200)}...`);
+  return { success: true, messageId: "console-" + Date.now() };
+}
+
+async function getOrCreateUnsubscribeToken(userId: string): Promise<string> {
+  const [existing] = await db
+    .select()
+    .from(emailUnsubscribeTokens)
+    .where(eq(emailUnsubscribeTokens.userId, userId))
+    .limit(1);
+
+  if (existing) {
+    return existing.token;
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  await db.insert(emailUnsubscribeTokens).values({
+    token,
+    userId,
+  });
+
+  return token;
+}
+
+function generateUnsubscribeFooter(unsubscribeUrl: string): string {
+  return `
+    <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+      <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+        You are receiving this email because you opted in for promotional communications.
+      </p>
+      <p style="margin: 10px 0;">
+        <a href="${unsubscribeUrl}" 
+           style="color: #6b7280; font-size: 12px; text-decoration: underline;">
+          Unsubscribe from promotional emails
+        </a>
+      </p>
+      <p style="color: #9ca3af; font-size: 11px; margin-top: 15px;">
+        &copy; ${new Date().getFullYear()} Warner Wireless Gears. All rights reserved.
+      </p>
+    </div>
+  `;
+}
+
+interface AIGeneratedEmail {
+  subject: string;
+  headline: string;
+  introduction: string;
+  callToAction: string;
+}
+
+async function generateEmailContent(
+  campaignType: string,
+  productNames: string[],
+  customerName: string
+): Promise<AIGeneratedEmail> {
+  try {
+    const prompt = getPromptForCampaign(campaignType, productNames, customerName);
+    
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional B2B marketing copywriter for Warner Wireless Gears, a wholesale distributor of sunglasses, cellular accessories, caps, perfumes, and novelty items. Write engaging, professional promotional emails that encourage wholesale buyers to check out new products. Keep the tone professional but friendly. Respond in JSON format only.`
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      response_format: { type: "json_object" },
+      max_completion_tokens: 500,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error("No response from AI");
+    }
+
+    return JSON.parse(content) as AIGeneratedEmail;
+  } catch (error) {
+    console.error("[Email Campaign] AI generation error:", error);
+    return getDefaultEmailContent(campaignType, productNames, customerName);
+  }
+}
+
+function getPromptForCampaign(
+  campaignType: string,
+  productNames: string[],
+  customerName: string
+): string {
+  const productList = productNames.slice(0, 5).join(", ");
+  const moreCount = productNames.length > 5 ? ` and ${productNames.length - 5} more` : "";
+
+  switch (campaignType) {
+    case EmailCampaignType.NEW_HIGHLIGHTED_ITEMS:
+      return `Generate a promotional email for ${customerName || "our valued customer"} about newly featured products in our wholesale catalog. Products include: ${productList}${moreCount}. 
+      
+      Return JSON with these fields:
+      - subject: Email subject line (max 60 chars, engaging, mentions featured products)
+      - headline: Main headline for the email (max 80 chars)
+      - introduction: Brief intro paragraph (2-3 sentences) explaining these are our hand-picked featured items
+      - callToAction: Button text for viewing the products (max 25 chars)`;
+
+    case EmailCampaignType.NEW_SKUS:
+      return `Generate a promotional email for ${customerName || "our valued customer"} about new products just added to our wholesale inventory. New products include: ${productList}${moreCount}.
+      
+      Return JSON with these fields:
+      - subject: Email subject line (max 60 chars, creates excitement about new arrivals)
+      - headline: Main headline for the email (max 80 chars)
+      - introduction: Brief intro paragraph (2-3 sentences) about fresh inventory
+      - callToAction: Button text for browsing new products (max 25 chars)`;
+
+    case EmailCampaignType.CART_ABANDONMENT:
+      return `Generate a reminder email for ${customerName || "our valued customer"} who has items in their shopping cart but hasn't checked out. Cart contains: ${productList}${moreCount}.
+      
+      Return JSON with these fields:
+      - subject: Email subject line (max 60 chars, friendly reminder tone)
+      - headline: Main headline for the email (max 80 chars)
+      - introduction: Brief intro paragraph (2-3 sentences) reminding about items waiting in cart
+      - callToAction: Button text for completing the order (max 25 chars)`;
+
+    default:
+      return `Generate a general promotional email for ${customerName || "our valued customer"} about wholesale products. Return JSON with subject, headline, introduction, and callToAction fields.`;
+  }
+}
+
+function getDefaultEmailContent(
+  campaignType: string,
+  productNames: string[],
+  customerName: string
+): AIGeneratedEmail {
+  const name = customerName || "Valued Customer";
+
+  switch (campaignType) {
+    case EmailCampaignType.NEW_HIGHLIGHTED_ITEMS:
+      return {
+        subject: "New Featured Products Just for You!",
+        headline: "Check Out Our Handpicked Featured Items",
+        introduction: `Hi ${name}, we've curated a selection of our best products just for you. These featured items are flying off the shelves - don't miss out on stocking up for your store!`,
+        callToAction: "View Featured Products"
+      };
+
+    case EmailCampaignType.NEW_SKUS:
+      return {
+        subject: "Fresh Inventory Alert: New Products Added!",
+        headline: "New Products Just Landed",
+        introduction: `Hi ${name}, we're excited to announce new additions to our wholesale catalog! Be the first to stock these fresh items and stay ahead of the competition.`,
+        callToAction: "Browse New Arrivals"
+      };
+
+    case EmailCampaignType.CART_ABANDONMENT:
+      return {
+        subject: "Don't Forget - Items Waiting in Your Cart",
+        headline: "Your Cart is Waiting",
+        introduction: `Hi ${name}, you left some great items in your shopping cart. Complete your order before they sell out - wholesale prices won't last forever!`,
+        callToAction: "Complete Your Order"
+      };
+
+    default:
+      return {
+        subject: "Special Offers from Warner Wireless Gears",
+        headline: "Exclusive Wholesale Deals",
+        introduction: `Hi ${name}, check out our latest wholesale offerings designed to help your business grow.`,
+        callToAction: "Shop Now"
+      };
+  }
+}
+
+function buildEmailHtml(
+  emailContent: AIGeneratedEmail,
+  productsToShow: Product[],
+  unsubscribeUrl: string,
+  actionUrl: string
+): string {
+  const baseUrl = getBaseUrl();
+  
+  const productCards = productsToShow.slice(0, 6).map(p => `
+    <div style="display: inline-block; width: 180px; margin: 10px; text-align: center; vertical-align: top;">
+      <img src="${p.imageUrl || `${baseUrl}/placeholder-product.png`}" 
+           alt="${p.name}" 
+           style="width: 160px; height: 160px; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb;">
+      <p style="margin: 8px 0 4px; font-size: 14px; font-weight: 600; color: #1f2937; max-height: 40px; overflow: hidden;">
+        ${p.name.substring(0, 40)}${p.name.length > 40 ? '...' : ''}
+      </p>
+      <p style="margin: 0; font-size: 16px; color: #059669; font-weight: bold;">$${p.basePrice}</p>
+    </div>
+  `).join('');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${emailContent.subject}</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 0 auto; background: white;">
+    <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 30px; text-align: center;">
+      <h1 style="color: white; margin: 0; font-size: 24px;">Warner Wireless Gears</h1>
+      <p style="color: #a5b4fc; margin: 5px 0 0; font-size: 14px;">Your Wholesale Partner</p>
+    </div>
+    
+    <div style="padding: 30px;">
+      <h2 style="color: #1f2937; margin: 0 0 20px; font-size: 28px; text-align: center;">
+        ${emailContent.headline}
+      </h2>
+      
+      <p style="color: #4b5563; font-size: 16px; margin-bottom: 25px;">
+        ${emailContent.introduction}
+      </p>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        ${productCards}
+      </div>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${actionUrl}" 
+           style="display: inline-block; background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; 
+                  padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;
+                  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          ${emailContent.callToAction}
+        </a>
+      </div>
+      
+      <p style="color: #6b7280; font-size: 14px; text-align: center;">
+        Questions? Reply to this email or contact us anytime.
+      </p>
+    </div>
+    
+    ${generateUnsubscribeFooter(unsubscribeUrl)}
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+async function logCampaignEmail(
+  campaignType: string,
+  userId: string,
+  subject: string,
+  referenceData: object,
+  success: boolean,
+  errorMessage?: string
+): Promise<void> {
+  await db.insert(emailCampaignLogs).values({
+    campaignType,
+    userId,
+    subject,
+    referenceData,
+    success,
+    errorMessage,
+  });
+}
+
+export async function getOptedInCustomers(): Promise<Array<{ id: string; email: string; businessName: string | null; contactName: string | null }>> {
+  const customers = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      businessName: users.businessName,
+      contactName: users.contactName,
+    })
+    .from(users)
+    .where(
+      and(
+        eq(users.role, 'customer'),
+        eq(users.status, 'approved'),
+        eq(users.emailOptIn, true)
+      )
+    );
+
+  return customers;
+}
+
+export async function sendNewHighlightedItemsEmail(): Promise<{ sent: number; errors: number }> {
+  console.log("[Email Campaign] Starting new highlighted items campaign...");
+  
+  const [tracking] = await db
+    .select()
+    .from(emailCampaignTracking)
+    .where(eq(emailCampaignTracking.campaignType, EmailCampaignType.NEW_HIGHLIGHTED_ITEMS))
+    .limit(1);
+
+  const lastSyncAt = tracking?.lastSyncAt || new Date(0);
+  const lastPromotedIds = tracking?.lastPromotedIds || [];
+
+  const highlightedProducts = await db
+    .select()
+    .from(products)
+    .where(
+      and(
+        eq(products.isHighlighted, true),
+        eq(products.isOnline, true),
+        eq(products.isActive, true)
+      )
+    )
+    .limit(20);
+
+  const newHighlightedProducts = highlightedProducts.filter(
+    p => !lastPromotedIds.includes(p.id)
+  );
+
+  if (newHighlightedProducts.length === 0) {
+    console.log("[Email Campaign] No new highlighted items to promote");
+    return { sent: 0, errors: 0 };
+  }
+
+  const customers = await getOptedInCustomers();
+  console.log(`[Email Campaign] Sending to ${customers.length} customers about ${newHighlightedProducts.length} new highlighted items`);
+
+  let sent = 0;
+  let errors = 0;
+  const baseUrl = getBaseUrl();
+
+  for (const customer of customers) {
+    try {
+      const unsubscribeToken = await getOrCreateUnsubscribeToken(customer.id);
+      const unsubscribeUrl = `${baseUrl}/api/unsubscribe/${unsubscribeToken}`;
+      const actionUrl = `${baseUrl}/`;
+
+      const productNames = newHighlightedProducts.map(p => p.name);
+      const customerName = customer.contactName || customer.businessName || "Valued Customer";
+      
+      const emailContent = await generateEmailContent(
+        EmailCampaignType.NEW_HIGHLIGHTED_ITEMS,
+        productNames,
+        customerName
+      );
+
+      const htmlContent = buildEmailHtml(
+        emailContent,
+        newHighlightedProducts,
+        unsubscribeUrl,
+        actionUrl
+      );
+
+      const result = await sendEmail(customer.email, emailContent.subject, htmlContent);
+
+      await logCampaignEmail(
+        EmailCampaignType.NEW_HIGHLIGHTED_ITEMS,
+        customer.id,
+        emailContent.subject,
+        { productIds: newHighlightedProducts.map(p => p.id) },
+        result.success,
+        result.error
+      );
+
+      if (result.success) {
+        sent++;
+      } else {
+        errors++;
+      }
+    } catch (error) {
+      console.error(`[Email Campaign] Error sending to ${customer.email}:`, error);
+      errors++;
+    }
+  }
+
+  await db
+    .insert(emailCampaignTracking)
+    .values({
+      campaignType: EmailCampaignType.NEW_HIGHLIGHTED_ITEMS,
+      lastSyncAt: new Date(),
+      lastPromotedIds: highlightedProducts.map(p => p.id),
+    })
+    .onConflictDoUpdate({
+      target: emailCampaignTracking.campaignType,
+      set: {
+        lastSyncAt: new Date(),
+        lastPromotedIds: highlightedProducts.map(p => p.id),
+        updatedAt: new Date(),
+      },
+    });
+
+  console.log(`[Email Campaign] New highlighted items campaign complete: ${sent} sent, ${errors} errors`);
+  return { sent, errors };
+}
+
+export async function sendNewSkusEmail(): Promise<{ sent: number; errors: number }> {
+  console.log("[Email Campaign] Starting new SKUs campaign...");
+
+  const [tracking] = await db
+    .select()
+    .from(emailCampaignTracking)
+    .where(eq(emailCampaignTracking.campaignType, EmailCampaignType.NEW_SKUS))
+    .limit(1);
+
+  const lastSyncAt = tracking?.lastSyncAt || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const newProducts = await db
+    .select()
+    .from(products)
+    .where(
+      and(
+        gt(products.createdAt, lastSyncAt),
+        eq(products.isOnline, true),
+        eq(products.isActive, true)
+      )
+    )
+    .orderBy(desc(products.createdAt))
+    .limit(20);
+
+  if (newProducts.length === 0) {
+    console.log("[Email Campaign] No new SKUs to promote");
+    return { sent: 0, errors: 0 };
+  }
+
+  const customers = await getOptedInCustomers();
+  console.log(`[Email Campaign] Sending to ${customers.length} customers about ${newProducts.length} new SKUs`);
+
+  let sent = 0;
+  let errors = 0;
+  const baseUrl = getBaseUrl();
+
+  for (const customer of customers) {
+    try {
+      const unsubscribeToken = await getOrCreateUnsubscribeToken(customer.id);
+      const unsubscribeUrl = `${baseUrl}/api/unsubscribe/${unsubscribeToken}`;
+      const actionUrl = `${baseUrl}/whats-new`;
+
+      const productNames = newProducts.map(p => p.name);
+      const customerName = customer.contactName || customer.businessName || "Valued Customer";
+
+      const emailContent = await generateEmailContent(
+        EmailCampaignType.NEW_SKUS,
+        productNames,
+        customerName
+      );
+
+      const htmlContent = buildEmailHtml(
+        emailContent,
+        newProducts,
+        unsubscribeUrl,
+        actionUrl
+      );
+
+      const result = await sendEmail(customer.email, emailContent.subject, htmlContent);
+
+      await logCampaignEmail(
+        EmailCampaignType.NEW_SKUS,
+        customer.id,
+        emailContent.subject,
+        { productIds: newProducts.map(p => p.id) },
+        result.success,
+        result.error
+      );
+
+      if (result.success) {
+        sent++;
+      } else {
+        errors++;
+      }
+    } catch (error) {
+      console.error(`[Email Campaign] Error sending to ${customer.email}:`, error);
+      errors++;
+    }
+  }
+
+  await db
+    .insert(emailCampaignTracking)
+    .values({
+      campaignType: EmailCampaignType.NEW_SKUS,
+      lastSyncAt: new Date(),
+      lastPromotedIds: newProducts.map(p => p.id),
+    })
+    .onConflictDoUpdate({
+      target: emailCampaignTracking.campaignType,
+      set: {
+        lastSyncAt: new Date(),
+        lastPromotedIds: newProducts.map(p => p.id),
+        updatedAt: new Date(),
+      },
+    });
+
+  console.log(`[Email Campaign] New SKUs campaign complete: ${sent} sent, ${errors} errors`);
+  return { sent, errors };
+}
+
+export async function sendCartAbandonmentEmails(): Promise<{ sent: number; errors: number }> {
+  console.log("[Email Campaign] Starting cart abandonment campaign...");
+
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const abandonedCarts = await db
+    .select({
+      cart: carts,
+      user: {
+        id: users.id,
+        email: users.email,
+        businessName: users.businessName,
+        contactName: users.contactName,
+        emailOptIn: users.emailOptIn,
+      },
+    })
+    .from(carts)
+    .innerJoin(users, eq(carts.userId, users.id))
+    .where(
+      and(
+        lt(carts.updatedAt, twentyFourHoursAgo),
+        gt(carts.itemCount, 0),
+        eq(users.role, 'customer'),
+        eq(users.status, 'approved'),
+        eq(users.emailOptIn, true)
+      )
+    );
+
+  if (abandonedCarts.length === 0) {
+    console.log("[Email Campaign] No abandoned carts found");
+    return { sent: 0, errors: 0 };
+  }
+
+  const recentlySent = await db
+    .select({ userId: emailCampaignLogs.userId })
+    .from(emailCampaignLogs)
+    .where(
+      and(
+        eq(emailCampaignLogs.campaignType, EmailCampaignType.CART_ABANDONMENT),
+        gt(emailCampaignLogs.sentAt, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+      )
+    );
+
+  const recentlySentUserIds = new Set(recentlySent.map(r => r.userId));
+
+  const cartsToNotify = abandonedCarts.filter(
+    ac => !recentlySentUserIds.has(ac.user.id)
+  );
+
+  console.log(`[Email Campaign] Found ${cartsToNotify.length} carts eligible for abandonment email`);
+
+  let sent = 0;
+  let errors = 0;
+  const baseUrl = getBaseUrl();
+
+  for (const { cart, user } of cartsToNotify) {
+    try {
+      const items = await db
+        .select({
+          cartItem: cartItems,
+          product: products,
+        })
+        .from(cartItems)
+        .innerJoin(products, eq(cartItems.productId, products.id))
+        .where(eq(cartItems.cartId, cart.id));
+
+      if (items.length === 0) continue;
+
+      const cartProducts = items.map(i => i.product);
+      const unsubscribeToken = await getOrCreateUnsubscribeToken(user.id);
+      const unsubscribeUrl = `${baseUrl}/api/unsubscribe/${unsubscribeToken}`;
+      const actionUrl = `${baseUrl}/cart`;
+
+      const productNames = cartProducts.map(p => p.name);
+      const customerName = user.contactName || user.businessName || "Valued Customer";
+
+      const emailContent = await generateEmailContent(
+        EmailCampaignType.CART_ABANDONMENT,
+        productNames,
+        customerName
+      );
+
+      const htmlContent = buildEmailHtml(
+        emailContent,
+        cartProducts,
+        unsubscribeUrl,
+        actionUrl
+      );
+
+      const result = await sendEmail(user.email, emailContent.subject, htmlContent);
+
+      await logCampaignEmail(
+        EmailCampaignType.CART_ABANDONMENT,
+        user.id,
+        emailContent.subject,
+        { cartId: cart.id, productIds: cartProducts.map(p => p.id) },
+        result.success,
+        result.error
+      );
+
+      if (result.success) {
+        sent++;
+      } else {
+        errors++;
+      }
+    } catch (error) {
+      console.error(`[Email Campaign] Error sending cart abandonment to ${user.email}:`, error);
+      errors++;
+    }
+  }
+
+  console.log(`[Email Campaign] Cart abandonment campaign complete: ${sent} sent, ${errors} errors`);
+  return { sent, errors };
+}

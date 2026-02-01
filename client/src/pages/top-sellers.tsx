@@ -309,14 +309,14 @@ export default function TopSellersPage() {
         </div>
 
         <div className="flex gap-2 items-center flex-wrap">
-          <div className="relative w-56 lg:w-64">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="relative w-80 lg:w-96">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <Input
               type="search"
               placeholder="Search products..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-9"
+              className="pl-10 h-14 text-base"
               data-testid="input-search-top-sellers"
             />
           </div>

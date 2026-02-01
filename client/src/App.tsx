@@ -144,30 +144,29 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <AICartBuilder />
             </div>
-            <div className="hidden md:flex items-center justify-center flex-1">
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight text-foreground whitespace-nowrap" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
-                Warner Wireless Gears
-              </h1>
-            </div>
+            <div className="flex-1" />
             <div className="flex items-center gap-2">
               <HeaderUserMenu />
               <ThemeToggle />
               <CartButton />
             </div>
           </header>
-          <div className="relative w-full h-48 md:h-64 overflow-hidden">
+          <div className="relative w-full h-24 md:h-28 overflow-hidden">
             <img 
               src={heroBanner} 
               alt="Warner Wireless Gears - Premium Wholesale Accessories" 
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-transparent flex items-center">
-              <div className="px-8 md:px-12">
-                <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight drop-shadow-lg" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
+              <div className="px-6 md:px-10">
+                <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight drop-shadow-lg" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
                   Warner Wireless Gears
                 </h2>
-                <p className="text-white/90 text-lg md:text-xl mt-2 max-w-md">
-                  Premium wholesale accessories for retailers
+                <p className="text-white/90 text-sm md:text-base font-medium">
+                  Premium B2B Wholesale Distributors
+                </p>
+                <p className="text-white/70 text-xs md:text-sm mt-0.5">
+                  Serving gas stations, convenience stores, smoke shops, gift shops and retailers
                 </p>
               </div>
             </div>

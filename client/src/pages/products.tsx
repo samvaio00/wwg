@@ -36,13 +36,11 @@ import type { Product, Category } from "@shared/schema";
 
 const sortOptions = [
   { value: "newest", label: "Newest" },
-  { value: "newest-instock", label: "Newest (In Stock)" },
   { value: "price-low", label: "Price: Low to High" },
-  { value: "price-low-instock", label: "Price: Low (In Stock)" },
   { value: "price-high", label: "Price: High to Low" },
-  { value: "price-high-instock", label: "Price: High (In Stock)" },
   { value: "name-asc", label: "Name: A to Z" },
   { value: "name-desc", label: "Name: Z to A" },
+  { value: "instock", label: "In Stock Only" },
 ];
 
 function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {

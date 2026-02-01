@@ -308,17 +308,15 @@ export default function WhatsNewPage() {
           </div>
 
           <Select value="newest" onValueChange={() => {}}>
-            <SelectTrigger className="w-[160px] h-9" data-testid="select-sort-whats-new">
+            <SelectTrigger className="w-[140px] h-9" data-testid="select-sort-whats-new">
               <SelectValue placeholder="Sort" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="newest">Newest</SelectItem>
-              <SelectItem value="newest-instock">Newest (In Stock)</SelectItem>
               <SelectItem value="price-low">Price: Low</SelectItem>
-              <SelectItem value="price-low-instock">Price: Low (In Stock)</SelectItem>
               <SelectItem value="price-high">Price: High</SelectItem>
-              <SelectItem value="price-high-instock">Price: High (In Stock)</SelectItem>
               <SelectItem value="name-asc">Name: A-Z</SelectItem>
+              <SelectItem value="instock">In Stock Only</SelectItem>
             </SelectContent>
           </Select>
         </div>

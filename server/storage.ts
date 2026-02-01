@@ -338,7 +338,8 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions));
 
     // Consolidate: one entry per group, individual items stay as-is
-    const groupMap = new Map<string, Product>();
+    // Track group stock: if ALL variants have 0 stock, mark group as out of stock
+    const groupMap = new Map<string, Product & { _allVariantsOutOfStock: boolean }>();
     const ungrouped: Product[] = [];
 
     for (const product of allProducts) {
@@ -348,6 +349,7 @@ export class DatabaseStorage implements IStorage {
           const representative = {
             ...product,
             name: product.zohoGroupName,
+            _allVariantsOutOfStock: (product.stockQuantity || 0) <= 0,
           };
           groupMap.set(product.zohoGroupId, representative);
         } else {
@@ -359,9 +361,20 @@ export class DatabaseStorage implements IStorage {
             existing.basePrice = product.basePrice;
           }
           existing.stockQuantity = (existing.stockQuantity || 0) + (product.stockQuantity || 0);
+          // If any variant has stock, the group is NOT all out of stock
+          if ((product.stockQuantity || 0) > 0) {
+            existing._allVariantsOutOfStock = false;
+          }
         }
       } else {
         ungrouped.push(product);
+      }
+    }
+    
+    // Set stockQuantity to 0 for groups where all variants are out of stock
+    for (const [, group] of groupMap) {
+      if (group._allVariantsOutOfStock) {
+        group.stockQuantity = 0;
       }
     }
 

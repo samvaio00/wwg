@@ -92,6 +92,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
   const isOutOfStock = stockQty <= 0;
   const isLowStock = stockQty > 0 && stockQty <= (product.lowStockThreshold || 10);
   const isGroupedProduct = !!product.zohoGroupId;
+  const isGroupOutOfStock = isGroupedProduct && isOutOfStock;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -116,9 +117,9 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
 
   return (
     <Card 
-      className={`overflow-hidden cursor-pointer ${isOutOfStock ? "opacity-60" : "hover-elevate"}`} 
+      className={`overflow-hidden ${isGroupOutOfStock ? "opacity-60 cursor-not-allowed" : isOutOfStock ? "opacity-60 cursor-pointer" : "cursor-pointer hover-elevate"}`} 
       data-testid={`card-product-${product.id}`}
-      onClick={() => onProductClick(product)}
+      onClick={() => !isGroupOutOfStock && onProductClick(product)}
     >
       <div className="h-32 relative bg-muted overflow-hidden">
         <ProductImage 
@@ -164,15 +165,25 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
           <Button 
             className="w-full h-7"
             size="sm"
-            variant="outline"
+            variant={isGroupOutOfStock ? "destructive" : "outline"}
+            disabled={isGroupOutOfStock}
             onClick={(e) => {
               e.stopPropagation();
-              onProductClick(product);
+              if (!isGroupOutOfStock) onProductClick(product);
             }}
             data-testid={`button-view-variants-${product.id}`}
           >
-            <Eye className="h-3 w-3 mr-1" />
-            View Variants
+            {isGroupOutOfStock ? (
+              <>
+                <Package className="h-3 w-3 mr-1" />
+                Out of Stock
+              </>
+            ) : (
+              <>
+                <Eye className="h-3 w-3 mr-1" />
+                View Variants
+              </>
+            )}
           </Button>
         ) : (
           <div className="flex items-center gap-2">

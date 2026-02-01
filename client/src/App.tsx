@@ -139,7 +139,7 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
-          <header className="sticky top-0 z-50 flex h-14 items-center justify-between gap-4 border-b bg-background px-4">
+          <header className="sticky top-0 z-50 flex h-14 items-center justify-between gap-4 glass-header px-4">
             <div className="flex items-center gap-2">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <AICartBuilder />
@@ -157,7 +157,7 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               alt="Warner Wireless Gears - Premium Wholesale Accessories" 
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-transparent flex items-center">
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-900/90 via-purple-800/70 to-blue-600/40 dark:from-violet-950/95 dark:via-fuchsia-900/80 dark:to-cyan-700/50 flex items-center">
               <div className="px-6 md:px-10">
                 <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight drop-shadow-lg" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
                   Warner Wireless Gears

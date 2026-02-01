@@ -181,7 +181,7 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               <CartButton />
             </div>
           </header>
-          <div className="relative w-full h-[88px] md:h-[120px] overflow-hidden">
+          <div className="relative w-full h-[88px] md:h-[120px] overflow-hidden -mt-1">
             <div className="absolute inset-0 bg-gradient-to-r from-sky-100 via-blue-50 to-amber-50" />
             {/* Subtle floating product images - same for light and dark mode */}
             <img src={heroSunglasses} alt="" className="hidden md:block absolute right-[45%] top-[10%] h-16 w-16 object-contain opacity-[0.12] rotate-[-8deg] mix-blend-multiply" />

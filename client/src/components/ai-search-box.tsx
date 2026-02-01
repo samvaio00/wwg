@@ -5,6 +5,11 @@ import { Sparkles, Loader2, ShoppingCart, TrendingUp } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface AISearchBoxProps {
   value: string;
@@ -89,7 +94,7 @@ export function AISearchBox({
   onChange,
   onSearch,
   isSearching = false,
-  placeholder = "AI Search: try 'cheap cables' or 'add 5 headsets to cart'",
+  placeholder = "AI Search",
   testId = "input-ai-search",
   onActionExecuted,
 }: AISearchBoxProps) {
@@ -258,46 +263,53 @@ export function AISearchBox({
   const isTopSellersAction = parsed.isTopSellers;
 
   return (
-    <div className="relative w-80 lg:w-96">
-      <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary/70 transition-colors" />
-      <Input
-        type="search"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        className={`pl-9 pr-24 h-9 focus-ring-animate transition-all ${
-          showActionIndicator ? "border-primary/50 bg-primary/5" : ""
-        }`}
-        data-testid={testId}
-        disabled={isProcessingAction}
-      />
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-        {isProcessingAction && (
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-        )}
-        {showActionIndicator && !isProcessingAction && (
-          <Badge variant="default" className="text-xs gap-1 badge-pop">
-            {isTopSellersAction ? (
-              <>
-                <TrendingUp className="h-3 w-3" />
-                Top Sellers
-              </>
-            ) : (
-              <>
-                <ShoppingCart className="h-3 w-3" />
-                Action
-              </>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="relative w-80 lg:w-96 ml-24">
+          <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary transition-colors" />
+          <Input
+            type="search"
+            placeholder={placeholder}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className={`pl-9 pr-24 h-9 focus-ring-animate transition-all ${
+              showActionIndicator ? "border-primary/50 bg-primary/5" : ""
+            }`}
+            data-testid={testId}
+            disabled={isProcessingAction}
+          />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {isProcessingAction && (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
             )}
-          </Badge>
-        )}
-        {isSearching && !isProcessingAction && !showActionIndicator && (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        )}
-        {!isSearching && !showActionIndicator && !isProcessingAction && value.length === 0 && (
-          <span className="text-xs text-muted-foreground">Press Enter</span>
-        )}
-      </div>
-    </div>
+            {showActionIndicator && !isProcessingAction && (
+              <Badge variant="default" className="text-xs gap-1 badge-pop">
+                {isTopSellersAction ? (
+                  <>
+                    <TrendingUp className="h-3 w-3" />
+                    Top Sellers
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="h-3 w-3" />
+                    Action
+                  </>
+                )}
+              </Badge>
+            )}
+            {isSearching && !isProcessingAction && !showActionIndicator && (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+            {!isSearching && !showActionIndicator && !isProcessingAction && value.length === 0 && (
+              <span className="text-xs text-muted-foreground">Press Enter</span>
+            )}
+          </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs">
+        <p className="text-sm">Try: "cheap cables" or "add 5 headsets to cart"</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }

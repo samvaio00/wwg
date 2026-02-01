@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useAISearch } from "@/hooks/use-ai-search";
 import { ProductDetailModal } from "@/components/product-detail-modal";
 import { 
   Search, 
@@ -23,7 +24,8 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Tag,
-  Eye
+  Eye,
+  Sparkles
 } from "lucide-react";
 import {
   Select,
@@ -275,11 +277,21 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState(urlCategory);
   const [sort, setSort] = useState("newest");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [inStockOnly, setInStockOnly] = useState(false);
+
+  // AI-powered search
+  const { 
+    results: aiSearchResults, 
+    isSearching: isAISearching,
+    isAISearchActive,
+    searchType,
+  } = useAISearch(search, { 
+    category: category !== "all" ? category : undefined,
+    minQueryLength: 2,
+  });
 
   // Fetch categories from Zoho
   const { data: categoriesData } = useQuery<{ categories: Category[] }>({
@@ -304,7 +316,7 @@ export default function ProductsPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, category, sort, inStockOnly]);
+  }, [search, category, sort, inStockOnly]);
 
   const handleCategoryChange = (value: string) => {
     setCategory(value);
@@ -316,18 +328,8 @@ export default function ProductsPage() {
     }
   };
 
-  // Debounce search
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    const timeoutId = setTimeout(() => {
-      setDebouncedSearch(value);
-    }, 300);
-    return () => clearTimeout(timeoutId);
-  };
-
-  // Build query params
+  // Build query params for non-AI search (when no search term)
   const queryParams = new URLSearchParams();
-  if (debouncedSearch) queryParams.set("search", debouncedSearch);
   if (category !== "all") queryParams.set("category", category);
   if (sort === "price-low") {
     queryParams.set("sortBy", "price");
@@ -345,7 +347,8 @@ export default function ProductsPage() {
   queryParams.set("page", page.toString());
   queryParams.set("limit", "12");
 
-  const { data, isLoading, error } = useQuery<{ products: Product[]; pagination: PaginationInfo }>({
+  // Fetch products from regular API (used when no AI search is active)
+  const { data, isLoading: isRegularLoading, error } = useQuery<{ products: Product[]; pagination: PaginationInfo }>({
     queryKey: ["/api/products", queryParams.toString()],
     queryFn: async () => {
       const url = `/api/products${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
@@ -353,9 +356,27 @@ export default function ProductsPage() {
       if (!res.ok) throw new Error("Failed to fetch products");
       return res.json();
     },
+    enabled: !isAISearchActive,
   });
 
-  const pagination = data?.pagination;
+  // Use AI search results when searching, otherwise use regular API results
+  const displayProducts = isAISearchActive 
+    ? aiSearchResults.map(p => ({
+        ...p,
+        stockQuantity: 0,
+        minOrderQuantity: 1,
+        isActive: true,
+        isOnline: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as Product)).slice((page - 1) * 12, page * 12)
+    : data?.products || [];
+
+  const totalPages = isAISearchActive 
+    ? Math.ceil(aiSearchResults.length / 12)
+    : data?.pagination?.totalPages || 1;
+
+  const isLoading = isAISearchActive ? isAISearching : isRegularLoading;
 
   const addToCartMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
@@ -386,9 +407,8 @@ export default function ProductsPage() {
     addToCartMutation.mutate({ productId, quantity });
   };
 
-  // Backend now returns consolidated products (groups as single tiles)
   // Apply client-side filtering for in-stock only toggle
-  const products = (data?.products || []).filter(p => {
+  const products = displayProducts.filter(p => {
     if (inStockOnly && (p.stockQuantity || 0) <= 0) return false;
     return true;
   });
@@ -407,12 +427,18 @@ export default function ProductsPage() {
           <div className="relative w-80 lg:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <Input
-              placeholder="Search products..."
+              placeholder="Try: 'cheap cables' or 'sunglasses under $5'..."
               value={search}
-              onChange={(e) => handleSearchChange(e.target.value)}
+              onChange={(e) => setSearch(e.target.value)}
               className="pl-10 h-9"
               data-testid="input-search"
             />
+            {isAISearchActive && (
+              <Badge variant="secondary" className="absolute right-2 top-1/2 -translate-y-1/2 text-xs gap-1">
+                <Sparkles className="h-3 w-3" />
+                AI
+              </Badge>
+            )}
           </div>
           
           <div className="flex items-center gap-1">

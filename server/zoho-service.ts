@@ -909,26 +909,19 @@ export async function syncItemGroupsFromZoho(): Promise<{ synced: number; update
       console.log(`[Zoho Item Groups Sync] Processing page ${page}, found ${itemGroups.length} groups`);
 
       for (const group of itemGroups) {
-        if (group.status !== "active") {
-          continue;
-        }
-
         try {
-          // Fetch full group details to get all items
-          const detailResponse = await fetchZohoItemGroupDetail(group.group_id);
-          const groupDetail = detailResponse.item_group;
-
-          if (!groupDetail || !groupDetail.items || groupDetail.items.length === 0) {
+          // List response already includes items array
+          if (!group.items || group.items.length === 0) {
             continue;
           }
 
           // Update all products that belong to this group
-          for (const item of groupDetail.items) {
+          for (const item of group.items) {
             const updateResult = await db
               .update(products)
               .set({
-                zohoGroupId: groupDetail.group_id,
-                zohoGroupName: groupDetail.group_name,
+                zohoGroupId: group.group_id,
+                zohoGroupName: group.group_name,
                 updatedAt: new Date(),
               })
               .where(eq(products.zohoItemId, item.item_id));

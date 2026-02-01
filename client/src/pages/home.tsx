@@ -349,13 +349,16 @@ function CustomerHomePage() {
           </div>
 
           <Select value="newest" onValueChange={() => {}}>
-            <SelectTrigger className="w-[130px] h-9" data-testid="select-sort-home">
+            <SelectTrigger className="w-[160px] h-9" data-testid="select-sort-home">
               <SelectValue placeholder="Sort" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="newest">Newest</SelectItem>
+              <SelectItem value="newest-instock">Newest (In Stock)</SelectItem>
               <SelectItem value="price-low">Price: Low</SelectItem>
+              <SelectItem value="price-low-instock">Price: Low (In Stock)</SelectItem>
               <SelectItem value="price-high">Price: High</SelectItem>
+              <SelectItem value="price-high-instock">Price: High (In Stock)</SelectItem>
               <SelectItem value="name-asc">Name: A-Z</SelectItem>
             </SelectContent>
           </Select>

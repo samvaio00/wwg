@@ -121,7 +121,7 @@ export function AICartBuilder() {
       <Tooltip>
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
-            <Button size="icon" className="bg-teal-500 hover:bg-teal-600 text-white" data-testid="button-ai-cart-builder">
+            <Button size="icon" variant="ghost" data-testid="button-ai-cart-builder">
               <Sparkles className="h-4 w-4" />
             </Button>
           </DialogTrigger>

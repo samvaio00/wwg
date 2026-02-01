@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ShoppingCart, User, LogOut, Settings } from "lucide-react";
+import heroBanner from "@/assets/images/hero-banner.png";
 
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
@@ -144,7 +145,7 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               <AICartBuilder />
             </div>
             <div className="hidden md:flex items-center justify-center flex-1">
-              <h1 className="text-3xl md:text-4xl font-black tracking-tight bg-gradient-to-r from-red-500 via-blue-500 to-green-500 bg-[length:200%_auto] bg-clip-text text-transparent animate-gradient-flow whitespace-nowrap drop-shadow-sm" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight text-foreground whitespace-nowrap" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
                 Warner Wireless Gears
               </h1>
             </div>
@@ -154,6 +155,23 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               <CartButton />
             </div>
           </header>
+          <div className="relative w-full h-48 md:h-64 overflow-hidden">
+            <img 
+              src={heroBanner} 
+              alt="Warner Wireless Gears - Premium Wholesale Accessories" 
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-transparent flex items-center">
+              <div className="px-8 md:px-12">
+                <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight drop-shadow-lg" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
+                  Warner Wireless Gears
+                </h2>
+                <p className="text-white/90 text-lg md:text-xl mt-2 max-w-md">
+                  Premium wholesale accessories for retailers
+                </p>
+              </div>
+            </div>
+          </div>
           <main className="flex-1 overflow-auto p-6">
             {children}
           </main>

@@ -32,13 +32,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import type { Product, Category } from "@shared/schema";
 
 const sortOptions = [
   { value: "newest", label: "Newest" },
+  { value: "newest-instock", label: "Newest (In Stock)" },
   { value: "price-low", label: "Price: Low to High" },
+  { value: "price-low-instock", label: "Price: Low (In Stock)" },
   { value: "price-high", label: "Price: High to Low" },
+  { value: "price-high-instock", label: "Price: High (In Stock)" },
   { value: "name-asc", label: "Name: A to Z" },
   { value: "name-desc", label: "Name: Z to A" },
 ];
@@ -425,7 +427,7 @@ export default function ProductsPage() {
           <div className="flex items-center gap-1">
             <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
             <Select value={sort} onValueChange={setSort}>
-              <SelectTrigger className="w-[130px] h-9" data-testid="select-sort">
+              <SelectTrigger className="w-[160px] h-9" data-testid="select-sort">
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>
@@ -436,21 +438,6 @@ export default function ProductsPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="in-stock-only"
-              checked={inStockOnly}
-              onCheckedChange={(checked) => setInStockOnly(checked === true)}
-              data-testid="checkbox-in-stock-only"
-            />
-            <label
-              htmlFor="in-stock-only"
-              className="text-sm font-medium leading-none cursor-pointer select-none whitespace-nowrap"
-            >
-              In Stock
-            </label>
           </div>
         </div>
       </div>

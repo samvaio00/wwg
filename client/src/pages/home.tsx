@@ -319,11 +319,11 @@ function CustomerHomePage() {
         </div>
 
         <div className="flex gap-2 items-center flex-wrap">
-          <div className="relative w-48 lg:w-56">
+          <div className="relative w-56 lg:w-64">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search..."
+              placeholder="Search products..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-8 h-9"
@@ -347,6 +347,18 @@ function CustomerHomePage() {
               </SelectContent>
             </Select>
           </div>
+
+          <Select value="newest" onValueChange={() => {}}>
+            <SelectTrigger className="w-[130px] h-9" data-testid="select-sort-home">
+              <SelectValue placeholder="Sort" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest</SelectItem>
+              <SelectItem value="price-low">Price: Low</SelectItem>
+              <SelectItem value="price-high">Price: High</SelectItem>
+              <SelectItem value="name-asc">Name: A-Z</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

@@ -394,10 +394,10 @@ export default function ProductsPage() {
         </div>
 
         <div className="flex gap-2 items-center flex-wrap">
-          <div className="relative w-48 lg:w-56">
+          <div className="relative w-56 lg:w-64">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search..."
+              placeholder="Search products..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-8 h-9"

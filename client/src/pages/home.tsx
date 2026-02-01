@@ -537,58 +537,17 @@ function CustomerHomePage() {
 function AdminDashboard() {
   const { user } = useAuth();
 
-  const getStatusBadge = () => {
-    if (!user) return null;
-    
-    switch (user.status) {
-      case "approved":
-        return <Badge variant="default" data-testid="badge-status-approved"><CheckCircle2 className="h-3 w-3 mr-1" /> Approved</Badge>;
-      case "pending":
-        return <Badge variant="secondary" data-testid="badge-status-pending"><Clock className="h-3 w-3 mr-1" /> Pending Approval</Badge>;
-      case "rejected":
-        return <Badge variant="destructive" data-testid="badge-status-rejected"><AlertCircle className="h-3 w-3 mr-1" /> Rejected</Badge>;
-      default:
-        return null;
-    }
-  };
-
-  const getRoleBadge = () => {
-    if (!user) return null;
-    
-    if (user.role === "admin") {
-      return <Badge variant="default" data-testid="badge-role-admin">Admin</Badge>;
-    }
-    return null;
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back, {user?.contactName || user?.businessName || "User"}
+            Welcome back, {user?.contactName || user?.businessName || "Admin"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {getStatusBadge()}
-          {getRoleBadge()}
-        </div>
+        <Badge variant="default" data-testid="badge-role-admin">Admin</Badge>
       </div>
-
-      {user?.status === "pending" && (
-        <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
-          <CardContent className="flex items-center gap-4 py-4">
-            <Clock className="h-8 w-8 text-amber-600" />
-            <div>
-              <h3 className="font-semibold text-amber-900 dark:text-amber-100">Account Pending Approval</h3>
-              <p className="text-sm text-amber-700 dark:text-amber-300">
-                Your account is being reviewed. You'll receive access to wholesale pricing once approved.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -640,12 +599,29 @@ function AdminDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common tasks for your account</CardDescription>
+            <CardDescription>Common administrative tasks</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Product browsing and ordering will be available in future phases.
-            </p>
+            <div className="flex flex-col gap-2">
+              <Link href="/admin/users">
+                <Button variant="outline" className="w-full justify-start" data-testid="button-manage-users">
+                  <Users className="h-4 w-4 mr-2" />
+                  Manage Users
+                </Button>
+              </Link>
+              <Link href="/admin/orders">
+                <Button variant="outline" className="w-full justify-start" data-testid="button-manage-orders">
+                  <Package className="h-4 w-4 mr-2" />
+                  Manage Orders
+                </Button>
+              </Link>
+              <Link href="/admin/analytics">
+                <Button variant="outline" className="w-full justify-start" data-testid="button-view-analytics">
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  View Analytics
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
 
@@ -665,12 +641,126 @@ function AdminDashboard() {
   );
 }
 
+function StaffDashboard() {
+  const { user } = useAuth();
+
+  const { data: pendingUsersData } = useQuery<{ users: Array<{ id: string }> }>({
+    queryKey: ['/api/admin/users/pending'],
+  });
+
+  const { data: ordersData } = useQuery<{ orders: Array<{ id: string; status: string }> }>({
+    queryKey: ['/api/admin/orders'],
+  });
+
+  const { data: cartsData } = useQuery<{ carts: Array<{ id: string }> }>({
+    queryKey: ['/api/admin/active-carts'],
+  });
+
+  const pendingUsersCount = pendingUsersData?.users?.length || 0;
+  const pendingOrdersCount = ordersData?.orders?.filter(o => o.status === 'pending')?.length || 0;
+  const activeCartsCount = cartsData?.carts?.length || 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Staff Dashboard</h1>
+          <p className="text-muted-foreground">
+            Welcome back, {user?.contactName || user?.businessName || "Staff"}
+          </p>
+        </div>
+        <Badge variant="secondary" className="bg-blue-600 dark:bg-blue-700 text-white" data-testid="badge-role-staff">Staff</Badge>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Link href="/admin/users">
+          <Card className="hover-elevate cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Pending User Approvals</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{pendingUsersCount}</div>
+              <p className="text-xs text-muted-foreground">Users awaiting approval</p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/admin/orders">
+          <Card className="hover-elevate cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Pending Order Approvals</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{pendingOrdersCount}</div>
+              <p className="text-xs text-muted-foreground">Orders awaiting approval</p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/admin/carts">
+          <Card className="hover-elevate cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Active Carts</CardTitle>
+              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{activeCartsCount}</div>
+              <p className="text-xs text-muted-foreground">Customers with items in cart</p>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>Your available tasks</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex flex-col gap-2">
+            <Link href="/admin/users">
+              <Button variant="outline" className="w-full justify-start" data-testid="button-user-approvals">
+                <Users className="h-4 w-4 mr-2" />
+                User Approvals
+              </Button>
+            </Link>
+            <Link href="/admin/orders">
+              <Button variant="outline" className="w-full justify-start" data-testid="button-order-approvals">
+                <Package className="h-4 w-4 mr-2" />
+                Order Approvals
+              </Button>
+            </Link>
+            <Link href="/admin/carts">
+              <Button variant="outline" className="w-full justify-start" data-testid="button-active-carts">
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                View Active Carts
+              </Button>
+            </Link>
+            <Link href="/admin/email-templates">
+              <Button variant="outline" className="w-full justify-start" data-testid="button-email-templates">
+                <Star className="h-4 w-4 mr-2" />
+                Email Templates
+              </Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const { user } = useAuth();
   
-  // Show admin dashboard for admins and staff, customer homepage for customers
-  if (user?.role === "admin" || user?.role === "staff") {
+  // Show admin dashboard for admins, staff dashboard for staff, customer homepage for customers
+  if (user?.role === "admin") {
     return <AdminDashboard />;
+  }
+  
+  if (user?.role === "staff") {
+    return <StaffDashboard />;
   }
   
   return <CustomerHomePage />;

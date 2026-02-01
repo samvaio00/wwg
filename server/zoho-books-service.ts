@@ -816,7 +816,7 @@ export async function syncTopSellersFromZoho(): Promise<TopSellersSyncResult> {
           productId: product.id,
           zohoItemId: item.zohoItemId,
           zohoGroupId: product.zohoGroupId || null,
-          totalQuantitySold: item.quantity,
+          totalQuantitySold: Math.round(item.quantity),
           totalRevenue: item.revenue.toFixed(2),
           orderCount: item.orderCount,
           rank: i + 1,

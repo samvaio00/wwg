@@ -18,7 +18,7 @@ import { users, products, orders } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
 import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, syncItemGroupsFromZoho } from "./zoho-service";
-import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, type ZohoLineItem } from "./zoho-books-service";
+import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, syncTopSellersFromZoho, type ZohoLineItem } from "./zoho-books-service";
 import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
 import { sendShipmentNotification, sendDeliveryNotification } from "./email-service";
@@ -1765,8 +1765,8 @@ export async function registerRoutes(
   app.post("/api/admin/scheduler/sync", requireAdmin, async (req, res) => {
     try {
       const { type = "all" } = req.body;
-      if (!["zoho", "embeddings", "customers", "all"].includes(type)) {
-        return res.status(400).json({ message: "Invalid sync type. Use: zoho, embeddings, customers, or all" });
+      if (!["zoho", "embeddings", "customers", "topsellers", "all"].includes(type)) {
+        return res.status(400).json({ message: "Invalid sync type. Use: zoho, embeddings, customers, topsellers, or all" });
       }
       const results = await triggerManualSync(type);
       res.json({ success: true, results });
@@ -1775,6 +1775,21 @@ export async function registerRoutes(
       res.status(500).json({ 
         success: false, 
         message: error instanceof Error ? error.message : "Sync failed" 
+      });
+    }
+  });
+
+  // Trigger top sellers sync from Zoho Books
+  app.post("/api/admin/sync/top-sellers", requireAdmin, async (_req, res) => {
+    try {
+      console.log("[Admin] Triggering top sellers sync...");
+      const result = await syncTopSellersFromZoho();
+      res.json(result);
+    } catch (error) {
+      console.error("Top sellers sync error:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: error instanceof Error ? error.message : "Top sellers sync failed" 
       });
     }
   });

@@ -67,6 +67,7 @@ export const SyncType = {
   ZOHO_INVENTORY: 'zoho_inventory',
   ZOHO_CUSTOMERS: 'zoho_customers',
   EMBEDDINGS: 'embeddings',
+  TOP_SELLERS: 'top_sellers',
 } as const;
 
 export type SyncTypeValue = typeof SyncType[keyof typeof SyncType];
@@ -535,6 +536,43 @@ export const zohoApiLogs = pgTable("zoho_api_logs", {
 
 export type ZohoApiLog = typeof zohoApiLogs.$inferSelect;
 export type InsertZohoApiLog = typeof zohoApiLogs.$inferInsert;
+
+// ================================================================
+// TOP SELLERS CACHE TABLE (Zoho Books sales data)
+// ================================================================
+
+export const topSellersCache = pgTable("top_sellers_cache", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Product identifier - can be productId or groupId
+  productId: varchar("product_id", { length: 36 }),
+  zohoItemId: text("zoho_item_id"),
+  zohoGroupId: text("zoho_group_id"),
+  
+  // Sales data
+  totalQuantitySold: integer("total_quantity_sold").default(0),
+  totalRevenue: decimal("total_revenue", { precision: 12, scale: 2 }).default("0"),
+  orderCount: integer("order_count").default(0),
+  
+  // Ranking
+  rank: integer("rank").notNull(),
+  
+  // Period info
+  periodStartDate: timestamp("period_start_date").notNull(),
+  periodEndDate: timestamp("period_end_date").notNull(),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  productIdIdx: index("top_sellers_product_id_idx").on(table.productId),
+  zohoItemIdIdx: index("top_sellers_zoho_item_id_idx").on(table.zohoItemId),
+  zohoGroupIdIdx: index("top_sellers_zoho_group_id_idx").on(table.zohoGroupId),
+  rankIdx: index("top_sellers_rank_idx").on(table.rank),
+}));
+
+export type TopSellerCache = typeof topSellersCache.$inferSelect;
+export type InsertTopSellerCache = typeof topSellersCache.$inferInsert;
 
 // ================================================================
 // PRICE LISTS TABLE (Zoho price list sync)

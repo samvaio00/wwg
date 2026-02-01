@@ -338,22 +338,35 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual", force
     let retryCount = 0;
     const maxRetries = 3;
     
-    console.log(`[Zoho Sync] Starting ${isIncremental ? 'incremental' : 'full'} sync${isIncremental ? ` (since ${lastSyncTime?.toISOString()})` : ''}`);
+    console.log(`[Zoho Sync] Starting ${isIncremental ? 'incremental (server-side filtered)' : 'full'} sync${isIncremental ? ` (since ${lastSyncTime?.toISOString()})` : ''}`);
 
     while (hasMore) {
       try {
-        const response = await fetchZohoItems({ page, sortByModified: true });
+        // Pass lastModifiedSince for server-side filtering during incremental sync
+        // This reduces API payload by only fetching items modified since last sync
+        const response = await fetchZohoItems({ 
+          page, 
+          sortByModified: true,
+          lastModifiedSince: isIncremental ? lastSyncTime! : undefined
+        });
         const items = response.items || [];
         result.total += items.length;
         retryCount = 0;
+        
+        if (isIncremental && items.length > 0) {
+          console.log(`[Zoho Sync] Incremental sync received ${items.length} modified items on page ${page}`);
+          // Warn if incremental sync returns many items (API filter may not be working)
+          if (items.length >= 150 && page === 1) {
+            console.warn(`[Zoho Sync] WARNING: Incremental sync returned ${items.length} items - API filter may not be applied. Consider verifying Zoho supports last_modified_time_start parameter.`);
+          }
+        }
 
         for (const item of items) {
           try {
             const showInOnlineStore = item.show_in_storefront === true;
             
-            // Always track online items for delisting check (before status check)
-            // This ensures we don't delist items that are still in storefront even if inactive
-            if (showInOnlineStore) {
+            // Track online items for delisting check (only during full sync)
+            if (!isIncremental && showInOnlineStore) {
               onlineZohoItemIds.push(item.item_id);
             }
 
@@ -362,12 +375,13 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual", force
               continue;
             }
             
-            // For incremental sync, skip items that haven't changed since last sync
+            // Client-side safety net: skip items not modified since last sync
+            // This handles cases where Zoho API ignores the last_modified_time_start param
             if (isIncremental && lastSyncTime && item.last_modified_time) {
               const itemModifiedAt = new Date(item.last_modified_time);
               if (itemModifiedAt < lastSyncTime) {
                 result.skipped++;
-                continue; // Skip updating this item, but continue collecting online IDs
+                continue;
               }
             }
 
@@ -467,7 +481,9 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual", force
 
     // Delist products that are no longer in Zoho's online store
     // This handles products that were deleted or made inactive in Zoho
-    if (onlineZohoItemIds.length > 0) {
+    // IMPORTANT: Only run during full syncs - incremental syncs don't have complete item list
+    if (!isIncremental && onlineZohoItemIds.length > 0) {
+      console.log(`[Zoho Sync] Running delisting check (full sync with ${onlineZohoItemIds.length} online items)`);
       const allSyncedProducts = await db
         .select({ id: products.id, zohoItemId: products.zohoItemId, isOnline: products.isOnline })
         .from(products)
@@ -484,6 +500,8 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual", force
           console.log(`[Zoho Sync] Delisted product ${prod.id} (Zoho item ${prod.zohoItemId} no longer online)`);
         }
       }
+    } else if (isIncremental) {
+      console.log(`[Zoho Sync] Skipping delisting check (incremental sync - use full sync to detect removed items)`);
     }
 
     const durationMs = Date.now() - startTime;

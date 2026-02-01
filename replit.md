@@ -81,10 +81,20 @@ The platform is built with a modern web stack:
 ## Scheduler Configuration
 
 - **Zoho Inventory Sync**: Dynamic intervals - 2 hours during business hours (8 AM - 6 PM weekdays), 6 hours off-hours/weekends.
+  - **Server-Side Incremental Sync**: Uses Zoho's `last_modified_time_start` API parameter to only fetch items modified since last sync, significantly reducing API payload and bandwidth.
+  - **Full Sync**: Triggered on first run or via manual "Force Full Sync" button. Only full syncs can detect and delist items removed from Zoho.
+  - **Delisting**: Products removed from Zoho's storefront are only detected during full syncs. Recommend periodic full sync to catch removals.
 - **Customer Status Sync**: Every 60 minutes.
 - **Embeddings Update**: Every 120 minutes.
 - **Top Sellers Sync**: Weekly on Sundays at midnight (fetches last 30 days of invoice data from Zoho Books).
 - **Email Campaigns**: Bi-weekly on Wednesday and Saturday at 9 AM. Templates must be approved by admin/staff before emails are sent.
+
+### Zoho Webhooks (Future Enhancement)
+For near-real-time sync, Zoho webhooks can be configured to notify the app when items change:
+1. In Zoho Inventory: Settings → Automation → Webhooks
+2. Create webhook for "Item" events (Created, Updated, Deleted)
+3. Set URL to: `https://your-domain.replit.app/api/webhooks/zoho/inventory`
+4. Requires paid Zoho plan and public app URL
 
 ## AI Email Campaigns
 

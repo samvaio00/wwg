@@ -25,6 +25,7 @@ import {
   TrendingUp,
   ShoppingCart,
   Mail,
+  RefreshCw,
 } from "lucide-react";
 import type { Category } from "@shared/schema";
 
@@ -58,6 +59,11 @@ const adminNavItems = [
     title: "Email Templates",
     url: "/admin/email-templates",
     icon: Mail,
+  },
+  {
+    title: "Zoho Status",
+    url: "/admin/zoho-status",
+    icon: RefreshCw,
   },
   {
     title: "Settings",

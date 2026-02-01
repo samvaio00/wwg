@@ -29,7 +29,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  ArrowDownCircle,
+  ArrowUpCircle
 } from "lucide-react";
 import {
   Select,
@@ -550,76 +552,6 @@ interface ZohoStats {
   };
 }
 
-function ZohoIntegrationStatus() {
-  const { data: zohoStats, isLoading } = useQuery<ZohoStats>({
-    queryKey: ['/api/admin/analytics/zoho-api-stats'],
-    refetchInterval: 60000,
-  });
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Zoho Integration Status</CardTitle>
-        <CardDescription>API calls and sync activity</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="text-sm text-muted-foreground">Loading...</div>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-3">
-              <h4 className="font-medium text-sm">Today</h4>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">API Calls</span>
-                  <span className="font-medium">{zohoStats?.today?.apiCalls || 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Successful</span>
-                  <span className="font-medium text-green-600">{zohoStats?.today?.successfulCalls || 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Failed</span>
-                  <span className="font-medium text-red-600">{zohoStats?.today?.failedCalls || 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Records Pulled</span>
-                  <span className="font-medium">{zohoStats?.today?.recordsPulled || 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Records Updated</span>
-                  <span className="font-medium">{zohoStats?.today?.recordsUpdated || 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Sync Operations</span>
-                  <span className="font-medium">{zohoStats?.today?.syncs || 0}</span>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <h4 className="font-medium text-sm">This Month</h4>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Total API Calls</span>
-                  <span className="font-medium">{zohoStats?.month?.apiCalls || 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Successful</span>
-                  <span className="font-medium text-green-600">{zohoStats?.month?.successfulCalls || 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Failed</span>
-                  <span className="font-medium text-red-600">{zohoStats?.month?.failedCalls || 0}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function AdminDashboard() {
   const { user } = useAuth();
 
@@ -639,10 +571,16 @@ function AdminDashboard() {
     queryKey: ['/api/admin/users'],
   });
 
+  const { data: zohoStats } = useQuery<ZohoStats>({
+    queryKey: ['/api/admin/analytics/zoho-api-stats'],
+  });
+
   const pendingUsersCount = pendingUsersData?.users?.length || 0;
   const pendingOrdersCount = ordersData?.orders?.filter(o => o.status === 'pending')?.length || 0;
   const activeCartsCount = cartsData?.carts?.length || 0;
   const adminStaffCount = usersData?.users?.filter(u => u.role === 'admin' || u.role === 'staff')?.length || 0;
+  const recordsPulled = zohoStats?.today?.recordsPulled || 0;
+  const recordsUpdated = zohoStats?.today?.recordsUpdated || 0;
 
   return (
     <div className="space-y-6">
@@ -710,7 +648,33 @@ function AdminDashboard() {
         </Link>
       </div>
 
-      <ZohoIntegrationStatus />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Link href="/admin/zoho-status">
+          <Card className="hover-elevate cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Records Received from Zoho</CardTitle>
+              <ArrowDownCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{recordsPulled}</div>
+              <p className="text-xs text-muted-foreground">New records pulled today</p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/admin/zoho-status">
+          <Card className="hover-elevate cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Records Sent to Zoho</CardTitle>
+              <ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{recordsUpdated}</div>
+              <p className="text-xs text-muted-foreground">Records updated today</p>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
     </div>
   );
 }

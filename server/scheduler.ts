@@ -99,11 +99,9 @@ export function getSchedulerStatus() {
       running: topSellersInterval !== null,
     },
     emailCampaigns: {
-      intervalMinutes: config.emailCampaignIntervalMinutes,
+      schedule: "Wed & Sat 9AM",
       lastRun: lastEmailCampaignRun,
-      nextRun: lastEmailCampaignRun && config.enabled
-        ? new Date(lastEmailCampaignRun.getTime() + config.emailCampaignIntervalMinutes * 60 * 1000)
-        : null,
+      nextRun: getNextEmailCampaignDate(),
       running: emailCampaignInterval !== null,
     },
   };
@@ -122,6 +120,40 @@ function getMsUntilNextSunday(): number {
   const now = new Date();
   const nextSunday = getNextSundayMidnight();
   return nextSunday.getTime() - now.getTime();
+}
+
+function getNextEmailCampaignDate(): Date {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const hour = now.getHours();
+  
+  let daysUntilNext: number;
+  
+  if (dayOfWeek === 3 && hour < 9) {
+    daysUntilNext = 0;
+  } else if (dayOfWeek < 3) {
+    daysUntilNext = 3 - dayOfWeek;
+  } else if (dayOfWeek === 3 || dayOfWeek === 4 || dayOfWeek === 5 || (dayOfWeek === 6 && hour < 9)) {
+    daysUntilNext = 6 - dayOfWeek;
+    if (daysUntilNext === 0 && hour >= 9) {
+      daysUntilNext = 4;
+    }
+  } else if (dayOfWeek === 6 && hour >= 9) {
+    daysUntilNext = 4;
+  } else {
+    daysUntilNext = 3;
+  }
+  
+  const nextDate = new Date(now);
+  nextDate.setDate(now.getDate() + daysUntilNext);
+  nextDate.setHours(9, 0, 0, 0);
+  return nextDate;
+}
+
+function getMsUntilNextEmailCampaign(): number {
+  const now = new Date();
+  const next = getNextEmailCampaignDate();
+  return next.getTime() - now.getTime();
 }
 
 async function runZohoSync() {
@@ -244,6 +276,24 @@ function scheduleNextTopSellersSync() {
   }, msUntilSunday);
 }
 
+function scheduleNextEmailCampaign() {
+  const msUntilNext = getMsUntilNextEmailCampaign();
+  const hoursUntil = Math.round(msUntilNext / (1000 * 60 * 60));
+  const nextDate = getNextEmailCampaignDate();
+  const dayName = nextDate.getDay() === 3 ? "Wednesday" : "Saturday";
+  console.log(`[Scheduler] Next email campaign scheduled in ${hoursUntil} hours (${dayName} 9 AM)`);
+  
+  emailCampaignInterval = setTimeout(async () => {
+    try {
+      await runEmailCampaigns();
+    } catch (error) {
+      console.error("[Scheduler] Email campaign failed, will retry next scheduled time:", error);
+    } finally {
+      scheduleNextEmailCampaign();
+    }
+  }, msUntilNext);
+}
+
 function scheduleNextZohoSync() {
   const interval = getCurrentSyncInterval();
   console.log(`[Scheduler] Next Zoho sync in ${interval} minutes (${isBusinessHours() ? 'business hours' : 'off-hours'})`);
@@ -296,12 +346,8 @@ export function startScheduler(newConfig?: Partial<SchedulerConfig>) {
   // Schedule weekly top sellers sync (Sundays at midnight)
   scheduleNextTopSellersSync();
 
-  // Schedule email campaigns
-  console.log(`[Scheduler] Email campaigns every ${config.emailCampaignIntervalMinutes} minutes`);
-  emailCampaignInterval = setInterval(
-    runEmailCampaigns,
-    config.emailCampaignIntervalMinutes * 60 * 1000
-  );
+  // Schedule email campaigns on Wednesday and Saturday at 9 AM
+  scheduleNextEmailCampaign();
 
   setTimeout(() => {
     console.log("[Scheduler] Running initial sync on startup...");
@@ -335,9 +381,9 @@ export function stopScheduler() {
     console.log("[Scheduler] Top sellers sync stopped");
   }
   if (emailCampaignInterval) {
-    clearInterval(emailCampaignInterval);
+    clearTimeout(emailCampaignInterval);
     emailCampaignInterval = null;
-    console.log("[Scheduler] Email campaigns interval stopped");
+    console.log("[Scheduler] Email campaigns stopped");
   }
 }
 

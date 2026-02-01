@@ -715,6 +715,50 @@ export const emailCampaignTracking = pgTable("email_campaign_tracking", {
 export type EmailCampaignTracking = typeof emailCampaignTracking.$inferSelect;
 
 // ================================================================
+// EMAIL CAMPAIGN TEMPLATES (admin-approved templates)
+// ================================================================
+
+export const EmailTemplateStatus = {
+  DRAFT: 'draft',
+  PENDING_APPROVAL: 'pending_approval',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+} as const;
+
+export type EmailTemplateStatusValue = typeof EmailTemplateStatus[keyof typeof EmailTemplateStatus];
+
+export const emailCampaignTemplates = pgTable("email_campaign_templates", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Template identification
+  campaignType: text("campaign_type").notNull(), // new_highlighted_items, new_skus, cart_abandonment
+  
+  // AI-generated content
+  subject: text("subject").notNull(),
+  headline: text("headline").notNull(),
+  introduction: text("introduction").notNull(),
+  callToAction: text("call_to_action").notNull(),
+  
+  // Prompt used to generate (for regeneration)
+  customPrompt: text("custom_prompt"),
+  
+  // Approval workflow
+  status: text("status").notNull().default(EmailTemplateStatus.DRAFT),
+  approvedById: varchar("approved_by_id", { length: 36 }).references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  
+  // Products associated with this template (for preview)
+  productIds: text("product_ids").array(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type EmailCampaignTemplate = typeof emailCampaignTemplates.$inferSelect;
+export type InsertEmailCampaignTemplate = typeof emailCampaignTemplates.$inferInsert;
+
+// ================================================================
 // EMAIL ACTION TOKENS TABLE (for approve/reject from email)
 // ================================================================
 

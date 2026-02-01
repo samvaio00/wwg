@@ -24,6 +24,7 @@ interface RegisterData {
   city?: string;
   state?: string;
   zipCode?: string;
+  emailOptIn?: boolean;
   certificateUrl?: string;
 }
 

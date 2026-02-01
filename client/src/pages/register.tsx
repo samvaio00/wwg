@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Building2, User, Phone, Mail, Lock, MapPin, CheckCircle, AlertCircle, ArrowLeft, CalendarDays, Upload, FileText, X } from "lucide-react";
+import { Loader2, Building2, User, Phone, Mail, Lock, MapPin, CheckCircle, AlertCircle, ArrowLeft, CalendarDays, Upload, FileText, X, BellRing } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { apiRequest } from "@/lib/queryClient";
 import wwgLogo from "@assets/wwg-logo_1769841225412.jpg";
 
@@ -48,11 +49,12 @@ const newCustomerSchema = z.object({
     const actualAge = monthDiff < 0 || (monthDiff === 0 && dayDiff < 0) ? age - 1 : age;
     return actualAge >= 21;
   }, "You must be at least 21 years old to register"),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  zipCode: z.string().optional(),
+  phone: z.string().min(1, "Phone number is required"),
+  address: z.string().min(1, "Address is required"),
+  city: z.string().min(1, "City is required"),
+  state: z.string().min(1, "State is required"),
+  zipCode: z.string().min(1, "ZIP code is required"),
+  emailOptIn: z.boolean().default(true),
   password: z.string().min(8, "Password must be at least 8 characters"),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -93,6 +95,7 @@ export default function RegisterPage() {
       city: "",
       state: "",
       zipCode: "",
+      emailOptIn: true,
       password: "",
       confirmPassword: "",
     },
@@ -221,6 +224,7 @@ export default function RegisterPage() {
         city: data.city,
         state: data.state,
         zipCode: data.zipCode,
+        emailOptIn: data.emailOptIn,
         certificateUrl,
       });
       toast({
@@ -612,6 +616,31 @@ export default function RegisterPage() {
                       )}
                     />
                   </div>
+
+                  <FormField
+                    control={newForm.control}
+                    name="emailOptIn"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
+                        <div className="space-y-0.5">
+                          <FormLabel className="flex items-center gap-2">
+                            <BellRing className="h-4 w-4 text-muted-foreground" />
+                            Email Communications
+                          </FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            Receive promotional emails, special offers, and new product announcements
+                          </p>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            data-testid="switch-email-opt-in"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
 
                   <div className="space-y-2">
                     <FormLabel className="flex items-center gap-2">

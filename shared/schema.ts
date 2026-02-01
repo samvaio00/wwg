@@ -804,6 +804,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   city: true,
   state: true,
   zipCode: true,
+  emailOptIn: true,
   certificateUrl: true,
 }).extend({
   email: z.string().email("Please enter a valid email address"),
@@ -816,6 +817,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   city: z.string().optional(),
   state: z.string().optional(),
   zipCode: z.string().optional(),
+  emailOptIn: z.boolean().optional().default(true),
   certificateUrl: z.string().optional(),
 });
 

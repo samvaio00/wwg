@@ -12,6 +12,8 @@ interface ZohoStats {
     recordsPulled: number;
     recordsUpdated: number;
     syncs: number;
+    customersSentToZoho: number;
+    ordersSentToZoho: number;
   };
   month: {
     apiCalls: number;
@@ -89,13 +91,26 @@ export default function AdminZohoStatus() {
                 </div>
 
                 <div className="space-y-2 pt-2 border-t">
+                  <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Received from Zoho</h5>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">Records Pulled (New)</span>
+                    <span className="text-sm">New Records Pulled</span>
                     <span className="font-medium">{zohoStats?.today?.recordsPulled || 0}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Records Updated</span>
                     <span className="font-medium">{zohoStats?.today?.recordsUpdated || 0}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t">
+                  <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sent to Zoho</h5>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">New Customers Added</span>
+                    <span className="font-medium">{zohoStats?.today?.customersSentToZoho || 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Orders Invoiced</span>
+                    <span className="font-medium">{zohoStats?.today?.ordersSentToZoho || 0}</span>
                   </div>
                 </div>
               </div>

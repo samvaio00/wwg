@@ -2111,6 +2111,7 @@ export async function registerRoutes(
       startOfDay.setHours(0, 0, 0, 0);
       const todayApiStats = await storage.getZohoApiCallStats(startOfDay);
       const todaySyncStats = await storage.getSyncRunStats(startOfDay);
+      const todayJobStats = await storage.getJobStats(startOfDay);
       
       // Stats for this month (start of month)
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -2124,6 +2125,8 @@ export async function registerRoutes(
           recordsPulled: todaySyncStats.totalCreated,
           recordsUpdated: todaySyncStats.totalUpdated,
           syncs: todaySyncStats.totalSyncs,
+          customersSentToZoho: todayJobStats.customersSent,
+          ordersSentToZoho: todayJobStats.ordersSent,
         },
         month: {
           apiCalls: monthApiStats.total,

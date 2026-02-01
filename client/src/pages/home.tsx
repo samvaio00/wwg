@@ -544,6 +544,8 @@ interface ZohoStats {
     recordsPulled: number;
     recordsUpdated: number;
     syncs: number;
+    customersSentToZoho: number;
+    ordersSentToZoho: number;
   };
   month: {
     apiCalls: number;
@@ -581,6 +583,8 @@ function AdminDashboard() {
   const adminStaffCount = usersData?.users?.filter(u => u.role === 'admin' || u.role === 'staff')?.length || 0;
   const recordsPulled = zohoStats?.today?.recordsPulled || 0;
   const recordsUpdated = zohoStats?.today?.recordsUpdated || 0;
+  const customersSentToZoho = zohoStats?.today?.customersSentToZoho || 0;
+  const ordersSentToZoho = zohoStats?.today?.ordersSentToZoho || 0;
 
   return (
     <div className="space-y-6">
@@ -671,6 +675,34 @@ function AdminDashboard() {
             <CardContent>
               <div className="text-2xl font-bold">{recordsUpdated}</div>
               <p className="text-xs text-muted-foreground">Existing records synced today</p>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Link href="/admin/zoho-status">
+          <Card className="hover-elevate cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">New Customers Sent to Zoho</CardTitle>
+              <ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{customersSentToZoho}</div>
+              <p className="text-xs text-muted-foreground">Approved customers added today</p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/admin/zoho-status">
+          <Card className="hover-elevate cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Orders Sent to Zoho</CardTitle>
+              <ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{ordersSentToZoho}</div>
+              <p className="text-xs text-muted-foreground">Approved orders invoiced today</p>
             </CardContent>
           </Card>
         </Link>

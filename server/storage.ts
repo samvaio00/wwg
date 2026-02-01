@@ -142,6 +142,7 @@ export interface IStorage {
   logZohoApiCall(log: InsertZohoApiLog): Promise<ZohoApiLog>;
   getZohoApiCallStats(sinceDate: Date): Promise<{ total: number; success: number; failed: number }>;
   getSyncRunStats(sinceDate: Date): Promise<{ totalCreated: number; totalUpdated: number; totalSyncs: number }>;
+  getJobStats(sinceDate: Date): Promise<{ customersSent: number; ordersSent: number }>;
   
   // Email campaign template operations
   getEmailTemplates(): Promise<EmailCampaignTemplate[]>;
@@ -1395,6 +1396,20 @@ export class DatabaseStorage implements IStorage {
       totalCreated: result[0]?.totalCreated || 0,
       totalUpdated: result[0]?.totalUpdated || 0,
       totalSyncs: result[0]?.totalSyncs || 0,
+    };
+  }
+
+  async getJobStats(sinceDate: Date): Promise<{ customersSent: number; ordersSent: number }> {
+    const result = await db.select({
+      customersSent: sql<number>`SUM(CASE WHEN ${jobs.jobType} = 'create_zoho_customer' AND ${jobs.status} = 'completed' THEN 1 ELSE 0 END)::int`,
+      ordersSent: sql<number>`SUM(CASE WHEN ${jobs.jobType} = 'push_order_to_zoho' AND ${jobs.status} = 'completed' THEN 1 ELSE 0 END)::int`,
+    })
+    .from(jobs)
+    .where(gte(jobs.createdAt, sinceDate));
+    
+    return {
+      customersSent: result[0]?.customersSent || 0,
+      ordersSent: result[0]?.ordersSent || 0,
     };
   }
 

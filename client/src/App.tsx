@@ -41,6 +41,7 @@ import AdminOrdersPage from "@/pages/admin-orders";
 import AdminAnalyticsPage from "@/pages/admin-analytics";
 import AdminSettingsPage from "@/pages/admin-settings";
 import AdminCartsPage from "@/pages/admin-carts";
+import AdminEmailTemplatesPage from "@/pages/admin-email-templates";
 import PendingApprovalPage from "@/pages/pending-approval";
 import AboutPage from "@/pages/about";
 import ReturnPolicyPage from "@/pages/return-policy";
@@ -266,6 +267,7 @@ function AppRouter() {
         <Route path="/admin/carts" component={AdminCartsPage} />
         <Route path="/admin/analytics" component={AdminAnalyticsPage} />
         <Route path="/admin/settings" component={AdminSettingsPage} />
+        <Route path="/admin/email-templates" component={AdminEmailTemplatesPage} />
         <Route path="/about" component={AboutPage} />
         <Route path="/return-policy" component={ReturnPolicyPage} />
         <Route path="/disclaimer" component={DisclaimerPage} />

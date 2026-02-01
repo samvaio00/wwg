@@ -16,6 +16,8 @@ import {
   type ZohoApiLog,
   type InsertZohoApiLog,
   type TopSellerCache,
+  type EmailCampaignTemplate,
+  type InsertEmailCampaignTemplate,
   users,
   products,
   carts,
@@ -29,6 +31,8 @@ import {
   categories,
   zohoApiLogs,
   topSellersCache,
+  emailCampaignTemplates,
+  EmailTemplateStatus,
   toSafeUser,
   UserRole,
   UserStatus,
@@ -40,7 +44,8 @@ import {
   type UserRoleType,
   type OrderStatusType,
   type JobTypeValue,
-  type JobStatusValue
+  type JobStatusValue,
+  type EmailTemplateStatusValue
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ne, ilike, or, asc, sql, lte, gte, gt, inArray } from "drizzle-orm";
@@ -136,6 +141,16 @@ export interface IStorage {
   // Zoho API log operations
   logZohoApiCall(log: InsertZohoApiLog): Promise<ZohoApiLog>;
   getZohoApiCallStats(sinceDate: Date): Promise<{ total: number; success: number; failed: number }>;
+  
+  // Email campaign template operations
+  getEmailTemplates(): Promise<EmailCampaignTemplate[]>;
+  getEmailTemplateById(id: string): Promise<EmailCampaignTemplate | undefined>;
+  getApprovedTemplateForCampaign(campaignType: string): Promise<EmailCampaignTemplate | undefined>;
+  createEmailTemplate(template: InsertEmailCampaignTemplate): Promise<EmailCampaignTemplate>;
+  updateEmailTemplate(id: string, updates: Partial<InsertEmailCampaignTemplate>): Promise<EmailCampaignTemplate | undefined>;
+  approveEmailTemplate(id: string, approvedById: string): Promise<EmailCampaignTemplate | undefined>;
+  rejectEmailTemplate(id: string, reason: string): Promise<EmailCampaignTemplate | undefined>;
+  deleteEmailTemplate(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1364,6 +1379,82 @@ export class DatabaseStorage implements IStorage {
       success: result[0]?.success || 0,
       failed: result[0]?.failed || 0,
     };
+  }
+
+  // Email campaign template operations
+  async getEmailTemplates(): Promise<EmailCampaignTemplate[]> {
+    return db.select()
+      .from(emailCampaignTemplates)
+      .orderBy(desc(emailCampaignTemplates.createdAt));
+  }
+
+  async getEmailTemplateById(id: string): Promise<EmailCampaignTemplate | undefined> {
+    const [template] = await db.select()
+      .from(emailCampaignTemplates)
+      .where(eq(emailCampaignTemplates.id, id));
+    return template;
+  }
+
+  async getApprovedTemplateForCampaign(campaignType: string): Promise<EmailCampaignTemplate | undefined> {
+    const [template] = await db.select()
+      .from(emailCampaignTemplates)
+      .where(and(
+        eq(emailCampaignTemplates.campaignType, campaignType),
+        eq(emailCampaignTemplates.status, EmailTemplateStatus.APPROVED)
+      ))
+      .orderBy(desc(emailCampaignTemplates.approvedAt))
+      .limit(1);
+    return template;
+  }
+
+  async createEmailTemplate(template: InsertEmailCampaignTemplate): Promise<EmailCampaignTemplate> {
+    const [created] = await db.insert(emailCampaignTemplates)
+      .values(template)
+      .returning();
+    return created;
+  }
+
+  async updateEmailTemplate(id: string, updates: Partial<InsertEmailCampaignTemplate>): Promise<EmailCampaignTemplate | undefined> {
+    const [updated] = await db.update(emailCampaignTemplates)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(emailCampaignTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async approveEmailTemplate(id: string, approvedById: string): Promise<EmailCampaignTemplate | undefined> {
+    const [updated] = await db.update(emailCampaignTemplates)
+      .set({
+        status: EmailTemplateStatus.APPROVED,
+        approvedById,
+        approvedAt: new Date(),
+        rejectionReason: null,
+        updatedAt: new Date()
+      })
+      .where(eq(emailCampaignTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async rejectEmailTemplate(id: string, reason: string): Promise<EmailCampaignTemplate | undefined> {
+    const [updated] = await db.update(emailCampaignTemplates)
+      .set({
+        status: EmailTemplateStatus.REJECTED,
+        rejectionReason: reason,
+        updatedAt: new Date()
+      })
+      .where(eq(emailCampaignTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEmailTemplate(id: string): Promise<boolean> {
+    const result = await db.delete(emailCampaignTemplates)
+      .where(eq(emailCampaignTemplates.id, id));
+    return true;
   }
 }
 

@@ -7,7 +7,6 @@ interface SchedulerConfig {
   zohoSyncIntervalMinutes: number;
   customerSyncIntervalMinutes: number;
   embeddingsUpdateIntervalMinutes: number;
-  emailCampaignIntervalMinutes: number;
   enabled: boolean;
   useBusinessHours: boolean;
   businessHoursIntervalMinutes: number;
@@ -20,7 +19,6 @@ const DEFAULT_CONFIG: SchedulerConfig = {
   zohoSyncIntervalMinutes: 60,
   customerSyncIntervalMinutes: 60,
   embeddingsUpdateIntervalMinutes: 120,
-  emailCampaignIntervalMinutes: 360,
   enabled: true,
   useBusinessHours: true,
   businessHoursIntervalMinutes: 120,

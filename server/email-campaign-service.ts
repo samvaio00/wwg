@@ -329,7 +329,6 @@ function buildEmailHtml(
       <p style="margin: 8px 0 4px; font-size: 14px; font-weight: 600; color: #1f2937; max-height: 40px; overflow: hidden;">
         ${p.name.substring(0, 40)}${p.name.length > 40 ? '...' : ''}
       </p>
-      <p style="margin: 0; font-size: 16px; color: #059669; font-weight: bold;">$${p.basePrice}</p>
     </div>
   `).join('');
 
@@ -420,6 +419,28 @@ export async function getOptedInCustomers(): Promise<Array<{ id: string; email: 
   return customers;
 }
 
+async function getEmailContentFromApprovedTemplate(
+  campaignType: string,
+  customerName: string
+): Promise<AIGeneratedEmail | null> {
+  const { storage } = await import("./storage");
+  
+  const approvedTemplate = await storage.getApprovedTemplateForCampaign(campaignType);
+  
+  if (!approvedTemplate) {
+    return null;
+  }
+  
+  const personalized: AIGeneratedEmail = {
+    subject: approvedTemplate.subject,
+    headline: approvedTemplate.headline,
+    introduction: approvedTemplate.introduction.replace(/Valued Customer/g, customerName),
+    callToAction: approvedTemplate.callToAction,
+  };
+  
+  return personalized;
+}
+
 export async function sendNewHighlightedItemsEmail(): Promise<{ sent: number; errors: number }> {
   console.log("[Email Campaign] Starting new highlighted items campaign...");
   
@@ -469,11 +490,18 @@ export async function sendNewHighlightedItemsEmail(): Promise<{ sent: number; er
       const productNames = newHighlightedProducts.map(p => p.name);
       const customerName = customer.contactName || customer.businessName || "Valued Customer";
       
-      const emailContent = await generateEmailContent(
+      let emailContent = await getEmailContentFromApprovedTemplate(
         EmailCampaignType.NEW_HIGHLIGHTED_ITEMS,
-        productNames,
         customerName
       );
+      
+      if (!emailContent) {
+        emailContent = await generateEmailContent(
+          EmailCampaignType.NEW_HIGHLIGHTED_ITEMS,
+          productNames,
+          customerName
+        );
+      }
 
       const htmlContent = buildEmailHtml(
         emailContent,
@@ -569,11 +597,18 @@ export async function sendNewSkusEmail(): Promise<{ sent: number; errors: number
       const productNames = newProducts.map(p => p.name);
       const customerName = customer.contactName || customer.businessName || "Valued Customer";
 
-      const emailContent = await generateEmailContent(
+      let emailContent = await getEmailContentFromApprovedTemplate(
         EmailCampaignType.NEW_SKUS,
-        productNames,
         customerName
       );
+      
+      if (!emailContent) {
+        emailContent = await generateEmailContent(
+          EmailCampaignType.NEW_SKUS,
+          productNames,
+          customerName
+        );
+      }
 
       const htmlContent = buildEmailHtml(
         emailContent,
@@ -700,11 +735,18 @@ export async function sendCartAbandonmentEmails(): Promise<{ sent: number; error
       const productNames = cartProducts.map(p => p.name);
       const customerName = user.contactName || user.businessName || "Valued Customer";
 
-      const emailContent = await generateEmailContent(
+      let emailContent = await getEmailContentFromApprovedTemplate(
         EmailCampaignType.CART_ABANDONMENT,
-        productNames,
         customerName
       );
+      
+      if (!emailContent) {
+        emailContent = await generateEmailContent(
+          EmailCampaignType.CART_ABANDONMENT,
+          productNames,
+          customerName
+        );
+      }
 
       const htmlContent = buildEmailHtml(
         emailContent,
@@ -737,4 +779,79 @@ export async function sendCartAbandonmentEmails(): Promise<{ sent: number; error
 
   console.log(`[Email Campaign] Cart abandonment campaign complete: ${sent} sent, ${errors} errors`);
   return { sent, errors };
+}
+
+// Generate a template for admin approval (used by admin routes)
+export async function generateTemplateForApproval(
+  campaignType: string,
+  customPrompt?: string
+): Promise<{
+  id: string;
+  campaignType: string;
+  subject: string;
+  headline: string;
+  introduction: string;
+  callToAction: string;
+  customPrompt: string | null;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+}> {
+  // Import storage dynamically to avoid circular dependencies
+  const { storage } = await import("./storage");
+  const { EmailTemplateStatus } = await import("@shared/schema");
+  
+  // Get sample products for context
+  const { products: sampleProducts } = await storage.getProducts({ limit: 10 });
+  const productNames = sampleProducts.slice(0, 5).map(p => p.name);
+  
+  // Generate AI content
+  let emailContent: AIGeneratedEmail;
+  
+  if (customPrompt) {
+    // Use custom prompt for regeneration
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are a professional B2B marketing copywriter for Warner Wireless Gears, a wholesale distributor. Write engaging, professional promotional emails. Respond in JSON format only with these fields: subject, headline, introduction, callToAction.`
+          },
+          {
+            role: "user",
+            content: customPrompt
+          }
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 500,
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (content) {
+        emailContent = JSON.parse(content) as AIGeneratedEmail;
+      } else {
+        throw new Error("No response from AI");
+      }
+    } catch (error) {
+      console.error("[Email Campaign] AI generation with custom prompt failed:", error);
+      emailContent = getDefaultEmailContent(campaignType, productNames, "Valued Customer");
+    }
+  } else {
+    emailContent = await generateEmailContent(campaignType, productNames, "Valued Customer");
+  }
+  
+  // Save template to database with PENDING_APPROVAL status
+  const template = await storage.createEmailTemplate({
+    campaignType,
+    subject: emailContent.subject,
+    headline: emailContent.headline,
+    introduction: emailContent.introduction,
+    callToAction: emailContent.callToAction,
+    customPrompt: customPrompt || null,
+    status: EmailTemplateStatus.PENDING_APPROVAL,
+    productIds: sampleProducts.slice(0, 6).map(p => p.id),
+  });
+  
+  return template;
 }

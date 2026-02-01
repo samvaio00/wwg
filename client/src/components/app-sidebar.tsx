@@ -24,6 +24,7 @@ import {
   Gift,
   TrendingUp,
   ShoppingCart,
+  Mail,
 } from "lucide-react";
 import type { Category } from "@shared/schema";
 
@@ -54,6 +55,11 @@ const adminNavItems = [
     icon: BarChart3,
   },
   {
+    title: "Email Templates",
+    url: "/admin/email-templates",
+    icon: Mail,
+  },
+  {
     title: "Settings",
     url: "/admin/settings",
     icon: Settings,
@@ -80,6 +86,11 @@ const staffNavItems = [
     title: "Active Carts",
     url: "/admin/carts",
     icon: ShoppingCart,
+  },
+  {
+    title: "Email Templates",
+    url: "/admin/email-templates",
+    icon: Mail,
   },
   {
     title: "Settings",

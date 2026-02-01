@@ -84,7 +84,7 @@ The platform is built with a modern web stack:
 - **Customer Status Sync**: Every 60 minutes.
 - **Embeddings Update**: Every 120 minutes.
 - **Top Sellers Sync**: Weekly on Sundays at midnight (fetches last 30 days of invoice data from Zoho Books).
-- **Email Campaigns**: Every 6 hours (360 minutes). Runs three campaign types automatically.
+- **Email Campaigns**: Bi-weekly on Wednesday and Saturday at 9 AM. Templates must be approved by admin/staff before emails are sent.
 
 ## AI Email Campaigns
 
@@ -105,9 +105,19 @@ The platform includes AI-generated promotional email campaigns powered by OpenAI
 
 ### Email Content
 - AI generates personalized subject lines, headlines, and introductions based on campaign type and customer name
-- Emails include product cards with images, names, and prices (up to 6 products)
+- Emails include product cards with images and names (prices removed for better call-to-action)
 - Professional HTML template with Warner Wireless Gears branding
 - Unsubscribe footer in all promotional emails
+
+### Template Approval Workflow
+- **Admin UI**: `/admin/email-templates` page for viewing and managing email templates
+- **Generate**: Admin/staff can generate new templates using AI with optional custom prompts
+- **Preview**: Full preview of subject, headline, introduction, and call-to-action
+- **Approve/Reject**: Templates must be approved before being used in campaigns
+- **Regenerate**: Rejected templates can be regenerated with custom instructions
+- **Status Flow**: draft → pending_approval → approved/rejected
+- **Database Table**: `email_campaign_templates` stores templates with approval status, approver info, and rejection reasons
+- **Campaign Flow**: When campaigns run, they use approved templates if available; otherwise fall back to AI-generated content
 
 ### Email Providers
 - **Resend** (RESEND_API_KEY): Primary provider

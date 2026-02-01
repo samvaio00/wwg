@@ -2298,5 +2298,152 @@ export async function registerRoutes(
     }
   });
 
+  // ================================================================
+  // EMAIL CAMPAIGN TEMPLATE ENDPOINTS (Admin/Staff)
+  // ================================================================
+
+  // Get all email templates
+  app.get("/api/admin/email-templates", requireStaffOrAdmin, async (_req, res) => {
+    try {
+      const templates = await storage.getEmailTemplates();
+      res.json({ templates });
+    } catch (error) {
+      console.error("Error fetching email templates:", error);
+      res.status(500).json({ message: "Failed to fetch email templates" });
+    }
+  });
+
+  // Get single email template
+  app.get("/api/admin/email-templates/:id", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const template = await storage.getEmailTemplateById(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      res.json({ template });
+    } catch (error) {
+      console.error("Error fetching email template:", error);
+      res.status(500).json({ message: "Failed to fetch email template" });
+    }
+  });
+
+  // Generate new template with AI
+  app.post("/api/admin/email-templates/generate", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { campaignType, customPrompt } = req.body;
+      
+      if (!campaignType) {
+        return res.status(400).json({ message: "Campaign type is required" });
+      }
+
+      const { generateTemplateForApproval } = await import("./email-campaign-service");
+      const template = await generateTemplateForApproval(campaignType, customPrompt);
+      
+      res.json({ template });
+    } catch (error) {
+      console.error("Error generating email template:", error);
+      res.status(500).json({ message: "Failed to generate email template" });
+    }
+  });
+
+  // Update email template
+  app.patch("/api/admin/email-templates/:id", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { subject, headline, introduction, callToAction, customPrompt } = req.body;
+      const template = await storage.updateEmailTemplate(req.params.id, {
+        subject,
+        headline,
+        introduction,
+        callToAction,
+        customPrompt,
+      });
+      
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      res.json({ template });
+    } catch (error) {
+      console.error("Error updating email template:", error);
+      res.status(500).json({ message: "Failed to update email template" });
+    }
+  });
+
+  // Approve email template
+  app.post("/api/admin/email-templates/:id/approve", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const template = await storage.approveEmailTemplate(req.params.id, user.id);
+      
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      res.json({ template, message: "Template approved successfully" });
+    } catch (error) {
+      console.error("Error approving email template:", error);
+      res.status(500).json({ message: "Failed to approve email template" });
+    }
+  });
+
+  // Reject email template
+  app.post("/api/admin/email-templates/:id/reject", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { reason } = req.body;
+      
+      if (!reason) {
+        return res.status(400).json({ message: "Rejection reason is required" });
+      }
+      
+      const template = await storage.rejectEmailTemplate(req.params.id, reason);
+      
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      
+      res.json({ template, message: "Template rejected" });
+    } catch (error) {
+      console.error("Error rejecting email template:", error);
+      res.status(500).json({ message: "Failed to reject email template" });
+    }
+  });
+
+  // Delete email template
+  app.delete("/api/admin/email-templates/:id", requireStaffOrAdmin, async (req, res) => {
+    try {
+      await storage.deleteEmailTemplate(req.params.id);
+      res.json({ message: "Template deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting email template:", error);
+      res.status(500).json({ message: "Failed to delete email template" });
+    }
+  });
+
+  // Regenerate template with custom prompt
+  app.post("/api/admin/email-templates/:id/regenerate", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { customPrompt } = req.body;
+      const existingTemplate = await storage.getEmailTemplateById(req.params.id);
+      
+      if (!existingTemplate) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      const { generateTemplateForApproval } = await import("./email-campaign-service");
+      const newTemplate = await generateTemplateForApproval(
+        existingTemplate.campaignType, 
+        customPrompt
+      );
+      
+      // Delete the old template
+      await storage.deleteEmailTemplate(req.params.id);
+      
+      res.json({ template: newTemplate });
+    } catch (error) {
+      console.error("Error regenerating email template:", error);
+      res.status(500).json({ message: "Failed to regenerate email template" });
+    }
+  });
+
   return httpServer;
 }

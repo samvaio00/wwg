@@ -36,28 +36,20 @@ const SEED_USERS = [
 ];
 
 export async function seedUsers(): Promise<void> {
-  // Only run seeding when explicitly enabled via environment variable
-  if (process.env.SEED_DEFAULT_USERS !== "true") {
-    console.log("[Seed] Skipping (set SEED_DEFAULT_USERS=true to enable)");
+  // Check if any users exist - if so, seeding already happened
+  const existingUsers = await db.select().from(users).limit(1);
+  
+  if (existingUsers.length > 0) {
+    console.log("[Seed] Users already exist, skipping seed");
     return;
   }
   
-  console.log("[Seed] Checking for seed users...");
+  console.log("[Seed] No users found, creating initial users...");
 
   for (const seedUser of SEED_USERS) {
-    const existing = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, seedUser.email))
-      .limit(1);
-
-    if (existing.length === 0) {
-      await db.insert(users).values(seedUser);
-      console.log(`[Seed] Created user: ${seedUser.email} (${seedUser.role})`);
-    } else {
-      console.log(`[Seed] User exists: ${seedUser.email}`);
-    }
+    await db.insert(users).values(seedUser);
+    console.log(`[Seed] Created user: ${seedUser.email} (${seedUser.role})`);
   }
 
-  console.log("[Seed] User seeding complete");
+  console.log("[Seed] User seeding complete - this will not run again");
 }

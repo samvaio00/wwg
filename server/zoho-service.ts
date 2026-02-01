@@ -124,11 +124,10 @@ async function getAccessToken(): Promise<string> {
 interface FetchZohoItemsOptions {
   page?: number;
   sortByModified?: boolean;
-  lastModifiedSince?: Date;
 }
 
 async function fetchZohoItems(options: FetchZohoItemsOptions = {}): Promise<ZohoItemsResponse> {
-  const { page = 1, sortByModified = false, lastModifiedSince } = options;
+  const { page = 1, sortByModified = false } = options;
   const accessToken = await getAccessToken();
   const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
 
@@ -136,17 +135,12 @@ async function fetchZohoItems(options: FetchZohoItemsOptions = {}): Promise<Zoho
     throw new Error("Zoho organization ID not configured");
   }
   
+  // Note: Zoho Inventory API does NOT support server-side date filtering.
+  // We sort by last_modified_time descending and stop pagination early when we hit older items.
   let url = `https://www.zohoapis.com/inventory/v1/items?organization_id=${organizationId}&page=${page}&per_page=200`;
   
   if (sortByModified) {
     url += `&sort_column=last_modified_time&sort_order=D`;
-  }
-  
-  // Add server-side filtering by last modified time for incremental sync
-  if (lastModifiedSince) {
-    // Format: yyyy-MM-dd'T'HH:mm:ssZ (ISO 8601)
-    const formattedDate = lastModifiedSince.toISOString();
-    url += `&last_modified_time_start=${encodeURIComponent(formattedDate)}`;
   }
   
   const response = await fetch(url, {
@@ -338,27 +332,27 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual", force
     let retryCount = 0;
     const maxRetries = 3;
     
-    console.log(`[Zoho Sync] Starting ${isIncremental ? 'incremental (server-side filtered)' : 'full'} sync${isIncremental ? ` (since ${lastSyncTime?.toISOString()})` : ''}`);
+    console.log(`[Zoho Sync] Starting ${isIncremental ? 'incremental' : 'full'} sync${isIncremental ? ` (since ${lastSyncTime?.toISOString()})` : ''}`);
+    
+    // For incremental sync: track how many items we've actually processed vs skipped
+    let incrementalProcessed = 0;
+    let incrementalSkipped = 0;
+    let stopPagination = false;
 
-    while (hasMore) {
+    while (hasMore && !stopPagination) {
       try {
-        // Pass lastModifiedSince for server-side filtering during incremental sync
-        // This reduces API payload by only fetching items modified since last sync
+        // Sort by last_modified_time descending so newest items come first
+        // This allows us to stop pagination early when we hit old items
         const response = await fetchZohoItems({ 
           page, 
-          sortByModified: true,
-          lastModifiedSince: isIncremental ? lastSyncTime! : undefined
+          sortByModified: true
         });
         const items = response.items || [];
         result.total += items.length;
         retryCount = 0;
         
-        if (isIncremental && items.length > 0) {
-          console.log(`[Zoho Sync] Incremental sync received ${items.length} modified items on page ${page}`);
-          // Warn if incremental sync returns many items (API filter may not be working)
-          if (items.length >= 150 && page === 1) {
-            console.warn(`[Zoho Sync] WARNING: Incremental sync returned ${items.length} items - API filter may not be applied. Consider verifying Zoho supports last_modified_time_start parameter.`);
-          }
+        if (items.length > 0) {
+          console.log(`[Zoho Sync] Page ${page}: ${items.length} items`);
         }
 
         for (const item of items) {
@@ -375,14 +369,23 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual", force
               continue;
             }
             
-            // Client-side safety net: skip items not modified since last sync
-            // This handles cases where Zoho API ignores the last_modified_time_start param
+            // For incremental sync: skip items not modified since last sync
+            // Since items are sorted by last_modified_time DESC, once we hit an old item,
+            // all remaining items on this and future pages will also be old - stop pagination
             if (isIncremental && lastSyncTime && item.last_modified_time) {
               const itemModifiedAt = new Date(item.last_modified_time);
               if (itemModifiedAt < lastSyncTime) {
+                incrementalSkipped++;
                 result.skipped++;
+                // If we've skipped multiple items in a row, we're past the sync boundary
+                if (incrementalSkipped >= 5) {
+                  console.log(`[Zoho Sync] Incremental: Reached items older than last sync, stopping pagination. Processed ${incrementalProcessed} items.`);
+                  stopPagination = true;
+                  break;
+                }
                 continue;
               }
+              incrementalProcessed++;
             }
 
             const existingProduct = await db

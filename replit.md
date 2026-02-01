@@ -81,9 +81,10 @@ The platform is built with a modern web stack:
 ## Scheduler Configuration
 
 - **Zoho Inventory Sync**: Dynamic intervals - 2 hours during business hours (8 AM - 6 PM weekdays), 6 hours off-hours/weekends.
-  - **Server-Side Incremental Sync**: Uses Zoho's `last_modified_time_start` API parameter to only fetch items modified since last sync, significantly reducing API payload and bandwidth.
+  - **Incremental Sync with Early Termination**: Items are sorted by `last_modified_time` descending. During incremental sync, pagination stops once items older than the last sync are encountered, reducing API calls.
   - **Full Sync**: Triggered on first run or via manual "Force Full Sync" button. Only full syncs can detect and delist items removed from Zoho.
   - **Delisting**: Products removed from Zoho's storefront are only detected during full syncs. Recommend periodic full sync to catch removals.
+  - **Note**: Zoho Inventory API does not support server-side date filtering; client-side filtering with early pagination termination is used instead.
 - **Customer Status Sync**: Every 60 minutes.
 - **Embeddings Update**: Every 120 minutes.
 - **Top Sellers Sync**: Weekly on Sundays at midnight (fetches last 30 days of invoice data from Zoho Books).

@@ -151,7 +151,7 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               <CartButton />
             </div>
           </header>
-          <div className="relative w-full h-24 md:h-28 overflow-hidden">
+          <div className="relative w-full h-32 md:h-36 overflow-hidden">
             <img 
               src={heroBanner} 
               alt="Warner Wireless Gears - Premium Wholesale Accessories" 

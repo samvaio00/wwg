@@ -652,12 +652,12 @@ function AdminDashboard() {
         <Link href="/admin/zoho-status">
           <Card className="hover-elevate cursor-pointer">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Records Received from Zoho</CardTitle>
+              <CardTitle className="text-sm font-medium">New Records from Zoho</CardTitle>
               <ArrowDownCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{recordsPulled}</div>
-              <p className="text-xs text-muted-foreground">New records pulled today</p>
+              <p className="text-xs text-muted-foreground">New products added today</p>
             </CardContent>
           </Card>
         </Link>
@@ -665,12 +665,12 @@ function AdminDashboard() {
         <Link href="/admin/zoho-status">
           <Card className="hover-elevate cursor-pointer">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Records Sent to Zoho</CardTitle>
-              <ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Records Updated from Zoho</CardTitle>
+              <ArrowDownCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{recordsUpdated}</div>
-              <p className="text-xs text-muted-foreground">Records updated today</p>
+              <p className="text-xs text-muted-foreground">Existing records synced today</p>
             </CardContent>
           </Card>
         </Link>

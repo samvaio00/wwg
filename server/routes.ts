@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
   insertUserSchema, 
+  insertAdminStaffSchema,
   loginSchema, 
   toSafeUser, 
   UserRole, 
@@ -672,6 +673,64 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error reactivating user:", error);
       res.status(500).json({ message: "Failed to reactivate user" });
+    }
+  });
+
+  // Admin: Create admin or staff user
+  app.post("/api/admin/users/staff", requireAdmin, async (req, res) => {
+    try {
+      const data = insertAdminStaffSchema.parse(req.body);
+      
+      // Check if email already exists
+      const existing = await storage.getUserByEmail(data.email);
+      if (existing) {
+        return res.status(400).json({ message: "Email already registered" });
+      }
+      
+      const user = await storage.createAdminOrStaff(data);
+      res.status(201).json({ user, message: `${data.role.charAt(0).toUpperCase() + data.role.slice(1)} user created successfully` });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: error.errors 
+        });
+      }
+      console.error("Error creating admin/staff user:", error);
+      res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
+  // Admin: Delete admin or staff user
+  app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = req.params.id as string;
+      const currentUser = req.session.userId;
+      
+      // Prevent self-deletion
+      if (id === currentUser) {
+        return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Only allow deleting admin or staff users
+      if (user.role !== UserRole.ADMIN && user.role !== UserRole.STAFF) {
+        return res.status(400).json({ message: "Can only delete admin or staff users. Use suspend for customers." });
+      }
+      
+      const deleted = await storage.deleteUser(id);
+      if (deleted) {
+        res.json({ message: "User deleted successfully" });
+      } else {
+        res.status(500).json({ message: "Failed to delete user" });
+      }
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ message: "Failed to delete user" });
     }
   });
 

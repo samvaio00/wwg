@@ -60,6 +60,8 @@ export interface IStorage {
   getAllUsers(): Promise<SafeUser[]>;
   getPendingUsers(): Promise<SafeUser[]>;
   updateUserStatus(id: string, status: UserStatusType, role?: UserRoleType): Promise<SafeUser | undefined>;
+  createAdminOrStaff(data: { email: string; password: string; contactName: string; role: 'admin' | 'staff' }): Promise<SafeUser>;
+  deleteUser(id: string): Promise<boolean>;
   
   // Auth operations
   validatePassword(plainPassword: string, hashedPassword: string): Promise<boolean>;
@@ -190,6 +192,26 @@ export class DatabaseStorage implements IStorage {
     await db.update(users)
       .set({ lastLoginAt: new Date() })
       .where(eq(users.id, id));
+  }
+
+  async createAdminOrStaff(data: { email: string; password: string; contactName: string; role: 'admin' | 'staff' }): Promise<SafeUser> {
+    const hashedPassword = await this.hashPassword(data.password);
+    
+    const [user] = await db.insert(users).values({
+      email: data.email.toLowerCase(),
+      password: hashedPassword,
+      contactName: data.contactName,
+      businessName: data.role === 'admin' ? 'Administrator' : 'Staff Member',
+      role: data.role === 'admin' ? UserRole.ADMIN : UserRole.STAFF,
+      status: UserStatus.APPROVED,
+    }).returning();
+    
+    return toSafeUser(user);
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.id, id)).returning();
+    return result.length > 0;
   }
 
   async getAllUsers(): Promise<SafeUser[]> {

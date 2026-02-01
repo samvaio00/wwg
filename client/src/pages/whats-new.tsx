@@ -262,14 +262,14 @@ export default function WhatsNewPage() {
             What's New
           </h1>
         </div>
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search new arrivals..."
+            placeholder="Search new arrivals by name, SKU, or description..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8"
+            className="pl-10"
             data-testid="input-search-whats-new"
           />
         </div>

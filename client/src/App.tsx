@@ -143,6 +143,12 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <AICartBuilder />
             </div>
+            <div className="hidden md:flex items-center justify-center flex-1">
+              <h1 className="text-lg md:text-xl font-bold tracking-tight bg-gradient-to-r from-blue-600 via-teal-500 to-blue-600 bg-clip-text text-transparent animate-pulse-subtle whitespace-nowrap">
+                Warner Wireless Gears
+                <span className="ml-2 text-sm font-medium text-muted-foreground">B2B Distribution</span>
+              </h1>
+            </div>
             <div className="flex items-center gap-2">
               <HeaderUserMenu />
               <ThemeToggle />

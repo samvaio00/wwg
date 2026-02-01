@@ -67,12 +67,12 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <Link href="/" className="flex items-center gap-3 text-sidebar-foreground">
-          <img src={wwgLogo} alt="Warner Wireless Gears" className="h-12 w-12 rounded object-contain" />
-          <div className="flex flex-col">
-            <span className="text-lg font-bold leading-tight">Warner Wireless Gears</span>
-            <span className="text-xs text-sidebar-foreground/70">B2B Distribution</span>
-          </div>
+        <Link href="/" className="flex items-center justify-center text-sidebar-foreground">
+          <img 
+            src={wwgLogo} 
+            alt="Warner Wireless Gears" 
+            className="w-full max-w-[14rem] h-auto rounded-lg object-contain shadow-lg transition-transform hover:scale-105" 
+          />
         </Link>
       </SidebarHeader>
 

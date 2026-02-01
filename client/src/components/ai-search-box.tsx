@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Sparkles, Loader2, ShoppingCart, Zap, TrendingUp } from "lucide-react";
+import { Sparkles, Loader2, ShoppingCart, TrendingUp } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 interface AISearchBoxProps {
   value: string;
   onChange: (value: string) => void;
-  isAIActive?: boolean;
+  onSearch?: (query: string) => void;
   isSearching?: boolean;
   placeholder?: string;
   testId?: string;
@@ -87,9 +87,9 @@ function parseActionCommand(query: string): ParsedAction {
 export function AISearchBox({
   value,
   onChange,
-  isAIActive = false,
+  onSearch,
   isSearching = false,
-  placeholder = "Try: 'cheap cables' or 'add 5 headsets to cart'...",
+  placeholder = "AI Search: try 'cheap cables' or 'add 5 headsets to cart'",
   testId = "input-ai-search",
   onActionExecuted,
 }: AISearchBoxProps) {
@@ -246,64 +246,57 @@ export function AISearchBox({
             productQuery: parsed.productQuery,
           });
         }
+      } else {
+        // Regular search - trigger onSearch callback
+        onSearch?.(value.trim());
       }
     }
-  }, [value, executeActionMutation, executeTopSellersAction]);
+  }, [value, executeActionMutation, executeTopSellersAction, onSearch]);
 
   const parsed = parseActionCommand(value);
   const showActionIndicator = parsed.isAction && value.length > 5;
   const isTopSellersAction = parsed.isTopSellers;
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="relative w-80 lg:w-96">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground transition-colors" />
-        <Input
-          type="search"
-          placeholder={placeholder}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          className={`pl-10 pr-16 h-9 focus-ring-animate transition-all ${
-            showActionIndicator ? "border-primary/50 bg-primary/5" : ""
-          }`}
-          data-testid={testId}
-          disabled={isProcessingAction}
-        />
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-          {isProcessingAction && (
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          )}
-          {showActionIndicator && !isProcessingAction && (
-            <Badge variant="default" className="text-xs gap-1 badge-pop">
-              {isTopSellersAction ? (
-                <>
-                  <TrendingUp className="h-3 w-3" />
-                  Top Sellers
-                </>
-              ) : (
-                <>
-                  <ShoppingCart className="h-3 w-3" />
-                  Action
-                </>
-              )}
-            </Badge>
-          )}
-          {isSearching && !isProcessingAction && !showActionIndicator && (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          )}
-          {isAIActive && !isSearching && !showActionIndicator && !isProcessingAction && (
-            <Badge variant="secondary" className="text-xs gap-1 badge-pop">
-              <Sparkles className="h-3 w-3 ai-pulse" />
-              AI
-            </Badge>
-          )}
-        </div>
-      </div>
-      
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Zap className="h-3.5 w-3.5 text-primary" />
-        <span className="hidden sm:inline font-medium">AI Search</span>
+    <div className="relative w-80 lg:w-96">
+      <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary/70 transition-colors" />
+      <Input
+        type="search"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        className={`pl-9 pr-24 h-9 focus-ring-animate transition-all ${
+          showActionIndicator ? "border-primary/50 bg-primary/5" : ""
+        }`}
+        data-testid={testId}
+        disabled={isProcessingAction}
+      />
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+        {isProcessingAction && (
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        )}
+        {showActionIndicator && !isProcessingAction && (
+          <Badge variant="default" className="text-xs gap-1 badge-pop">
+            {isTopSellersAction ? (
+              <>
+                <TrendingUp className="h-3 w-3" />
+                Top Sellers
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="h-3 w-3" />
+                Action
+              </>
+            )}
+          </Badge>
+        )}
+        {isSearching && !isProcessingAction && !showActionIndicator && (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        )}
+        {!isSearching && !showActionIndicator && !isProcessingAction && value.length === 0 && (
+          <span className="text-xs text-muted-foreground">Press Enter</span>
+        )}
       </div>
     </div>
   );

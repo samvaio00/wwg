@@ -273,6 +273,7 @@ export default function ProductsPage() {
   const urlCategory = urlParams.get("category") || "all";
   
   const [search, setSearch] = useState("");
+  const [submittedSearch, setSubmittedSearch] = useState("");
   const [category, setCategory] = useState(urlCategory);
   const [sort, setSort] = useState("newest");
   const [page, setPage] = useState(1);
@@ -280,16 +281,21 @@ export default function ProductsPage() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [inStockOnly, setInStockOnly] = useState(false);
 
-  // AI-powered search
+  // AI-powered search - only triggers when Enter is pressed
   const { 
     results: aiSearchResults, 
     isSearching: isAISearching,
     isAISearchActive,
     searchType,
-  } = useAISearch(search, { 
+  } = useAISearch(submittedSearch, { 
     category: category !== "all" ? category : undefined,
     minQueryLength: 2,
   });
+  
+  const handleSearch = (query: string) => {
+    setSubmittedSearch(query);
+    setPage(1);
+  };
 
   // Fetch categories from Zoho
   const { data: categoriesData } = useQuery<{ categories: Category[] }>({
@@ -417,7 +423,7 @@ export default function ProductsPage() {
           <AISearchBox
             value={search}
             onChange={setSearch}
-            isAIActive={isAISearchActive}
+            onSearch={handleSearch}
             isSearching={isAISearching}
             testId="input-search"
           />

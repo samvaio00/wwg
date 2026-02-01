@@ -232,14 +232,20 @@ export default function TopSellersPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [submittedSearch, setSubmittedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // AI-powered search
+  // AI-powered search - only triggers when Enter is pressed
   const { 
     results: aiSearchResults, 
     isSearching: isAISearching,
     isAISearchActive,
-  } = useAISearch(search, { minQueryLength: 2 });
+  } = useAISearch(submittedSearch, { minQueryLength: 2 });
+  
+  const handleSearch = (query: string) => {
+    setSubmittedSearch(query);
+    setCurrentPage(1);
+  };
   
   const { data: topSellersData, isLoading: isTopSellersLoading } = useQuery<{ products: Product[] }>({
     queryKey: ["/api/products/top-sellers"],
@@ -326,7 +332,7 @@ export default function TopSellersPage() {
           <AISearchBox
             value={search}
             onChange={setSearch}
-            isAIActive={isAISearchActive}
+            onSearch={handleSearch}
             isSearching={isAISearching}
             testId="input-search-top-sellers"
           />

@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Product } from "@shared/schema";
 
@@ -12,38 +11,27 @@ interface AISearchResult {
 interface UseAISearchOptions {
   category?: string;
   enabled?: boolean;
-  debounceMs?: number;
   minQueryLength?: number;
 }
 
 export function useAISearch(
-  query: string,
+  submittedQuery: string,
   options: UseAISearchOptions = {}
 ) {
   const {
     category,
     enabled = true,
-    debounceMs = 400,
     minQueryLength = 2,
   } = options;
 
-  const [debouncedQuery, setDebouncedQuery] = useState(query);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedQuery(query);
-    }, debounceMs);
-
-    return () => clearTimeout(timer);
-  }, [query, debounceMs]);
-
-  const shouldSearch = enabled && debouncedQuery.trim().length >= minQueryLength;
+  // Only search when a query has been submitted (via Enter key)
+  const shouldSearch = enabled && submittedQuery.trim().length >= minQueryLength;
 
   const { data, isLoading, error, isFetching } = useQuery<AISearchResult>({
-    queryKey: ["/api/ai/search", debouncedQuery, category],
+    queryKey: ["/api/ai/search", submittedQuery, category],
     queryFn: async () => {
       const params = new URLSearchParams();
-      params.set("query", debouncedQuery.trim());
+      params.set("query", submittedQuery.trim());
       if (category && category !== "all") {
         params.set("category", category);
       }
@@ -71,6 +59,6 @@ export function useAISearch(
     isSearching: isLoading || isFetching,
     error,
     isAISearchActive: shouldSearch,
-    debouncedQuery,
+    submittedQuery,
   };
 }

@@ -509,14 +509,6 @@ function CustomerHomePage() {
         </div>
       )}
 
-      {displayProducts.length > 0 && (
-        <div className="flex justify-center">
-          <Button variant="outline" asChild data-testid="button-view-all-products">
-            <Link href="/products">View All Products</Link>
-          </Button>
-        </div>
-      )}
-
       <ProductDetailModal
         product={selectedProduct}
         open={isDetailModalOpen}

@@ -38,12 +38,12 @@ export default function ReturnPolicyPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             <p>
-              Returns must be initiated within <strong>14 days</strong> of receiving your order.
+              Returns must be initiated within <strong>30 days</strong> of receiving your order.
             </p>
             <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-              <li>Contact us to request a Return Authorization (RA) number</li>
-              <li>Returns without an RA number will not be accepted</li>
-              <li>Original packing slip or invoice must be included</li>
+              <li>No Return Authorization (RA) number required</li>
+              <li>Original invoice or packing slip is not required</li>
+              <li>Contact us to arrange your return</li>
             </ul>
           </CardContent>
         </Card>
@@ -78,10 +78,12 @@ export default function ReturnPolicyPage() {
         <CardContent>
           <p className="mb-3">The following items cannot be returned:</p>
           <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+            <li>Vape products and accessories</li>
+            <li>Kratom products</li>
+            <li>THC/CBD products</li>
+            <li>Candies and edible items</li>
+            <li>Medicine and health supplements</li>
             <li>Clearance or final sale items</li>
-            <li>Customized or personalized products</li>
-            <li>Opened fragrance products</li>
-            <li>Items returned without authorization</li>
             <li>Products showing signs of use or damage</li>
           </ul>
         </CardContent>

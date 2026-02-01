@@ -6,6 +6,7 @@ import { createServer } from "http";
 import connectPgSimple from "connect-pg-simple";
 import pg from "pg";
 import { startScheduler } from "./scheduler";
+import { seedUsers } from "./seed-users";
 import path from "path";
 
 const app = express();
@@ -102,6 +103,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Seed initial users if they don't exist
+  await seedUsers();
+  
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

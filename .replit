@@ -46,5 +46,8 @@ ALLOW_ADMIN_SETUP = "true"
 [userenv.shared]
 ZOHO_ORG_ID = "669968813"
 
+[userenv.production]
+SEED_DEFAULT_USERS = "true"
+
 [agent]
 integrations = ["javascript_openai_ai_integrations:2.0.0"]

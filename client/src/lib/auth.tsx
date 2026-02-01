@@ -47,8 +47,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await apiRequest("POST", "/api/auth/login", { email, password });
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    onSuccess: (data) => {
+      // Immediately set the user data from login response to avoid race condition
+      queryClient.setQueryData(["/api/auth/me"], { user: data.user });
     },
   });
 

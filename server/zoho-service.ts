@@ -124,10 +124,11 @@ async function getAccessToken(): Promise<string> {
 interface FetchZohoItemsOptions {
   page?: number;
   sortByModified?: boolean;
+  lastModifiedSince?: Date;
 }
 
 async function fetchZohoItems(options: FetchZohoItemsOptions = {}): Promise<ZohoItemsResponse> {
-  const { page = 1, sortByModified = false } = options;
+  const { page = 1, sortByModified = false, lastModifiedSince } = options;
   const accessToken = await getAccessToken();
   const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
 
@@ -139,6 +140,13 @@ async function fetchZohoItems(options: FetchZohoItemsOptions = {}): Promise<Zoho
   
   if (sortByModified) {
     url += `&sort_column=last_modified_time&sort_order=D`;
+  }
+  
+  // Add server-side filtering by last modified time for incremental sync
+  if (lastModifiedSince) {
+    // Format: yyyy-MM-dd'T'HH:mm:ssZ (ISO 8601)
+    const formattedDate = lastModifiedSince.toISOString();
+    url += `&last_modified_time_start=${encodeURIComponent(formattedDate)}`;
   }
   
   const response = await fetch(url, {

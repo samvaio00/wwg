@@ -170,73 +170,80 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         ) : (
-          /* Customer navigation - Browse section */
-          <SidebarGroup>
-            <SidebarGroupLabel>Browse</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === "/"}
-                    data-testid="nav-home"
-                  >
-                    <Link href="/">
-                      <Home className="h-4 w-4" />
-                      <span>Home</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === "/whats-new"}
-                    data-testid="nav-whats-new"
-                  >
-                    <Link href="/whats-new">
-                      <Gift className="h-4 w-4" />
-                      <span>What's New</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === "/top-sellers"}
-                    data-testid="nav-top-sellers"
-                  >
-                    <Link href="/top-sellers">
-                      <TrendingUp className="h-4 w-4" />
-                      <span>Top Sellers</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                
-                {/* Separator between Browse items and Categories */}
-                <div className="my-3 mx-2 border-t-2 border-sidebar-border/60" />
-                
-                {categories.map((category) => (
-                  <SidebarMenuItem key={category.id}>
+          <>
+            {/* Quick Links section */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Quick Links</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
                     <SidebarMenuButton
                       asChild
-                      isActive={location === `/products?category=${category.slug}`}
-                      data-testid={`nav-category-${category.slug}`}
+                      isActive={location === "/"}
+                      data-testid="nav-home"
                     >
-                      <Link href={`/products?category=${category.slug}`}>
-                        <Tag className="h-4 w-4" />
-                        <span>{category.name}</span>
+                      <Link href="/">
+                        <Home className="h-4 w-4" />
+                        <span>Home</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                ))}
-                {categories.length === 0 && (
                   <SidebarMenuItem>
-                    <span className="text-sm text-muted-foreground px-2">No categories available</span>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location === "/whats-new"}
+                      data-testid="nav-whats-new"
+                    >
+                      <Link href="/whats-new">
+                        <Gift className="h-4 w-4" />
+                        <span>What's New</span>
+                      </Link>
+                    </SidebarMenuButton>
                   </SidebarMenuItem>
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location === "/top-sellers"}
+                      data-testid="nav-top-sellers"
+                    >
+                      <Link href="/top-sellers">
+                        <TrendingUp className="h-4 w-4" />
+                        <span>Top Sellers</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            {/* Categories section */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Categories</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {categories.map((category) => (
+                    <SidebarMenuItem key={category.id}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={location === `/products?category=${category.slug}`}
+                        data-testid={`nav-category-${category.slug}`}
+                      >
+                        <Link href={`/products?category=${category.slug}`}>
+                          <Tag className="h-4 w-4" />
+                          <span>{category.name}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                  {categories.length === 0 && (
+                    <SidebarMenuItem>
+                      <span className="text-sm text-muted-foreground px-2">No categories available</span>
+                    </SidebarMenuItem>
+                  )}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
         )}
       </SidebarContent>
     </Sidebar>

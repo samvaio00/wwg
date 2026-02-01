@@ -462,3 +462,214 @@
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.12);
 }
+
+/* ============================================
+   SUBTLE ANIMATIONS & MICRO-INTERACTIONS
+   ============================================ */
+
+/* Tile/Card hover lift effect */
+.tile-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tile-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.tile-hover:active {
+  transform: translateY(0px) scale(0.995);
+}
+
+/* Menu item click ripple */
+.menu-click {
+  position: relative;
+  overflow: hidden;
+  transition: background-color 0.15s ease;
+}
+
+.menu-click:active {
+  background-color: hsl(var(--accent) / 0.5);
+}
+
+/* Button press effect */
+.btn-press {
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+/* Smooth fade-in for page content */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* Page transition slide */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.page-slide {
+  animation: slideIn 0.25s ease-out;
+}
+
+/* Pagination button transitions */
+.page-btn {
+  transition: all 0.15s ease;
+}
+
+.page-btn:hover:not(:disabled) {
+  transform: translateX(2px);
+}
+
+.page-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+/* AI Search shimmer effect */
+@keyframes aiShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.ai-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--primary) / 0.1) 0%,
+    hsl(var(--primary) / 0.2) 50%,
+    hsl(var(--primary) / 0.1) 100%
+  );
+  background-size: 200% 100%;
+  animation: aiShimmer 2s infinite;
+}
+
+/* Subtle pulse for AI indicator */
+@keyframes subtlePulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.ai-pulse {
+  animation: subtlePulse 2s ease-in-out infinite;
+}
+
+/* Dropdown/Select open animation */
+@keyframes dropIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-state="open"] > [data-radix-collection-item] {
+  animation: dropIn 0.15s ease-out;
+}
+
+/* Icon spin on interaction */
+.icon-spin {
+  transition: transform 0.3s ease;
+}
+
+.icon-spin:hover {
+  transform: rotate(15deg);
+}
+
+/* Smooth skeleton loading */
+@keyframes shimmer {
+  0% {
+    background-position: -468px 0;
+  }
+  100% {
+    background-position: 468px 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    to right,
+    hsl(var(--muted)) 8%,
+    hsl(var(--muted-foreground) / 0.1) 18%,
+    hsl(var(--muted)) 33%
+  );
+  background-size: 800px 104px;
+  animation: shimmer 1.5s infinite linear;
+}
+
+/* Badge pop-in */
+@keyframes badgePop {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.badge-pop {
+  animation: badgePop 0.2s ease-out;
+}
+
+/* Subtle focus ring animation */
+.focus-ring-animate {
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.focus-ring-animate:focus {
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2);
+}
+
+/* Cart add animation */
+@keyframes cartBounce {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+.cart-bounce {
+  animation: cartBounce 0.3s ease;
+}
+
+/* Tooltip fade */
+[data-radix-popper-content-wrapper] {
+  animation: fadeInUp 0.15s ease-out;
+}

@@ -4,14 +4,13 @@ import { useLocation, useSearch } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAISearch } from "@/hooks/use-ai-search";
 import { ProductDetailModal } from "@/components/product-detail-modal";
+import { AISearchBox } from "@/components/ai-search-box";
 import { 
-  Search, 
   ShoppingCart, 
   Package,
   Filter,
@@ -24,8 +23,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Tag,
-  Eye,
-  Sparkles
+  Eye
 } from "lucide-react";
 import {
   Select,
@@ -119,7 +117,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
 
   return (
     <Card 
-      className={`overflow-hidden ${isGroupOutOfStock ? "opacity-60 cursor-not-allowed" : isOutOfStock ? "opacity-60 cursor-pointer" : "cursor-pointer hover-elevate"}`} 
+      className={`overflow-hidden tile-hover ${isGroupOutOfStock ? "opacity-60 cursor-not-allowed" : isOutOfStock ? "opacity-60 cursor-pointer" : "cursor-pointer hover-elevate"}`} 
       data-testid={`card-product-${product.id}`}
       onClick={() => !isGroupOutOfStock && onProductClick(product)}
     >
@@ -406,32 +404,23 @@ export default function ProductsPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 fade-in-up">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
-          <Tag className="h-6 w-6 text-primary" />
+          <Tag className="h-6 w-6 text-primary icon-spin" />
           <h1 className="text-2xl font-black tracking-tight" data-testid="heading-category" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
             {currentCategoryName}
           </h1>
         </div>
 
         <div className="flex gap-2 items-center flex-wrap">
-          <div className="relative w-80 lg:w-96">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input
-              placeholder="Try: 'cheap cables' or 'sunglasses under $5'..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-9"
-              data-testid="input-search"
-            />
-            {isAISearchActive && (
-              <Badge variant="secondary" className="absolute right-2 top-1/2 -translate-y-1/2 text-xs gap-1">
-                <Sparkles className="h-3 w-3" />
-                AI
-              </Badge>
-            )}
-          </div>
+          <AISearchBox
+            value={search}
+            onChange={setSearch}
+            isAIActive={isAISearchActive}
+            isSearching={isAISearching}
+            testId="input-search"
+          />
           
           <div className="flex items-center gap-1">
             <Filter className="h-4 w-4 text-muted-foreground" />
@@ -509,12 +498,12 @@ export default function ProductsPage() {
           </div>
           
           {/* Pagination Controls */}
-          {pagination && (
+          {data?.pagination && (
             <div className="flex items-center justify-center gap-4 pt-6 flex-wrap" data-testid="pagination-controls">
               <span className="text-sm text-muted-foreground">
-                {pagination.totalCount} products
+                {data.pagination.totalCount} products
               </span>
-              {pagination.totalPages > 1 && (
+              {data.pagination.totalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -545,21 +534,21 @@ export default function ProductsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((p) => (
+                        {Array.from({ length: data.pagination.totalPages }, (_, i) => i + 1).map((p) => (
                           <SelectItem key={p} value={p.toString()}>
                             {p}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    <span className="text-sm text-muted-foreground">of {pagination.totalPages}</span>
+                    <span className="text-sm text-muted-foreground">of {data.pagination.totalPages}</span>
                   </div>
                   
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
-                    disabled={page === pagination.totalPages}
+                    onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
+                    disabled={page === data.pagination.totalPages}
                     data-testid="button-next-page"
                   >
                     <ChevronRight className="h-4 w-4" />
@@ -567,8 +556,8 @@ export default function ProductsPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPage(pagination.totalPages)}
-                    disabled={page === pagination.totalPages}
+                    onClick={() => setPage(data.pagination.totalPages)}
+                    disabled={page === data.pagination.totalPages}
                     data-testid="button-last-page"
                   >
                     <ChevronsRight className="h-4 w-4" />

@@ -7,10 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAISearch } from "@/hooks/use-ai-search";
 import { ProductDetailModal } from "@/components/product-detail-modal";
+import { AISearchBox } from "@/components/ai-search-box";
 import { 
   Package, 
   ShoppingCart, 
@@ -25,13 +25,11 @@ import {
   Check,
   Tag,
   Eye,
-  Search,
   Filter,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight,
-  Sparkles
+  ChevronsRight
 } from "lucide-react";
 import {
   Select,
@@ -116,7 +114,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
 
   return (
     <Card 
-      className={`overflow-hidden ${isGroupOutOfStock ? "opacity-60 cursor-not-allowed" : isOutOfStock ? "opacity-60 cursor-pointer" : "cursor-pointer hover-elevate"}`} 
+      className={`overflow-hidden tile-hover ${isGroupOutOfStock ? "opacity-60 cursor-not-allowed" : isOutOfStock ? "opacity-60 cursor-pointer" : "cursor-pointer hover-elevate"}`} 
       data-testid={`card-product-${product.id}`}
       onClick={() => !isGroupOutOfStock && onProductClick(product)}
     >
@@ -356,33 +354,23 @@ function CustomerHomePage() {
   const HeadingIcon = showingHighlighted ? Star : Tag;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 fade-in-up">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
-          <HeadingIcon className={`h-6 w-6 ${showingHighlighted ? "text-amber-500" : "text-primary"}`} />
+          <HeadingIcon className={`h-6 w-6 ${showingHighlighted ? "text-amber-500" : "text-primary"} icon-spin`} />
           <h1 className="text-2xl font-black tracking-tight" data-testid="heading-home-products" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
             {headingText}
           </h1>
         </div>
 
         <div className="flex gap-2 items-center flex-wrap">
-          <div className="relative w-80 lg:w-96">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Try: 'cheap cables' or 'sunglasses under $5'..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-9"
-              data-testid="input-search-home"
-            />
-            {isAISearchActive && (
-              <Badge variant="secondary" className="absolute right-2 top-1/2 -translate-y-1/2 text-xs gap-1">
-                <Sparkles className="h-3 w-3" />
-                AI
-              </Badge>
-            )}
-          </div>
+          <AISearchBox
+            value={search}
+            onChange={setSearch}
+            isAIActive={isAISearchActive}
+            isSearching={isAISearching}
+            testId="input-search-home"
+          />
           
           <div className="flex items-center gap-1">
             <Filter className="h-4 w-4 text-muted-foreground" />
@@ -473,6 +461,7 @@ function CustomerHomePage() {
                 size="sm"
                 onClick={() => setCurrentPage(1)}
                 disabled={currentPage === 1}
+                className="page-btn"
                 data-testid="button-first-page"
               >
                 <ChevronsLeft className="h-4 w-4" />
@@ -482,6 +471,7 @@ function CustomerHomePage() {
                 size="sm"
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
+                className="page-btn"
                 data-testid="button-prev-page"
               >
                 <ChevronLeft className="h-4 w-4" />

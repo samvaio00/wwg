@@ -6,10 +6,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAISearch } from "@/hooks/use-ai-search";
 import { ProductDetailModal } from "@/components/product-detail-modal";
+import { AISearchBox } from "@/components/ai-search-box";
 import { 
   Package, 
   ShoppingCart, 
@@ -19,7 +19,6 @@ import {
   Minus,
   Check,
   Eye,
-  Search,
   Filter,
   ChevronLeft,
   ChevronRight,
@@ -109,7 +108,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
 
   return (
     <Card 
-      className={`overflow-hidden ${isGroupOutOfStock ? "opacity-60 cursor-not-allowed" : isOutOfStock ? "opacity-60 cursor-pointer" : "cursor-pointer hover-elevate"}`} 
+      className={`overflow-hidden tile-hover ${isGroupOutOfStock ? "opacity-60 cursor-not-allowed" : isOutOfStock ? "opacity-60 cursor-pointer" : "cursor-pointer hover-elevate"}`} 
       onClick={() => !isGroupOutOfStock && onProductClick(product)}
       data-testid={`card-product-${product.id}`}
     >
@@ -319,33 +318,23 @@ export default function WhatsNewPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 fade-in-up">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-6 w-6 text-primary" />
+          <Sparkles className="h-6 w-6 text-primary icon-spin" />
           <h1 className="text-2xl font-black tracking-tight" data-testid="heading-whats-new" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
             What's New
           </h1>
         </div>
 
         <div className="flex gap-2 items-center flex-wrap">
-          <div className="relative w-80 lg:w-96">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Try: 'cheap cables' or 'sunglasses under $5'..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-9"
-              data-testid="input-search-whats-new"
-            />
-            {isAISearchActive && (
-              <Badge variant="secondary" className="absolute right-2 top-1/2 -translate-y-1/2 text-xs gap-1">
-                <Sparkles className="h-3 w-3" />
-                AI
-              </Badge>
-            )}
-          </div>
+          <AISearchBox
+            value={search}
+            onChange={setSearch}
+            isAIActive={isAISearchActive}
+            isSearching={isAISearching}
+            testId="input-search-whats-new"
+          />
           
           <div className="flex items-center gap-1">
             <Filter className="h-4 w-4 text-muted-foreground" />

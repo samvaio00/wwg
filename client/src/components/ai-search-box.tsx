@@ -266,7 +266,7 @@ export function AISearchBox({
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="relative w-80 lg:w-96 ml-24">
-          <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary transition-colors" />
+          <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500 fill-blue-200 transition-colors" />
           <Input
             type="search"
             placeholder={placeholder}

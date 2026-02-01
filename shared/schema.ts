@@ -111,6 +111,9 @@ export const users = pgTable("users", {
   profileUpdatePending: boolean("profile_update_pending").default(false),
   pendingProfileData: jsonb("pending_profile_data"), // Stores pending profile changes as JSON
   
+  // Email communication preferences
+  emailOptIn: boolean("email_opt_in").default(true), // Customer opted in for promotional emails
+  
   // Timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -635,6 +638,81 @@ export const customerPrices = pgTable("customer_prices", {
 
 export type CustomerPrice = typeof customerPrices.$inferSelect;
 export type InsertCustomerPrice = typeof customerPrices.$inferInsert;
+
+// ================================================================
+// EMAIL UNSUBSCRIBE TOKENS TABLE
+// ================================================================
+
+export const emailUnsubscribeTokens = pgTable("email_unsubscribe_tokens", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: index("email_unsubscribe_tokens_token_idx").on(table.token),
+  userIdx: index("email_unsubscribe_tokens_user_idx").on(table.userId),
+}));
+
+export type EmailUnsubscribeToken = typeof emailUnsubscribeTokens.$inferSelect;
+
+// ================================================================
+// EMAIL CAMPAIGN LOGS TABLE (track sent promotional emails)
+// ================================================================
+
+export const EmailCampaignType = {
+  NEW_HIGHLIGHTED_ITEMS: 'new_highlighted_items',
+  NEW_SKUS: 'new_skus',
+  CART_ABANDONMENT: 'cart_abandonment',
+} as const;
+
+export type EmailCampaignTypeValue = typeof EmailCampaignType[keyof typeof EmailCampaignType];
+
+export const emailCampaignLogs = pgTable("email_campaign_logs", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Campaign details
+  campaignType: text("campaign_type").notNull(), // new_highlighted_items, new_skus, cart_abandonment
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id),
+  
+  // Email details
+  subject: text("subject").notNull(),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  
+  // Reference data (e.g., product IDs, cart ID for abandonment)
+  referenceData: jsonb("reference_data"),
+  
+  // Status
+  success: boolean("success").default(true),
+  errorMessage: text("error_message"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  campaignTypeIdx: index("email_campaign_logs_type_idx").on(table.campaignType),
+  userIdx: index("email_campaign_logs_user_idx").on(table.userId),
+  sentAtIdx: index("email_campaign_logs_sent_idx").on(table.sentAt),
+}));
+
+export type EmailCampaignLog = typeof emailCampaignLogs.$inferSelect;
+
+// ================================================================
+// EMAIL CAMPAIGN TRACKING (track what items have been promoted)
+// ================================================================
+
+export const emailCampaignTracking = pgTable("email_campaign_tracking", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Track last sync for different campaign types
+  campaignType: text("campaign_type").notNull().unique(), // new_highlighted_items, new_skus
+  lastSyncAt: timestamp("last_sync_at").defaultNow().notNull(),
+  
+  // Store IDs that were included in the last campaign (to avoid duplicates)
+  lastPromotedIds: text("last_promoted_ids").array(),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type EmailCampaignTracking = typeof emailCampaignTracking.$inferSelect;
 
 // ================================================================
 // EMAIL ACTION TOKENS TABLE (for approve/reject from email)

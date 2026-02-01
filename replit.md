@@ -49,9 +49,17 @@ The platform is built with a modern web stack:
 - **Registration Enhancements**: Added date of birth field (21+ age verification) and file upload for Sales Tax Certificate/Business License during new customer registration.
 - **New Pages**: Created About Us, Return Policy, and Disclaimer static content pages.
 - **UI/UX Updates**: My Account menu items (Order History, Edit Profile, Contact Us) moved from sidebar to header user dropdown. AI Order button displays text next to sparkles icon for better visibility. What's New uses Gift icon instead of Sparkles.
+- **Top Sellers Zoho Books Sync**: Top Sellers now uses Zoho Books invoice data (last 30 days). Sync runs weekly on Sundays at midnight. Displays 24 top sellers with group-aware display (grouped products show group tile). Cached in `top_sellers_cache` table.
 
 ## File Upload Configuration
 
 - Certificate uploads are stored in `/uploads/certificates/` directory.
 - Supported file types: PDF, JPEG, PNG, GIF (max 5MB).
-- Static file serving configured at `/uploads` route.
+- Certificate files served only via protected admin endpoint `/api/admin/certificates/:filename`.
+
+## Scheduler Configuration
+
+- **Zoho Inventory Sync**: Dynamic intervals - 2 hours during business hours (8 AM - 6 PM weekdays), 6 hours off-hours/weekends.
+- **Customer Status Sync**: Every 60 minutes.
+- **Embeddings Update**: Every 120 minutes.
+- **Top Sellers Sync**: Weekly on Sundays at midnight (fetches last 30 days of invoice data from Zoho Books).

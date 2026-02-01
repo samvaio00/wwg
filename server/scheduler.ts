@@ -1,5 +1,5 @@
 import { syncProductsFromZoho, syncCategoriesFromZoho, syncItemGroupsFromZoho } from "./zoho-service";
-import { syncCustomerStatusFromZoho } from "./zoho-books-service";
+import { syncCustomerStatusFromZoho, syncTopSellersFromZoho } from "./zoho-books-service";
 import { generateProductEmbeddings } from "./ai-service";
 
 interface SchedulerConfig {
@@ -48,9 +48,11 @@ let config = { ...DEFAULT_CONFIG };
 let zohoSyncInterval: NodeJS.Timeout | null = null;
 let customerSyncInterval: NodeJS.Timeout | null = null;
 let embeddingsInterval: NodeJS.Timeout | null = null;
+let topSellersInterval: NodeJS.Timeout | null = null;
 let lastZohoSync: Date | null = null;
 let lastCustomerSync: Date | null = null;
 let lastEmbeddingsUpdate: Date | null = null;
+let lastTopSellersSync: Date | null = null;
 
 export function getSchedulerStatus() {
   const currentInterval = getCurrentSyncInterval();
@@ -85,7 +87,28 @@ export function getSchedulerStatus() {
         : null,
       running: embeddingsInterval !== null,
     },
+    topSellersSync: {
+      schedule: "Weekly (Sunday)",
+      lastRun: lastTopSellersSync,
+      nextRun: getNextSundayMidnight(),
+      running: topSellersInterval !== null,
+    },
   };
+}
+
+function getNextSundayMidnight(): Date {
+  const now = new Date();
+  const daysUntilSunday = (7 - now.getDay()) % 7 || 7;
+  const nextSunday = new Date(now);
+  nextSunday.setDate(now.getDate() + daysUntilSunday);
+  nextSunday.setHours(0, 0, 0, 0);
+  return nextSunday;
+}
+
+function getMsUntilNextSunday(): number {
+  const now = new Date();
+  const nextSunday = getNextSundayMidnight();
+  return nextSunday.getTime() - now.getTime();
 }
 
 async function runZohoSync() {
@@ -141,6 +164,35 @@ async function runEmbeddingsUpdate() {
   }
 }
 
+async function runTopSellersSync() {
+  console.log("[Scheduler] Starting scheduled top sellers sync from Zoho Books...");
+  try {
+    const result = await syncTopSellersFromZoho();
+    lastTopSellersSync = new Date();
+    console.log(`[Scheduler] Top sellers sync complete: ${result.synced} products synced`);
+    return result;
+  } catch (error) {
+    console.error("[Scheduler] Top sellers sync error:", error);
+    throw error;
+  }
+}
+
+function scheduleNextTopSellersSync() {
+  const msUntilSunday = getMsUntilNextSunday();
+  const hoursUntil = Math.round(msUntilSunday / (1000 * 60 * 60));
+  console.log(`[Scheduler] Next top sellers sync scheduled in ${hoursUntil} hours (Sunday midnight)`);
+  
+  topSellersInterval = setTimeout(async () => {
+    try {
+      await runTopSellersSync();
+    } catch (error) {
+      console.error("[Scheduler] Top sellers sync failed, will retry next week:", error);
+    } finally {
+      scheduleNextTopSellersSync();
+    }
+  }, msUntilSunday);
+}
+
 function scheduleNextZohoSync() {
   const interval = getCurrentSyncInterval();
   console.log(`[Scheduler] Next Zoho sync in ${interval} minutes (${isBusinessHours() ? 'business hours' : 'off-hours'})`);
@@ -190,11 +242,15 @@ export function startScheduler(newConfig?: Partial<SchedulerConfig>) {
     config.embeddingsUpdateIntervalMinutes * 60 * 1000
   );
 
+  // Schedule weekly top sellers sync (Sundays at midnight)
+  scheduleNextTopSellersSync();
+
   setTimeout(() => {
     console.log("[Scheduler] Running initial sync on startup...");
     runZohoSync()
       .then(() => runCustomerSync())
       .then(() => runEmbeddingsUpdate())
+      .then(() => runTopSellersSync())
       .catch((err) => console.error("[Scheduler] Initial sync error:", err));
   }, 5000);
 }
@@ -215,6 +271,11 @@ export function stopScheduler() {
     embeddingsInterval = null;
     console.log("[Scheduler] Embeddings interval stopped");
   }
+  if (topSellersInterval) {
+    clearTimeout(topSellersInterval);
+    topSellersInterval = null;
+    console.log("[Scheduler] Top sellers sync stopped");
+  }
 }
 
 export function updateSchedulerConfig(newConfig: Partial<SchedulerConfig>) {
@@ -226,7 +287,7 @@ export function updateSchedulerConfig(newConfig: Partial<SchedulerConfig>) {
   }
 }
 
-export async function triggerManualSync(type: "zoho" | "customers" | "embeddings" | "all") {
+export async function triggerManualSync(type: "zoho" | "customers" | "embeddings" | "topsellers" | "all") {
   const results: Record<string, unknown> = {};
   
   if (type === "zoho" || type === "all") {
@@ -239,6 +300,10 @@ export async function triggerManualSync(type: "zoho" | "customers" | "embeddings
   
   if (type === "embeddings" || type === "all") {
     results.embeddings = await runEmbeddingsUpdate();
+  }
+  
+  if (type === "topsellers" || type === "all") {
+    results.topsellers = await runTopSellersSync();
   }
   
   return results;

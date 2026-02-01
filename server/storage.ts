@@ -15,6 +15,7 @@ import {
   type InsertCategory,
   type ZohoApiLog,
   type InsertZohoApiLog,
+  type TopSellerCache,
   users,
   products,
   carts,
@@ -27,6 +28,7 @@ import {
   priceLists,
   categories,
   zohoApiLogs,
+  topSellersCache,
   toSafeUser,
   UserRole,
   UserStatus,
@@ -372,11 +374,11 @@ export class DatabaseStorage implements IStorage {
     }
     
     // Set stockQuantity to 0 for groups where all variants are out of stock
-    for (const [, group] of groupMap) {
+    Array.from(groupMap.values()).forEach(group => {
       if (group._allVariantsOutOfStock) {
         group.stockQuantity = 0;
       }
-    }
+    });
 
     // Combine and sort
     let consolidated = [...ungrouped, ...Array.from(groupMap.values())];
@@ -817,11 +819,84 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTopSellingProducts(limit: number = 24): Promise<Product[]> {
-    // Get products from orders in the last 3 months
+    // First, check if we have cached top sellers from Zoho Books
+    // Fetch all cache entries to ensure we can fill up to limit unique display items
+    const cachedTopSellers = await db.select()
+      .from(topSellersCache)
+      .orderBy(asc(topSellersCache.rank));
+
+    if (cachedTopSellers.length > 0) {
+      // Deduplicate IDs before querying
+      const productIds = Array.from(new Set(cachedTopSellers.map(c => c.productId).filter(Boolean) as string[]));
+      const groupIds = Array.from(new Set(cachedTopSellers.map(c => c.zohoGroupId).filter(Boolean) as string[]));
+      
+      // Get all products by IDs
+      const allProducts = productIds.length > 0 ? await db.select()
+        .from(products)
+        .where(and(
+          sql`${products.id} IN (${sql.join(productIds.map(id => sql`${id}`), sql`, `)})`,
+          eq(products.isOnline, true),
+          eq(products.isActive, true)
+        )) : [];
+      
+      // Get representative products for all groups
+      const groupProducts = groupIds.length > 0 ? await db.select()
+        .from(products)
+        .where(and(
+          sql`${products.zohoGroupId} IN (${sql.join(groupIds.map(id => sql`${id}`), sql`, `)})`,
+          eq(products.isOnline, true),
+          eq(products.isActive, true)
+        ))
+        .orderBy(asc(products.sku)) : [];
+      
+      // Build maps for fast lookup
+      const productMap = new Map(allProducts.map(p => [p.id, p]));
+      const groupRepMap = new Map<string, Product>();
+      for (const p of groupProducts) {
+        if (p.zohoGroupId && !groupRepMap.has(p.zohoGroupId)) {
+          groupRepMap.set(p.zohoGroupId, p);
+        }
+      }
+      
+      // Build result list with group-aware logic
+      const seenGroupIds = new Set<string>();
+      const seenProductIds = new Set<string>();
+      const resultProducts: Product[] = [];
+
+      for (const cached of cachedTopSellers) {
+        if (!cached.productId) continue;
+        
+        const product = productMap.get(cached.productId);
+        if (!product) continue;
+
+        // If product is part of a group, show the group tile
+        if (cached.zohoGroupId) {
+          if (!seenGroupIds.has(cached.zohoGroupId)) {
+            seenGroupIds.add(cached.zohoGroupId);
+            const groupProduct = groupRepMap.get(cached.zohoGroupId);
+            if (groupProduct && !seenProductIds.has(groupProduct.id)) {
+              seenProductIds.add(groupProduct.id);
+              resultProducts.push(groupProduct);
+            }
+          }
+        } else {
+          // Not part of a group, show the individual product
+          if (!seenProductIds.has(product.id)) {
+            seenProductIds.add(product.id);
+            resultProducts.push(product);
+          }
+        }
+
+        if (resultProducts.length >= limit) break;
+      }
+
+      return resultProducts;
+    }
+
+    // Fallback to website orders if no cache (legacy behavior)
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
-    // Get top selling product IDs based on total quantity sold
     const topSelling = await db
       .select({
         productId: orderItems.productId,
@@ -832,7 +907,6 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           gte(orders.createdAt, threeMonthsAgo),
-          // Only count approved/completed orders
           or(
             eq(orders.status, OrderStatus.APPROVED),
             eq(orders.status, OrderStatus.PROCESSING),
@@ -849,7 +923,6 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
 
-    // Get product details for top sellers
     const productIds = topSelling.map(ts => ts.productId);
     const productResults = await db
       .select()
@@ -862,7 +935,6 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
-    // Sort by sales order
     const productMap = new Map(productResults.map(p => [p.id, p]));
     return productIds
       .map(id => productMap.get(id))

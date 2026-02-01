@@ -609,3 +609,250 @@ export async function createZohoCustomer(input: ZohoCustomerInput): Promise<Zoho
     };
   }
 }
+
+// ================================================================
+// TOP SELLERS SYNC (Zoho Books invoices data)
+// ================================================================
+
+interface ZohoInvoiceLineItem {
+  item_id: string;
+  name: string;
+  sku?: string;
+  quantity: number;
+  item_total: number;
+}
+
+interface ZohoInvoice {
+  invoice_id: string;
+  invoice_number: string;
+  date: string;
+  status: string;
+  line_items?: ZohoInvoiceLineItem[];
+}
+
+interface ZohoInvoicesResponse {
+  invoices: ZohoInvoice[];
+  page_context?: {
+    page: number;
+    per_page: number;
+    has_more_page: boolean;
+  };
+}
+
+interface ZohoInvoiceDetailResponse {
+  invoice: ZohoInvoice;
+}
+
+export interface TopSellersSyncResult {
+  success: boolean;
+  synced: number;
+  periodStart: Date;
+  periodEnd: Date;
+  message: string;
+}
+
+import { topSellersCache, products } from "@shared/schema";
+
+export async function syncTopSellersFromZoho(): Promise<TopSellersSyncResult> {
+  const periodEnd = new Date();
+  const periodStart = new Date();
+  periodStart.setDate(periodStart.getDate() - 30);
+
+  try {
+    const accessToken = await getAccessToken();
+    const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
+
+    if (!organizationId) {
+      throw new Error("Zoho organization ID not configured");
+    }
+
+    console.log(`[Zoho Books] Syncing top sellers for last 30 days (${periodStart.toISOString().split('T')[0]} to ${periodEnd.toISOString().split('T')[0]})`);
+
+    const dateStart = periodStart.toISOString().split('T')[0];
+    const dateEnd = periodEnd.toISOString().split('T')[0];
+    
+    const salesByItem: Map<string, { zohoItemId: string; sku: string; name: string; quantity: number; revenue: number; orderCount: number }> = new Map();
+    
+    let page = 1;
+    let hasMorePages = true;
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 3;
+    
+    while (hasMorePages && consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
+      try {
+        // Use proper Zoho Books API filters
+        const response = await fetch(
+          `https://www.zohoapis.com/books/v3/invoices?organization_id=${organizationId}&date_start=${dateStart}&date_end=${dateEnd}&page=${page}&per_page=100`,
+          {
+            headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[Zoho Books] Failed to fetch invoices page ${page}:`, errorText);
+          consecutiveErrors++;
+          await new Promise(resolve => setTimeout(resolve, 2000 * consecutiveErrors));
+          continue;
+        }
+
+        consecutiveErrors = 0;
+        const data: ZohoInvoicesResponse = await response.json();
+        
+        // Process invoices in smaller batches to avoid rate limiting
+        const batchSize = 10;
+        for (let i = 0; i < data.invoices.length; i += batchSize) {
+          const batch = data.invoices.slice(i, i + batchSize);
+          
+          for (const invoice of batch) {
+            // Only process paid/sent invoices
+            if (invoice.status !== 'paid' && invoice.status !== 'sent') {
+              continue;
+            }
+            
+            try {
+              const detailResponse = await fetch(
+                `https://www.zohoapis.com/books/v3/invoices/${invoice.invoice_id}?organization_id=${organizationId}`,
+                {
+                  headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
+                }
+              );
+              
+              if (detailResponse.ok) {
+                const detailData: ZohoInvoiceDetailResponse = await detailResponse.json();
+                const lineItems = detailData.invoice.line_items || [];
+                
+                for (const item of lineItems) {
+                  if (!item.item_id) continue;
+                  const key = item.item_id;
+                  const existing = salesByItem.get(key);
+                  
+                  if (existing) {
+                    existing.quantity += item.quantity;
+                    existing.revenue += item.item_total;
+                    existing.orderCount += 1;
+                  } else {
+                    salesByItem.set(key, {
+                      zohoItemId: item.item_id,
+                      sku: item.sku || "",
+                      name: item.name,
+                      quantity: item.quantity,
+                      revenue: item.item_total,
+                      orderCount: 1,
+                    });
+                  }
+                }
+              } else if (detailResponse.status === 429) {
+                // Rate limited - wait and continue
+                console.log("[Zoho Books] Rate limited, waiting 5 seconds...");
+                await new Promise(resolve => setTimeout(resolve, 5000));
+              }
+            } catch (detailError) {
+              console.error(`[Zoho Books] Error fetching invoice ${invoice.invoice_id}:`, detailError);
+            }
+          }
+          
+          // Wait between batches to avoid rate limiting
+          if (i + batchSize < data.invoices.length) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+        
+        hasMorePages = data.page_context?.has_more_page || false;
+        page++;
+        
+        // Rate limiting - wait between pages
+        if (hasMorePages) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } catch (pageError) {
+        console.error(`[Zoho Books] Error processing page ${page}:`, pageError);
+        consecutiveErrors++;
+        await new Promise(resolve => setTimeout(resolve, 2000 * consecutiveErrors));
+      }
+    }
+
+    console.log(`[Zoho Books] Found ${salesByItem.size} unique items with sales`);
+
+    if (salesByItem.size === 0) {
+      console.log("[Zoho Books] No sales data found, keeping existing cache");
+      return {
+        success: true,
+        synced: 0,
+        periodStart,
+        periodEnd,
+        message: "No sales data found in Zoho Books for the period",
+      };
+    }
+
+    // Sort by quantity sold and take top 48 (more than 24 to account for groups)
+    const sortedItems = Array.from(salesByItem.values())
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 48);
+
+    // Build cache data first, then atomically update
+    const cacheData: Array<{
+      productId: string;
+      zohoItemId: string;
+      zohoGroupId: string | null;
+      totalQuantitySold: number;
+      totalRevenue: string;
+      orderCount: number;
+      rank: number;
+      periodStartDate: Date;
+      periodEndDate: Date;
+    }> = [];
+
+    for (let i = 0; i < sortedItems.length; i++) {
+      const item = sortedItems[i];
+      
+      const [product] = await db.select()
+        .from(products)
+        .where(eq(products.zohoItemId, item.zohoItemId))
+        .limit(1);
+
+      if (product) {
+        cacheData.push({
+          productId: product.id,
+          zohoItemId: item.zohoItemId,
+          zohoGroupId: product.zohoGroupId || null,
+          totalQuantitySold: item.quantity,
+          totalRevenue: item.revenue.toFixed(2),
+          orderCount: item.orderCount,
+          rank: i + 1,
+          periodStartDate: periodStart,
+          periodEndDate: periodEnd,
+        });
+      } else {
+        console.log(`[Zoho Books] No matching product for Zoho item ${item.zohoItemId} (${item.name})`);
+      }
+    }
+
+    // Only update cache if we have data
+    if (cacheData.length > 0) {
+      await db.delete(topSellersCache);
+      for (const data of cacheData) {
+        await db.insert(topSellersCache).values(data);
+      }
+    }
+
+    console.log(`[Zoho Books] Top sellers sync complete: ${cacheData.length} products cached`);
+
+    return {
+      success: true,
+      synced: cacheData.length,
+      periodStart,
+      periodEnd,
+      message: `Synced ${cacheData.length} top selling products`,
+    };
+  } catch (err) {
+    console.error("[Zoho Books] Top sellers sync error:", err);
+    return {
+      success: false,
+      synced: 0,
+      periodStart,
+      periodEnd,
+      message: err instanceof Error ? err.message : "Failed to sync top sellers",
+    };
+  }
+}

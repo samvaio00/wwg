@@ -320,7 +320,7 @@ export default function WhatsNewPage() {
               placeholder="Search products..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-14 text-base"
+              className="pl-10 h-9"
               data-testid="input-search-whats-new"
             />
           </div>

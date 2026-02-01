@@ -80,6 +80,20 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// Middleware to check if user is staff or admin (staff has limited admin privileges)
+async function requireStaffOrAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  
+  const user = await storage.getUser(req.session.userId);
+  if (!user || (user.role !== UserRole.ADMIN && user.role !== UserRole.STAFF)) {
+    return res.status(403).json({ message: "Staff or admin access required" });
+  }
+  
+  next();
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -511,7 +525,7 @@ export async function registerRoutes(
   // ================================================================
 
   // Admin: Get all users
-  app.get("/api/admin/users", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/users", requireStaffOrAdmin, async (_req, res) => {
     try {
       const allUsers = await storage.getAllUsers();
       res.json({ users: allUsers });
@@ -522,7 +536,7 @@ export async function registerRoutes(
   });
 
   // Admin: Get pending users
-  app.get("/api/admin/users/pending", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/users/pending", requireStaffOrAdmin, async (_req, res) => {
     try {
       const pendingUsers = await storage.getPendingUsers();
       res.json({ users: pendingUsers });
@@ -535,7 +549,7 @@ export async function registerRoutes(
   // Admin: Approve user
   // For NEW customers without Zoho ID: creates customer in Zoho Books first
   // For existing Zoho customers: just approves (they already have zohoCustomerId)
-  app.post("/api/admin/users/:id/approve", requireAdmin, async (req, res) => {
+  app.post("/api/admin/users/:id/approve", requireStaffOrAdmin, async (req, res) => {
     try {
       const id = req.params.id as string;
       
@@ -603,7 +617,7 @@ export async function registerRoutes(
   });
 
   // Admin: Reject user
-  app.post("/api/admin/users/:id/reject", requireAdmin, async (req, res) => {
+  app.post("/api/admin/users/:id/reject", requireStaffOrAdmin, async (req, res) => {
     try {
       const id = req.params.id as string;
       
@@ -1205,7 +1219,7 @@ export async function registerRoutes(
   // ================================================================
 
   // Get all orders (admin only)
-  app.get("/api/admin/orders", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/orders", requireStaffOrAdmin, async (_req, res) => {
     try {
       const orderList = await storage.getAllOrders();
       res.json({ orders: orderList });
@@ -1216,7 +1230,7 @@ export async function registerRoutes(
   });
 
   // Approve order
-  app.post("/api/admin/orders/:id/approve", requireAdmin, async (req, res) => {
+  app.post("/api/admin/orders/:id/approve", requireStaffOrAdmin, async (req, res) => {
     try {
       // Get order with items
       const orderData = await storage.getOrderWithItems(req.params.id as string);
@@ -1314,7 +1328,7 @@ export async function registerRoutes(
   });
 
   // Reject order
-  app.post("/api/admin/orders/:id/reject", requireAdmin, async (req, res) => {
+  app.post("/api/admin/orders/:id/reject", requireStaffOrAdmin, async (req, res) => {
     try {
       const { reason } = req.body;
       const order = await storage.updateOrderStatus(req.params.id as string, OrderStatus.REJECTED, req.session.userId!, reason);
@@ -1329,7 +1343,7 @@ export async function registerRoutes(
   });
 
   // Update order status
-  app.patch("/api/admin/orders/:id/status", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/orders/:id/status", requireStaffOrAdmin, async (req, res) => {
     try {
       const { status } = req.body;
       const validStatuses = Object.values(OrderStatus);
@@ -1538,7 +1552,7 @@ export async function registerRoutes(
   // ================================================================
 
   // Get highlighted products
-  app.get("/api/admin/highlighted-products", requireAdmin, async (req, res) => {
+  app.get("/api/admin/highlighted-products", requireStaffOrAdmin, async (req, res) => {
     try {
       const highlighted = await storage.getHighlightedProducts();
       res.json({ products: highlighted });
@@ -1572,7 +1586,7 @@ export async function registerRoutes(
   });
 
   // Toggle product highlight status
-  app.post("/api/admin/products/:id/highlight", requireAdmin, async (req, res) => {
+  app.post("/api/admin/products/:id/highlight", requireStaffOrAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { isHighlighted } = req.body;
@@ -1610,7 +1624,7 @@ export async function registerRoutes(
 
   // Sync products from Zoho Inventory
   // Use ?full=true to force a full sync instead of incremental
-  app.post("/api/admin/zoho/sync", requireAdmin, async (req, res) => {
+  app.post("/api/admin/zoho/sync", requireStaffOrAdmin, async (req, res) => {
     try {
       const forceFullSync = req.query.full === "true";
       const result = await syncProductsFromZoho("admin", forceFullSync);
@@ -1628,7 +1642,7 @@ export async function registerRoutes(
   });
 
   // Sync item groups from Zoho Inventory (updates products with group IDs)
-  app.post("/api/admin/zoho/item-groups/sync", requireAdmin, async (_req, res) => {
+  app.post("/api/admin/zoho/item-groups/sync", requireStaffOrAdmin, async (_req, res) => {
     try {
       const result = await syncItemGroupsFromZoho();
       res.json({
@@ -1646,7 +1660,7 @@ export async function registerRoutes(
   });
 
   // Sync price lists from Zoho Inventory
-  app.post("/api/admin/zoho/price-lists/sync", requireAdmin, async (_req, res) => {
+  app.post("/api/admin/zoho/price-lists/sync", requireStaffOrAdmin, async (_req, res) => {
     try {
       const { syncPriceListsFromZoho } = await import("./zoho-service");
       const result = await syncPriceListsFromZoho();
@@ -1993,7 +2007,7 @@ export async function registerRoutes(
   // ================================================================
 
   // Get scheduler status
-  app.get("/api/admin/scheduler/status", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/scheduler/status", requireStaffOrAdmin, async (_req, res) => {
     try {
       const status = getSchedulerStatus();
       res.json(status);
@@ -2004,7 +2018,7 @@ export async function registerRoutes(
   });
 
   // Update scheduler configuration
-  app.patch("/api/admin/scheduler/config", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/scheduler/config", requireStaffOrAdmin, async (req, res) => {
     try {
       const { enabled, zohoSyncIntervalMinutes, embeddingsUpdateIntervalMinutes } = req.body;
       updateSchedulerConfig({
@@ -2021,7 +2035,7 @@ export async function registerRoutes(
   });
 
   // Trigger manual sync
-  app.post("/api/admin/scheduler/sync", requireAdmin, async (req, res) => {
+  app.post("/api/admin/scheduler/sync", requireStaffOrAdmin, async (req, res) => {
     try {
       const { type = "all" } = req.body;
       if (!["zoho", "embeddings", "customers", "topsellers", "all"].includes(type)) {
@@ -2039,7 +2053,7 @@ export async function registerRoutes(
   });
 
   // Trigger top sellers sync from Zoho Books
-  app.post("/api/admin/sync/top-sellers", requireAdmin, async (_req, res) => {
+  app.post("/api/admin/sync/top-sellers", requireStaffOrAdmin, async (_req, res) => {
     try {
       console.log("[Admin] Triggering top sellers sync...");
       const result = await syncTopSellersFromZoho();

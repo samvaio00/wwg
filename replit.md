@@ -22,7 +22,10 @@ The platform is built with a modern web stack:
 - **Routing**: `wouter` for client-side routing and Express for backend API routes.
 - **Design Principles**: Focused on a professional, trustworthy, fast, and efficient user experience, inspired by leading B2B platforms like Amazon Business and Shopify Plus B2B. The UI features a clean, modern, and commercial-polished aesthetic with a practical, grid-based, and SKU-driven approach.
 - **Core Features**:
-    - **User Management**: Supports 'admin', 'customer', and 'pending' roles with a comprehensive status workflow (pending, approved, rejected, suspended).
+    - **User Management**: Supports 'admin', 'staff', 'customer', and 'pending' roles with a comprehensive status workflow (pending, approved, rejected, suspended).
+      - **Admin**: Full access to all features including user management, order management, analytics, and all settings.
+      - **Staff**: Limited admin access for customer approvals, order approvals, highlighted items selection, and Zoho API sync options. Cannot access analytics or suspend/reactivate users.
+      - **Customer**: Shopping, ordering, and self-service features.
     - **Product Catalog**: Displays products with category filtering, search, sorting, pagination, and inventory-based buyability. Products can be marked as `isOnline` to control storefront visibility, linked to Zoho Inventory's "Show in Online Store" toggle. Clicking any product card opens a detail modal with full product information (larger image, description, stock badges, case pack info) and add-to-cart controls.
     - **Item Groups (Product Variants)**: Products can be grouped via Zoho Inventory item groups (e.g., different colors/sizes of the same product). Products with a `zohoGroupId` display all variants in the product detail modal with individual add-to-cart controls per variant. The scheduler automatically syncs item groups from Zoho's `/itemgroups` endpoint.
     - **Homepage Featured Products**: Customers see a customizable homepage with featured products. Admins can highlight products in Settings. Minimum 12 highlighted products required to show "Featured Products"; otherwise falls back to "Warner Collection" category.

@@ -79,6 +79,8 @@ function CartButton() {
 function HeaderUserMenu() {
   const { user, logout } = useAuth();
   const isAdmin = user?.role === "admin";
+  const isStaff = user?.role === "staff";
+  const isAdminOrStaff = isAdmin || isStaff;
 
   const getInitials = () => {
     if (user?.contactName) {
@@ -115,21 +117,22 @@ function HeaderUserMenu() {
           <p className="text-sm font-medium">{user?.contactName || user?.businessName}</p>
           <p className="text-xs text-muted-foreground">{user?.email}</p>
           {isAdmin && <p className="text-xs text-primary font-medium">Administrator</p>}
+          {isStaff && <p className="text-xs text-blue-600 font-medium">Staff</p>}
         </div>
         <DropdownMenuSeparator />
         {/* Show different menu items based on role */}
-        {isAdmin ? (
+        {isAdminOrStaff ? (
           <>
             <DropdownMenuItem asChild>
               <Link href="/admin/users" className="cursor-pointer" data-testid="menu-item-users">
                 <User className="mr-2 h-4 w-4" />
-                User Management
+                {isAdmin ? "User Management" : "User Approvals"}
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/admin/orders" className="cursor-pointer" data-testid="menu-item-admin-orders">
                 <ClipboardList className="mr-2 h-4 w-4" />
-                Order Management
+                {isAdmin ? "Order Management" : "Order Approvals"}
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
@@ -184,6 +187,8 @@ function HeaderUserMenu() {
 function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const isStaff = user?.role === "staff";
+  const isAdminOrStaff = isAdmin || isStaff;
   
   const style = {
     "--sidebar-width": "16rem",
@@ -198,15 +203,15 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
           <header className="sticky top-0 z-50 flex h-12 items-center justify-between gap-4 glass-header px-4">
             <div className="flex items-center gap-2">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
-              {/* Only show AI Cart Builder for customers */}
-              {!isAdmin && <AICartBuilder />}
+              {/* Only show AI Cart Builder for customers (not admin or staff) */}
+              {!isAdminOrStaff && <AICartBuilder />}
             </div>
             <div className="flex-1" />
             <div className="flex items-center gap-2">
               <HeaderUserMenu />
               <ThemeToggle />
-              {/* Only show cart for customers */}
-              {!isAdmin && <CartButton />}
+              {/* Only show cart for customers (not admin or staff) */}
+              {!isAdminOrStaff && <CartButton />}
             </div>
           </header>
           <main className="flex-1 overflow-auto p-6">

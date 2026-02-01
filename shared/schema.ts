@@ -10,6 +10,7 @@ import { z } from "zod";
 // User roles for B2B wholesale platform
 export const UserRole = {
   ADMIN: 'admin',
+  STAFF: 'staff',
   CUSTOMER: 'customer',
   PENDING: 'pending',
 } as const;

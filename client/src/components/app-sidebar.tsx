@@ -54,17 +54,45 @@ const adminNavItems = [
   },
 ];
 
+const staffNavItems = [
+  {
+    title: "Dashboard",
+    url: "/",
+    icon: LayoutDashboard,
+  },
+  {
+    title: "User Approvals",
+    url: "/admin/users",
+    icon: Users,
+  },
+  {
+    title: "Order Approvals",
+    url: "/admin/orders",
+    icon: Package,
+  },
+  {
+    title: "Settings",
+    url: "/admin/settings",
+    icon: Settings,
+  },
+];
+
 export function AppSidebar() {
   const [location] = useLocation();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const isStaff = user?.role === "staff";
+  const isAdminOrStaff = isAdmin || isStaff;
 
-  // Fetch categories from Zoho (only for non-admin users)
+  // Fetch categories from Zoho (only for customer users)
   const { data: categoriesData } = useQuery<{ categories: Category[] }>({
     queryKey: ["/api/categories"],
-    enabled: !isAdmin, // Don't fetch categories for admin users
+    enabled: !isAdminOrStaff, // Don't fetch categories for admin or staff users
   });
   const categories = categoriesData?.categories || [];
+
+  // Choose navigation items based on role
+  const navItems = isAdmin ? adminNavItems : isStaff ? staffNavItems : [];
 
   return (
     <Sidebar>
@@ -79,18 +107,18 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Admin-only navigation */}
-        {isAdmin ? (
+        {/* Admin/Staff navigation */}
+        {isAdminOrStaff ? (
           <SidebarGroup>
-            <SidebarGroupLabel>Administration</SidebarGroupLabel>
+            <SidebarGroupLabel>{isAdmin ? "Administration" : "Staff Panel"}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {adminNavItems.map((item) => (
+                {navItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       asChild
                       isActive={location === item.url}
-                      data-testid={`nav-admin-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                      data-testid={`nav-${isAdmin ? 'admin' : 'staff'}-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                     >
                       <Link href={item.url}>
                         <item.icon className="h-4 w-4" />

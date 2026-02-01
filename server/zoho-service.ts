@@ -56,6 +56,8 @@ interface ZohoItem {
   // Item group fields (for variant products like colors, sizes)
   group_id?: string;
   group_name?: string;
+  item_group_id?: string;
+  item_group_name?: string;
 }
 
 function getCustomFieldValue(item: ZohoItem, label: string): string | number | boolean | undefined {
@@ -402,8 +404,8 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual", force
                   isActive: true,
                   isOnline: showInOnlineStore,
                   zohoItemId: item.item_id,
-                  zohoGroupId: item.group_id || null,
-                  zohoGroupName: item.group_name || null,
+                  zohoGroupId: item.item_group_id || item.group_id || null,
+                  zohoGroupName: item.item_group_name || item.group_name || null,
                   zohoLastSyncAt: new Date(),
                   updatedAt: new Date(),
                 })
@@ -428,8 +430,8 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual", force
                 isActive: true,
                 isOnline: showInOnlineStore,
                 zohoItemId: item.item_id,
-                zohoGroupId: item.group_id || null,
-                zohoGroupName: item.group_name || null,
+                zohoGroupId: item.item_group_id || item.group_id || null,
+                zohoGroupName: item.item_group_name || item.group_name || null,
                 zohoLastSyncAt: new Date(),
                 createdAt: new Date(),
                 updatedAt: new Date(),

@@ -144,9 +144,8 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               <AICartBuilder />
             </div>
             <div className="hidden md:flex items-center justify-center flex-1">
-              <h1 className="text-lg md:text-xl font-bold tracking-tight bg-gradient-to-r from-blue-600 via-teal-500 to-blue-600 bg-clip-text text-transparent animate-pulse-subtle whitespace-nowrap">
+              <h1 className="text-2xl md:text-3xl font-black tracking-tight bg-gradient-to-r from-red-500 via-blue-500 via-green-500 to-white bg-[length:200%_auto] bg-clip-text text-transparent animate-gradient-flow whitespace-nowrap drop-shadow-sm" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
                 Warner Wireless Gears
-                <span className="ml-2 text-sm font-medium text-muted-foreground">B2B Distribution</span>
               </h1>
             </div>
             <div className="flex items-center gap-2">

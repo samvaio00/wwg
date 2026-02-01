@@ -24,8 +24,16 @@ import {
   Check,
   Tag,
   Eye,
-  Search
+  Search,
+  Filter
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Product, Category } from "@shared/schema";
 
 function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {
@@ -226,8 +234,9 @@ function CustomerHomePage() {
     queryKey: ["/api/categories"],
   });
 
-  // Find Warner category
-  const warnerCategory = categoriesData?.categories?.find(
+  // Get categories list and find Warner category
+  const categories = categoriesData?.categories || [];
+  const warnerCategory = categories.find(
     (c) => c.name.toLowerCase() === "warner" || c.slug === "warner"
   );
 
@@ -301,14 +310,15 @@ function CustomerHomePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <HeadingIcon className={`h-5 w-5 ${showingHighlighted ? "text-amber-500" : "text-primary"}`} />
-          <h1 className="text-xl font-semibold" data-testid="heading-home-products">
-            {headingText}
-          </h1>
-        </div>
-        <div className="relative flex-1 max-w-md">
+      <div className="flex items-center gap-2">
+        <HeadingIcon className={`h-5 w-5 ${showingHighlighted ? "text-amber-500" : "text-primary"}`} />
+        <h1 className="text-xl font-semibold" data-testid="heading-home-products">
+          {headingText}
+        </h1>
+      </div>
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
@@ -318,6 +328,25 @@ function CustomerHomePage() {
             className="pl-10"
             data-testid="input-search-home"
           />
+        </div>
+        
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value="all" onValueChange={() => {}}>
+              <SelectTrigger className="w-[180px]" data-testid="select-category-home">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.slug}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 

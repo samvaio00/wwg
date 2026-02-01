@@ -285,6 +285,23 @@
   }
 }
 
+/* Gradient flow animation for header branding */
+@keyframes gradient-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient-flow {
+  animation: gradient-flow 4s ease infinite;
+}
+
 /* Subtle pulse animation for header branding */
 @keyframes pulse-subtle {
   0%, 100% {

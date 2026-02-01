@@ -17,9 +17,17 @@ import {
   Minus,
   Check,
   Eye,
-  Search
+  Search,
+  Filter
 } from "lucide-react";
-import type { Product } from "@shared/schema";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { Product, Category } from "@shared/schema";
 
 function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {
   const [imageError, setImageError] = useState(false);
@@ -210,6 +218,12 @@ export default function WhatsNewPage() {
     queryKey: ["/api/latest-products"],
   });
 
+  // Fetch categories for filter dropdown
+  const { data: categoriesData } = useQuery<{ categories: Category[] }>({
+    queryKey: ["/api/categories"],
+  });
+  const categories = categoriesData?.categories || [];
+
   const handleProductClick = (product: Product) => {
     setSelectedProduct(product);
     setIsDetailModalOpen(true);
@@ -255,14 +269,15 @@ export default function WhatsNewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-primary" />
-          <h1 className="text-xl font-semibold" data-testid="heading-whats-new">
-            What's New
-          </h1>
-        </div>
-        <div className="relative flex-1 max-w-md">
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-5 w-5 text-primary" />
+        <h1 className="text-xl font-semibold" data-testid="heading-whats-new">
+          What's New
+        </h1>
+      </div>
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
@@ -272,6 +287,25 @@ export default function WhatsNewPage() {
             className="pl-10"
             data-testid="input-search-whats-new"
           />
+        </div>
+        
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value="all" onValueChange={() => {}}>
+              <SelectTrigger className="w-[180px]" data-testid="select-category-whats-new">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.slug}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 

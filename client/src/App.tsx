@@ -19,8 +19,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ShoppingCart, User, LogOut, Settings } from "lucide-react";
+import { ShoppingCart, User, LogOut, Settings, ClipboardList, UserCircle, Mail } from "lucide-react";
 import heroBanner from "@/assets/images/hero-banner.png";
+import sunglassesHero from "@/assets/images/sunglasses-hero.png";
 
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
@@ -113,9 +114,27 @@ function HeaderUserMenu() {
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/orders" className="cursor-pointer">
+          <Link href="/orders" className="cursor-pointer" data-testid="menu-item-orders">
             <ShoppingCart className="mr-2 h-4 w-4" />
             My Orders
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/order-history" className="cursor-pointer" data-testid="menu-item-order-history">
+            <ClipboardList className="mr-2 h-4 w-4" />
+            Order History
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/profile" className="cursor-pointer" data-testid="menu-item-profile">
+            <UserCircle className="mr-2 h-4 w-4" />
+            Edit Profile
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/contact" className="cursor-pointer" data-testid="menu-item-contact">
+            <Mail className="mr-2 h-4 w-4" />
+            Contact Us
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -155,23 +174,30 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               <CartButton />
             </div>
           </header>
-          <div className="relative w-full h-32 md:h-36 overflow-hidden">
+          <div className="relative w-full h-36 md:h-44 overflow-hidden">
             <img 
               src={heroBanner} 
               alt="Warner Wireless Gears - Premium Wholesale Accessories" 
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-r from-indigo-900/90 via-purple-800/70 to-blue-600/40 dark:from-violet-950/95 dark:via-fuchsia-900/80 dark:to-cyan-700/50 flex items-center">
-              <div className="px-6 md:px-10">
+            <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-600/95 via-violet-600/85 to-cyan-500/70 dark:from-purple-900/95 dark:via-fuchsia-800/85 dark:to-cyan-600/60 flex items-center justify-between">
+              <div className="px-6 md:px-10 flex-1">
                 <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight drop-shadow-lg" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
                   Warner Wireless Gears
                 </h2>
-                <p className="text-white/90 text-sm md:text-base font-medium">
+                <p className="text-white text-sm md:text-base font-semibold mt-1">
                   Premium B2B Wholesale Distributors
                 </p>
-                <p className="text-white/70 text-xs md:text-sm mt-0.5">
+                <p className="text-white/80 text-xs md:text-sm mt-0.5">
                   Serving gas stations, convenience stores, smoke shops, gift shops and retailers
                 </p>
+              </div>
+              <div className="hidden md:block pr-8">
+                <img 
+                  src={sunglassesHero} 
+                  alt="Premium Sunglasses Collection"
+                  className="h-28 w-auto object-contain drop-shadow-2xl rounded-lg"
+                />
               </div>
             </div>
           </div>

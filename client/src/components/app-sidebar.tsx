@@ -21,11 +21,8 @@ import {
   Tag,
   BarChart3,
   Home,
-  Sparkles,
+  Gift,
   TrendingUp,
-  ClipboardList,
-  UserCircle,
-  Mail,
 } from "lucide-react";
 import type { Category } from "@shared/schema";
 
@@ -104,7 +101,7 @@ export function AppSidebar() {
                   data-testid="nav-whats-new"
                 >
                   <Link href="/whats-new">
-                    <Sparkles className="h-4 w-4" />
+                    <Gift className="h-4 w-4" />
                     <span>What's New</span>
                   </Link>
                 </SidebarMenuButton>
@@ -123,7 +120,7 @@ export function AppSidebar() {
               </SidebarMenuItem>
               
               {/* Separator between Browse items and Categories */}
-              <div className="my-2 mx-2 border-t border-sidebar-border" />
+              <div className="my-3 mx-2 border-t-2 border-sidebar-border/60" />
               
               {categories.map((category) => (
                 <SidebarMenuItem key={category.id}>
@@ -147,52 +144,6 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        {!isAdmin && user && (
-          <SidebarGroup>
-            <SidebarGroupLabel>My Account</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === "/order-history"}
-                    data-testid="nav-order-history"
-                  >
-                    <Link href="/order-history">
-                      <ClipboardList className="h-4 w-4" />
-                      <span>Order History</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === "/profile"}
-                    data-testid="nav-profile"
-                  >
-                    <Link href="/profile">
-                      <UserCircle className="h-4 w-4" />
-                      <span>Edit Profile</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === "/contact"}
-                    data-testid="nav-contact"
-                  >
-                    <Link href="/contact">
-                      <Mail className="h-4 w-4" />
-                      <span>Contact Us</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
 
         {isAdmin && (
           <SidebarGroup>

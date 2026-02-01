@@ -584,7 +584,7 @@ interface ZohoPriceListItemsResponse {
 
 async function fetchZohoPriceLists(): Promise<ZohoPriceListsResponse> {
   const accessToken = await getAccessToken();
-  const orgId = process.env.ZOHO_ORGANIZATION_ID;
+  const orgId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
 
   const response = await fetch(
     `https://www.zohoapis.com/inventory/v1/pricebooks?organization_id=${orgId}`,
@@ -605,7 +605,7 @@ async function fetchZohoPriceLists(): Promise<ZohoPriceListsResponse> {
 
 async function fetchZohoPriceListItems(priceBookId: string, page: number = 1): Promise<ZohoPriceListItemsResponse> {
   const accessToken = await getAccessToken();
-  const orgId = process.env.ZOHO_ORGANIZATION_ID;
+  const orgId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
 
   const response = await fetch(
     `https://www.zohoapis.com/inventory/v1/pricebooks/${priceBookId}/items?organization_id=${orgId}&page=${page}&per_page=200`,

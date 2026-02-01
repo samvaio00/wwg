@@ -318,10 +318,6 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
                   <span className="text-muted-foreground">Case Pack:</span>{" "}
                   <span className="font-medium">{product.casePackSize || 1}</span>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Min Order:</span>{" "}
-                  <span className="font-medium">{product.minOrderQuantity || 1}</span>
-                </div>
               </div>
 
               {!isGroupedProduct && !isOutOfStock && (

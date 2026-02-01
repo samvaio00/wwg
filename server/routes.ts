@@ -1754,7 +1754,7 @@ export async function registerRoutes(
   // ================================================================
 
   // Update order tracking info
-  app.patch("/api/admin/orders/:id/tracking", requireAdmin, async (req, res) => {
+  app.patch("/api/admin/orders/:id/tracking", requireStaffOrAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { trackingNumber, carrier } = req.body;
@@ -1782,7 +1782,7 @@ export async function registerRoutes(
   });
 
   // Mark order as shipped with tracking
-  app.post("/api/admin/orders/:id/ship", requireAdmin, async (req, res) => {
+  app.post("/api/admin/orders/:id/ship", requireStaffOrAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { trackingNumber, carrier, sendNotification = true } = req.body;
@@ -1830,7 +1830,7 @@ export async function registerRoutes(
   });
 
   // Mark order as delivered
-  app.post("/api/admin/orders/:id/deliver", requireAdmin, async (req, res) => {
+  app.post("/api/admin/orders/:id/deliver", requireStaffOrAdmin, async (req, res) => {
     try {
       const { id } = req.params;
 

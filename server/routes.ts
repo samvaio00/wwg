@@ -13,7 +13,8 @@ import {
   createOrderSchema,
   ProductCategory,
   emailActionTokens,
-  EmailActionType
+  EmailActionType,
+  emailUnsubscribeTokens
 } from "@shared/schema";
 import { z } from "zod";
 import { db } from "./db";
@@ -262,6 +263,58 @@ export async function registerRoutes(
         .card{background:white;padding:40px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;max-width:400px}
         h1{color:#dc2626;margin-bottom:16px}p{color:#666}</style></head>
         <body><div class="card"><h1>Error</h1><p>An error occurred while processing your request. Please try again or use the admin panel.</p></div></body></html>
+      `);
+    }
+  });
+
+  // Email unsubscribe handler - processes unsubscribe links from promotional emails
+  app.get("/api/unsubscribe/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      // Find the unsubscribe token
+      const [tokenRecord] = await db
+        .select()
+        .from(emailUnsubscribeTokens)
+        .where(eq(emailUnsubscribeTokens.token, token))
+        .limit(1);
+
+      if (!tokenRecord) {
+        return res.status(400).send(`
+          <!DOCTYPE html>
+          <html><head><title>Invalid Unsubscribe Link</title>
+          <style>body{font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5}
+          .card{background:white;padding:40px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;max-width:400px}
+          h1{color:#dc2626;margin-bottom:16px}p{color:#666}</style></head>
+          <body><div class="card"><h1>Invalid Link</h1><p>This unsubscribe link is invalid. Please contact us if you need assistance.</p></div></body></html>
+        `);
+      }
+
+      // Update user's email opt-in status
+      await db.update(users)
+        .set({ emailOptIn: false })
+        .where(eq(users.id, tokenRecord.userId));
+
+      console.log(`[Email Unsubscribe] User ${tokenRecord.userId} has unsubscribed from promotional emails`);
+
+      return res.send(`
+        <!DOCTYPE html>
+        <html><head><title>Unsubscribed Successfully</title>
+        <style>body{font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5}
+        .card{background:white;padding:40px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;max-width:500px}
+        .icon{width:60px;height:60px;border-radius:50%;background:#22c55e;color:white;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:30px}
+        h1{color:#333;margin-bottom:16px}p{color:#666}</style></head>
+        <body><div class="card"><div class="icon">✓</div><h1>Unsubscribed Successfully</h1><p>You have been unsubscribed from promotional emails. You will still receive important order and account notifications.</p></div></body></html>
+      `);
+    } catch (error) {
+      console.error("Unsubscribe error:", error);
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html><head><title>Error</title>
+        <style>body{font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5}
+        .card{background:white;padding:40px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,0.1);text-align:center;max-width:400px}
+        h1{color:#dc2626;margin-bottom:16px}p{color:#666}</style></head>
+        <body><div class="card"><h1>Error</h1><p>An error occurred while processing your request. Please try again.</p></div></body></html>
       `);
     }
   });

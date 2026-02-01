@@ -653,7 +653,3 @@
   animation: cartBounce 0.3s ease;
 }
 
-/* Tooltip fade */
-[data-radix-popper-content-wrapper] {
-  animation: fadeInUp 0.15s ease-out;
-}

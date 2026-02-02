@@ -13,6 +13,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Package, Plus, Minus, Check, ShoppingCart, Layers } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import type { Product } from "@shared/schema";
 
 interface ProductDetailModalProps {
@@ -170,6 +172,7 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
   const { toast } = useToast();
   const [quantity, setQuantity] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
+  const [variantsInStockOnly, setVariantsInStockOnly] = useState(false);
 
   const isGroupedProduct = !!product?.zohoGroupId;
 
@@ -182,6 +185,7 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
     if (product && open) {
       setQuantity(product.minOrderQuantity || 1);
       setJustAdded(false);
+      setVariantsInStockOnly(false);
     }
   }, [product?.id, open]);
 
@@ -252,7 +256,10 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
     onOpenChange(open);
   };
 
-  const groupVariants = groupData?.products || [];
+  const allGroupVariants = groupData?.products || [];
+  const groupVariants = variantsInStockOnly 
+    ? allGroupVariants.filter(v => (v.stockQuantity || 0) > 0)
+    : allGroupVariants;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -381,10 +388,30 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
 
         {isGroupedProduct && (
           <div className="border-t pt-3 mt-3 flex-1 flex flex-col min-h-0">
-            <h3 className="font-medium mb-2 flex items-center gap-2 flex-shrink-0">
-              <Layers className="h-4 w-4" />
-              Available Variants
-            </h3>
+            <div className="flex items-center justify-between gap-2 mb-2 flex-shrink-0 flex-wrap">
+              <h3 className="font-medium flex items-center gap-2">
+                <Layers className="h-4 w-4" />
+                Available Variants
+                <span className="text-sm font-normal text-muted-foreground">
+                  ({groupVariants.length}{variantsInStockOnly ? ` of ${allGroupVariants.length}` : ''})
+                </span>
+              </h3>
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="variants-in-stock-filter" 
+                  checked={variantsInStockOnly}
+                  onCheckedChange={(checked) => setVariantsInStockOnly(checked === true)}
+                  data-testid="checkbox-variants-in-stock"
+                />
+                <Label 
+                  htmlFor="variants-in-stock-filter" 
+                  className="text-sm cursor-pointer whitespace-nowrap"
+                  data-testid="label-variants-in-stock"
+                >
+                  In Stock Only
+                </Label>
+              </div>
+            </div>
             {isLoadingGroup ? (
               <div className="space-y-3 overflow-y-auto flex-1">
                 {Array.from({ length: 3 }).map((_, i) => (

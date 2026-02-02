@@ -40,6 +40,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import type { Product, Category } from "@shared/schema";
 
 function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {
@@ -248,6 +250,7 @@ function CustomerHomePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [aiEnabled, setAIEnabled] = useState(true);
   const [sortOption, setSortOption] = useState("newest");
+  const [inStockOnly, setInStockOnly] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
 
   // AI-powered search - only triggers when Enter is pressed and AI is enabled
@@ -356,8 +359,8 @@ function CustomerHomePage() {
       products = products.filter(p => p.category === categoryFilter);
     }
     
-    // Apply in-stock filter if selected
-    if (sortOption === "instock") {
+    // Apply in-stock filter if checkbox is checked
+    if (inStockOnly) {
       products = products.filter(p => (p.stockQuantity || 0) > 0);
     }
     
@@ -379,7 +382,7 @@ function CustomerHomePage() {
     }
     
     return products;
-  }, [baseProducts, search, isAISearchActive, aiSearchResults, categoryFilter, sortOption]);
+  }, [baseProducts, search, isAISearchActive, aiSearchResults, categoryFilter, sortOption, inStockOnly]);
 
   // Loading state - consider AI search loading
   const isLoading = isAISearchActive ? isAISearching : (highlightedLoading || (shouldFetchWarner && warnerLoading));
@@ -448,9 +451,24 @@ function CustomerHomePage() {
               <SelectItem value="price-low">Price: Low</SelectItem>
               <SelectItem value="price-high">Price: High</SelectItem>
               <SelectItem value="name-asc">Name: A-Z</SelectItem>
-              <SelectItem value="instock">In Stock Only</SelectItem>
             </SelectContent>
           </Select>
+
+          <div className="flex items-center gap-2">
+            <Checkbox 
+              id="in-stock-filter-home" 
+              checked={inStockOnly}
+              onCheckedChange={(checked) => { setInStockOnly(checked === true); setCurrentPage(1); }}
+              data-testid="checkbox-in-stock-home"
+            />
+            <Label 
+              htmlFor="in-stock-filter-home" 
+              className="text-sm cursor-pointer whitespace-nowrap"
+              data-testid="label-in-stock-home"
+            >
+              In Stock Only
+            </Label>
+          </div>
         </div>
       </div>
 

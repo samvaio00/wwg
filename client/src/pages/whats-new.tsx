@@ -32,6 +32,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import type { Product, Category } from "@shared/schema";
 
 function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {
@@ -241,6 +243,7 @@ export default function WhatsNewPage() {
   const [aiEnabled, setAIEnabled] = useState(true);
   const [sortOption, setSortOption] = useState("newest");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [inStockOnly, setInStockOnly] = useState(false);
 
   // AI-powered search - only triggers when Enter is pressed and AI is enabled
   const { 
@@ -301,8 +304,8 @@ export default function WhatsNewPage() {
       products = products.filter(p => p.category === categoryFilter);
     }
     
-    // Apply in-stock filter if selected
-    if (sortOption === "instock") {
+    // Apply in-stock filter if checkbox is checked
+    if (inStockOnly) {
       products = products.filter(p => (p.stockQuantity || 0) > 0);
     }
     
@@ -324,7 +327,7 @@ export default function WhatsNewPage() {
     }
     
     return products;
-  }, [latestData?.products, search, isAISearchActive, aiSearchResults, categoryFilter, sortOption]);
+  }, [latestData?.products, search, isAISearchActive, aiSearchResults, categoryFilter, sortOption, inStockOnly]);
 
   const isLoading = isAISearchActive ? isAISearching : isLatestLoading;
 
@@ -411,9 +414,24 @@ export default function WhatsNewPage() {
               <SelectItem value="price-low">Price: Low</SelectItem>
               <SelectItem value="price-high">Price: High</SelectItem>
               <SelectItem value="name-asc">Name: A-Z</SelectItem>
-              <SelectItem value="instock">In Stock Only</SelectItem>
             </SelectContent>
           </Select>
+
+          <div className="flex items-center gap-2">
+            <Checkbox 
+              id="in-stock-filter-whats-new" 
+              checked={inStockOnly}
+              onCheckedChange={(checked) => { setInStockOnly(checked === true); setCurrentPage(1); }}
+              data-testid="checkbox-in-stock-whats-new"
+            />
+            <Label 
+              htmlFor="in-stock-filter-whats-new" 
+              className="text-sm cursor-pointer whitespace-nowrap"
+              data-testid="label-in-stock-whats-new"
+            >
+              In Stock Only
+            </Label>
+          </div>
         </div>
       </div>
 

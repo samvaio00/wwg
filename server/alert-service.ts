@@ -1,7 +1,3 @@
-import { db } from "./db";
-import { users } from "@shared/schema";
-import { eq } from "drizzle-orm";
-
 const ADMIN_EMAIL = process.env.ALERT_EMAIL || "warnergears@gmail.com";
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between same alert types
 
@@ -96,7 +92,7 @@ function getBaseUrl(): string {
 export async function sendServerCrashAlert(error: Error): Promise<void> {
   if (!shouldSendAlert("server_crash")) return;
 
-  const subject = "🚨 Server Crash Alert - Warner Wireless Gears";
+  const subject = "[CRITICAL] Server Crash Alert - Warner Wireless Gears";
   const htmlContent = `
 <!DOCTYPE html>
 <html>
@@ -134,9 +130,9 @@ export async function sendServerErrorAlert(
   error: Error,
   context: { route?: string; method?: string; userId?: string }
 ): Promise<void> {
-  if (!shouldSendAlert(`server_error_${context.route || 'unknown'}`)) return;
+  if (!shouldSendAlert("server_error")) return;
 
-  const subject = "⚠️ Server Error Alert - Warner Wireless Gears";
+  const subject = "[WARNING] Server Error Alert - Warner Wireless Gears";
   const htmlContent = `
 <!DOCTYPE html>
 <html>
@@ -184,7 +180,7 @@ export async function sendServerErrorAlert(
 export async function sendSiteDownAlert(reason: string): Promise<void> {
   if (!shouldSendAlert("site_down")) return;
 
-  const subject = "🔴 Site Down Alert - Warner Wireless Gears";
+  const subject = "[ALERT] Site Down - Warner Wireless Gears";
   const htmlContent = `
 <!DOCTYPE html>
 <html>
@@ -218,16 +214,23 @@ export async function sendSiteDownAlert(reason: string): Promise<void> {
 }
 
 export function setupProcessAlertHandlers(): void {
-  process.on('uncaughtException', async (error) => {
+  process.on('uncaughtException', (error) => {
     console.error('[Alert] Uncaught Exception:', error);
-    await sendServerCrashAlert(error);
-    process.exit(1);
+    sendServerCrashAlert(error)
+      .catch(err => console.error('[Alert] Failed to send crash alert:', err))
+      .finally(() => {
+        setTimeout(() => process.exit(1), 1000);
+      });
   });
 
-  process.on('unhandledRejection', async (reason) => {
+  process.on('unhandledRejection', (reason) => {
     const error = reason instanceof Error ? reason : new Error(String(reason));
     console.error('[Alert] Unhandled Rejection:', error);
-    await sendServerCrashAlert(error);
+    sendServerCrashAlert(error)
+      .catch(err => console.error('[Alert] Failed to send crash alert:', err))
+      .finally(() => {
+        setTimeout(() => process.exit(1), 1000);
+      });
   });
 
   console.log('[Alert] Process alert handlers registered');

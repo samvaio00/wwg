@@ -445,7 +445,7 @@ export default function ProductsPage() {
           </h1>
         </div>
 
-        <div className="flex gap-2 items-center flex-wrap">
+        <div className="flex gap-2 items-center flex-nowrap">
           <AISearchBox
             value={search}
             onChange={setSearch}

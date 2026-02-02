@@ -26,7 +26,7 @@ const DEFAULT_CONFIG: SchedulerConfig = {
   offHoursIntervalMinutes: 360,
   businessStartHour: 8,
   businessEndHour: 18,
-  enableFrequentZohoSync: false,
+  enableFrequentZohoSync: true,
 };
 
 function isBusinessHours(): boolean {

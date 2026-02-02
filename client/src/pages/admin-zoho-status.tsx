@@ -221,6 +221,37 @@ export default function AdminZohoStatus() {
     },
   });
 
+  const manualSyncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/scheduler/sync", { type: "zoho" });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/analytics/zoho-api-stats"] });
+      refetch();
+      const zohoResult = data.results?.zoho;
+      if (zohoResult) {
+        toast({
+          title: "Sync Complete",
+          description: `Created ${zohoResult.created || 0}, updated ${zohoResult.updated || 0}, delisted ${zohoResult.delisted || 0} products`,
+        });
+      } else {
+        toast({
+          title: "Sync Complete",
+          description: "Zoho sync completed successfully",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Sync Failed",
+        description: error instanceof Error ? error.message : "Failed to sync from Zoho",
+        variant: "destructive",
+      });
+    },
+  });
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -258,10 +289,16 @@ export default function AdminZohoStatus() {
         <CardContent>
           <div className="flex flex-wrap items-center gap-4">
             {schedulerStatus?.enableFrequentZohoSync ? (
-              <Badge variant="secondary" className="text-sm" data-testid="badge-sync-mode-polling">
-                <Clock className="h-3 w-3 mr-1" />
-                Frequent API Polling (2-6 hours)
-              </Badge>
+              <>
+                <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-sm" data-testid="badge-sync-mode-polling">
+                  <Clock className="h-3 w-3 mr-1" />
+                  Scheduled Sync (every 2 hours)
+                </Badge>
+                <Badge variant="outline" className="text-sm" data-testid="badge-weekly-backup">
+                  <Calendar className="h-3 w-3 mr-1" />
+                  Weekly Full Sync: Sunday 2 AM
+                </Badge>
+              </>
             ) : (
               <>
                 <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-sm" data-testid="badge-sync-mode-webhooks">
@@ -277,6 +314,28 @@ export default function AdminZohoStatus() {
                 </Badge>
               </>
             )}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <Button
+              onClick={() => manualSyncMutation.mutate()}
+              disabled={manualSyncMutation.isPending}
+              data-testid="button-sync-now"
+            >
+              {manualSyncMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Sync Now
+                </>
+              )}
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Pull latest changes from Zoho Inventory
+            </span>
           </div>
           {schedulerStatus?.weeklyZohoBackup && !schedulerStatus.enableFrequentZohoSync && (
             <div className="mt-4 text-sm text-muted-foreground">

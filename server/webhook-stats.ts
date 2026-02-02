@@ -57,7 +57,7 @@ function resetMonthlyStatsIfNeeded(): void {
 }
 
 export function recordWebhookEvent(
-  type: "items" | "customers",
+  type: "items" | "customers" | "invoices" | "bills",
   action: string,
   success: boolean,
   details?: string

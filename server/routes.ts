@@ -27,7 +27,7 @@ import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
 import { sendShipmentNotification, sendDeliveryNotification, sendNewUserNotification, sendNewOrderNotification } from "./email-service";
 import { processJobQueue } from "./job-worker";
-import { handleItemWebhook, handleCustomerWebhook, verifyWebhookSecret } from "./zoho-webhooks";
+import { handleItemWebhook, handleCustomerWebhook, handleInvoiceWebhook, handleBillWebhook, verifyWebhookSecret } from "./zoho-webhooks";
 import { getWebhookStats } from "./webhook-stats";
 import multer from "multer";
 import path from "path";
@@ -2557,6 +2557,62 @@ export async function registerRoutes(
       }
     } catch (error) {
       console.error("[Zoho Webhook] Customers webhook error:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: error instanceof Error ? error.message : "Internal server error" 
+      });
+    }
+  });
+
+  // Invoices webhook - handles sales from Zoho Books (reduces stock)
+  app.post("/api/webhooks/zoho/invoices", async (req, res) => {
+    try {
+      const webhookSecret = process.env.ZOHO_WEBHOOK_SECRET;
+      const providedSecret = req.headers["x-zoho-webhook-secret"] as string || req.query.secret as string;
+
+      if (!verifyWebhookSecret(providedSecret, webhookSecret)) {
+        console.warn("[Zoho Webhook] Unauthorized invoices webhook request");
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      console.log("[Zoho Webhook] Invoice payload received:", JSON.stringify(req.body, null, 2));
+      const result = await handleInvoiceWebhook(req.body, webhookSecret);
+      
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (error) {
+      console.error("[Zoho Webhook] Invoices webhook error:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: error instanceof Error ? error.message : "Internal server error" 
+      });
+    }
+  });
+
+  // Bills webhook - handles purchases/receipts from Zoho Books (increases stock)
+  app.post("/api/webhooks/zoho/bills", async (req, res) => {
+    try {
+      const webhookSecret = process.env.ZOHO_WEBHOOK_SECRET;
+      const providedSecret = req.headers["x-zoho-webhook-secret"] as string || req.query.secret as string;
+
+      if (!verifyWebhookSecret(providedSecret, webhookSecret)) {
+        console.warn("[Zoho Webhook] Unauthorized bills webhook request");
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      console.log("[Zoho Webhook] Bill payload received:", JSON.stringify(req.body, null, 2));
+      const result = await handleBillWebhook(req.body, webhookSecret);
+      
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (error) {
+      console.error("[Zoho Webhook] Bills webhook error:", error);
       res.status(500).json({ 
         success: false, 
         message: error instanceof Error ? error.message : "Internal server error" 

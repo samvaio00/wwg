@@ -324,3 +324,272 @@ export function verifyWebhookSecret(
 
   return providedSecret === expectedSecret;
 }
+
+interface ZohoInvoiceLineItem {
+  item_id?: string;
+  sku?: string;
+  quantity?: number;
+  name?: string;
+}
+
+interface ZohoInvoiceWebhookPayload {
+  invoice?: {
+    invoice_id?: string;
+    invoice_number?: string;
+    status?: string;
+    line_items?: ZohoInvoiceLineItem[];
+  };
+  invoice_id?: string;
+  invoice_number?: string;
+  status?: string;
+  line_items?: ZohoInvoiceLineItem[];
+}
+
+interface ZohoBillLineItem {
+  item_id?: string;
+  sku?: string;
+  quantity?: number;
+  name?: string;
+}
+
+interface ZohoBillWebhookPayload {
+  bill?: {
+    bill_id?: string;
+    bill_number?: string;
+    status?: string;
+    line_items?: ZohoBillLineItem[];
+  };
+  bill_id?: string;
+  bill_number?: string;
+  status?: string;
+  line_items?: ZohoBillLineItem[];
+}
+
+// Valid statuses that indicate stock should be adjusted
+// Invoices: sent, paid, overdue = stock was sold
+// Bills: open, paid, overdue = stock was received
+const INVOICE_VALID_STATUSES = ["sent", "paid", "overdue", "partially_paid"];
+const BILL_VALID_STATUSES = ["open", "paid", "overdue", "partially_paid"];
+
+// Simple in-memory idempotency cache to prevent duplicate processing
+// Key format: "invoice:${id}:${status}" or "bill:${id}:${status}"
+const processedWebhooks = new Map<string, Date>();
+const MAX_CACHE_SIZE = 10000;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function checkAndRecordProcessed(type: "invoice" | "bill", id: string, status: string): boolean {
+  const key = `${type}:${id}:${status}`;
+  
+  // Clean old entries if cache is large
+  if (processedWebhooks.size > MAX_CACHE_SIZE) {
+    const cutoff = new Date(Date.now() - CACHE_TTL_MS);
+    for (const [k, v] of processedWebhooks) {
+      if (v < cutoff) processedWebhooks.delete(k);
+    }
+  }
+  
+  if (processedWebhooks.has(key)) {
+    return true; // Already processed
+  }
+  
+  processedWebhooks.set(key, new Date());
+  return false; // Not yet processed
+}
+
+export async function handleInvoiceWebhook(
+  payload: ZohoInvoiceWebhookPayload,
+  secret: string | undefined
+): Promise<WebhookResult> {
+  const invoiceData = payload.invoice || payload;
+  const invoiceId = invoiceData.invoice_id || "unknown";
+  const invoiceNumber = invoiceData.invoice_number || invoiceId;
+  const status = (invoiceData.status || "").toLowerCase();
+  const lineItems = invoiceData.line_items || [];
+  
+  console.log(`[Zoho Webhook] Invoice webhook received: ${invoiceNumber} (status: ${status}) with ${lineItems.length} line items`);
+
+  try {
+    // Check if status is valid for stock adjustment
+    if (!INVOICE_VALID_STATUSES.includes(status)) {
+      console.log(`[Zoho Webhook] Invoice ${invoiceNumber} status "${status}" not valid for stock adjustment - skipping`);
+      recordWebhookEvent("invoices", "ignored_status", true, `Invoice ${invoiceNumber} status "${status}" ignored`);
+      return {
+        success: true,
+        action: "ignored_status",
+        message: `Invoice ${invoiceNumber} with status "${status}" does not require stock adjustment`,
+      };
+    }
+
+    // Check idempotency - prevent duplicate processing
+    if (checkAndRecordProcessed("invoice", invoiceId, status)) {
+      console.log(`[Zoho Webhook] Invoice ${invoiceNumber} (status: ${status}) already processed - skipping`);
+      recordWebhookEvent("invoices", "duplicate", true, `Invoice ${invoiceNumber} already processed`);
+      return {
+        success: true,
+        action: "duplicate",
+        message: `Invoice ${invoiceNumber} with status "${status}" was already processed`,
+      };
+    }
+
+    if (lineItems.length === 0) {
+      console.log(`[Zoho Webhook] Invoice ${invoiceNumber} has no line items to process`);
+      recordWebhookEvent("invoices", "no_items", true, `Invoice ${invoiceNumber} has no line items`);
+      return {
+        success: true,
+        action: "no_items",
+        message: `Invoice ${invoiceNumber} received but has no line items to update inventory`,
+      };
+    }
+
+    let updatedCount = 0;
+    const updatedProducts: string[] = [];
+
+    for (const item of lineItems) {
+      if (!item.item_id) continue;
+
+      const existingProduct = await db
+        .select()
+        .from(products)
+        .where(eq(products.zohoItemId, item.item_id))
+        .limit(1);
+
+      if (existingProduct.length > 0) {
+        const product = existingProduct[0];
+        const quantitySold = item.quantity || 0;
+        const currentStock = product.stockQuantity ?? 0;
+        const newStock = Math.max(0, currentStock - quantitySold);
+
+        await db
+          .update(products)
+          .set({
+            stockQuantity: newStock,
+            zohoLastSyncAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(products.id, product.id));
+
+        console.log(`[Zoho Webhook] Invoice ${invoiceNumber}: ${product.sku} stock reduced by ${quantitySold} (${product.stockQuantity} -> ${newStock})`);
+        updatedProducts.push(`${product.sku} (-${quantitySold})`);
+        updatedCount++;
+      }
+    }
+
+    const message = updatedCount > 0
+      ? `Invoice ${invoiceNumber}: Updated ${updatedCount} products - ${updatedProducts.join(", ")}`
+      : `Invoice ${invoiceNumber}: No matching products found in database`;
+
+    recordWebhookEvent("invoices", "sale", true, message);
+    return {
+      success: true,
+      action: "sale",
+      message,
+    };
+  } catch (error) {
+    console.error(`[Zoho Webhook] Error processing invoice webhook:`, error);
+    recordWebhookEvent("invoices", "sale", false, error instanceof Error ? error.message : "Unknown error");
+    return {
+      success: false,
+      action: "sale",
+      message: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+export async function handleBillWebhook(
+  payload: ZohoBillWebhookPayload,
+  secret: string | undefined
+): Promise<WebhookResult> {
+  const billData = payload.bill || payload;
+  const billId = billData.bill_id || "unknown";
+  const billNumber = billData.bill_number || billId;
+  const status = (billData.status || "").toLowerCase();
+  const lineItems = billData.line_items || [];
+  
+  console.log(`[Zoho Webhook] Bill webhook received: ${billNumber} (status: ${status}) with ${lineItems.length} line items`);
+
+  try {
+    // Check if status is valid for stock adjustment
+    if (!BILL_VALID_STATUSES.includes(status)) {
+      console.log(`[Zoho Webhook] Bill ${billNumber} status "${status}" not valid for stock adjustment - skipping`);
+      recordWebhookEvent("bills", "ignored_status", true, `Bill ${billNumber} status "${status}" ignored`);
+      return {
+        success: true,
+        action: "ignored_status",
+        message: `Bill ${billNumber} with status "${status}" does not require stock adjustment`,
+      };
+    }
+
+    // Check idempotency - prevent duplicate processing
+    if (checkAndRecordProcessed("bill", billId, status)) {
+      console.log(`[Zoho Webhook] Bill ${billNumber} (status: ${status}) already processed - skipping`);
+      recordWebhookEvent("bills", "duplicate", true, `Bill ${billNumber} already processed`);
+      return {
+        success: true,
+        action: "duplicate",
+        message: `Bill ${billNumber} with status "${status}" was already processed`,
+      };
+    }
+
+    if (lineItems.length === 0) {
+      console.log(`[Zoho Webhook] Bill ${billNumber} has no line items to process`);
+      recordWebhookEvent("bills", "no_items", true, `Bill ${billNumber} has no line items`);
+      return {
+        success: true,
+        action: "no_items",
+        message: `Bill ${billNumber} received but has no line items to update inventory`,
+      };
+    }
+
+    let updatedCount = 0;
+    const updatedProducts: string[] = [];
+
+    for (const item of lineItems) {
+      if (!item.item_id) continue;
+
+      const existingProduct = await db
+        .select()
+        .from(products)
+        .where(eq(products.zohoItemId, item.item_id))
+        .limit(1);
+
+      if (existingProduct.length > 0) {
+        const product = existingProduct[0];
+        const quantityReceived = item.quantity || 0;
+        const currentStock = product.stockQuantity ?? 0;
+        const newStock = currentStock + quantityReceived;
+
+        await db
+          .update(products)
+          .set({
+            stockQuantity: newStock,
+            zohoLastSyncAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(products.id, product.id));
+
+        console.log(`[Zoho Webhook] Bill ${billNumber}: ${product.sku} stock increased by ${quantityReceived} (${product.stockQuantity} -> ${newStock})`);
+        updatedProducts.push(`${product.sku} (+${quantityReceived})`);
+        updatedCount++;
+      }
+    }
+
+    const message = updatedCount > 0
+      ? `Bill ${billNumber}: Updated ${updatedCount} products - ${updatedProducts.join(", ")}`
+      : `Bill ${billNumber}: No matching products found in database`;
+
+    recordWebhookEvent("bills", "receipt", true, message);
+    return {
+      success: true,
+      action: "receipt",
+      message,
+    };
+  } catch (error) {
+    console.error(`[Zoho Webhook] Error processing bill webhook:`, error);
+    recordWebhookEvent("bills", "receipt", false, error instanceof Error ? error.message : "Unknown error");
+    return {
+      success: false,
+      action: "receipt",
+      message: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}

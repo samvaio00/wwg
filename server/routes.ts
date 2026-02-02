@@ -1630,12 +1630,55 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Please provide a search query" });
       }
 
+      // Detect "top seller" filter in query
+      const topSellerPatterns = [
+        /\btop\s*sell(?:er|ing|ers)?\b/i,
+        /\bbest\s*sell(?:er|ing|ers)?\b/i,
+        /\bmost\s*popular\b/i,
+        /\bhot\s*sell(?:er|ing|ers)?\b/i,
+        /\btrending\b/i,
+      ];
+      const hasTopSellerFilter = topSellerPatterns.some(p => p.test(query));
+      
+      // Remove top seller phrases from query to get cleaner search term
+      let cleanQuery = query.trim();
+      if (hasTopSellerFilter) {
+        cleanQuery = cleanQuery
+          .replace(/\btop\s*sell(?:er|ing|ers)?\b/gi, '')
+          .replace(/\bbest\s*sell(?:er|ing|ers)?\b/gi, '')
+          .replace(/\bmost\s*popular\b/gi, '')
+          .replace(/\bhot\s*sell(?:er|ing|ers)?\b/gi, '')
+          .replace(/\btrending\b/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
       const userId = req.session?.userId || null;
-      const result = await aiEnhancedSearch(userId, query.trim(), category as string | undefined);
+      const result = await aiEnhancedSearch(userId, cleanQuery || query.trim(), category as string | undefined);
+      
+      // Get top seller IDs if filter is active
+      let topSellerIds: Set<string> | null = null;
+      if (hasTopSellerFilter) {
+        topSellerIds = await storage.getAllTopSellerProductIds();
+      }
       
       // Fetch full product records for the matched SKUs to ensure all fields are present
-      if (result.products && result.products.length > 0) {
-        const productIds = result.products.map(p => p.id);
+      let productIds = result.products && result.products.length > 0 
+        ? result.products.map(p => p.id) 
+        : [];
+      
+      // Filter to top sellers only if pattern detected
+      if (hasTopSellerFilter && topSellerIds) {
+        productIds = productIds.filter(id => topSellerIds!.has(id));
+        
+        // If no matches from AI search, search within top sellers directly
+        if (productIds.length === 0 && cleanQuery) {
+          const topSellerProducts = await storage.searchWithinTopSellers(cleanQuery);
+          productIds = topSellerProducts.map(p => p.id);
+        }
+      }
+      
+      if (productIds.length > 0) {
         const fullProducts = await storage.getProductsByIds(productIds);
         
         // Apply customer-specific pricing if user has a price list
@@ -1657,9 +1700,20 @@ export async function registerRoutes(
         res.json({
           ...result,
           products: productsWithPricing,
+          topSellerFiltered: hasTopSellerFilter,
+          interpretation: hasTopSellerFilter 
+            ? `${result.interpretation} (filtered to top sellers only)` 
+            : result.interpretation,
         });
       } else {
-        res.json(result);
+        res.json({
+          ...result,
+          products: [],
+          topSellerFiltered: hasTopSellerFilter,
+          interpretation: hasTopSellerFilter 
+            ? `${result.interpretation} (filtered to top sellers only - no matches found)` 
+            : result.interpretation,
+        });
       }
     } catch (error) {
       console.error("AI Search error:", error);

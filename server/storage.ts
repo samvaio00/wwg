@@ -1119,6 +1119,62 @@ export class DatabaseStorage implements IStorage {
       .slice(0, limit);
   }
 
+  async getAllTopSellerProductIds(): Promise<Set<string>> {
+    const cachedTopSellers = await db.select({ productId: topSellersCache.productId })
+      .from(topSellersCache);
+    
+    const productIds = new Set<string>();
+    for (const item of cachedTopSellers) {
+      if (item.productId) {
+        productIds.add(item.productId);
+      }
+    }
+    return productIds;
+  }
+
+  async searchWithinTopSellers(searchQuery: string, limit: number = 50): Promise<Product[]> {
+    const cachedTopSellers = await db.select({ productId: topSellersCache.productId, rank: topSellersCache.rank })
+      .from(topSellersCache)
+      .orderBy(asc(topSellersCache.rank));
+
+    const topSellerProductIds = cachedTopSellers
+      .filter(ts => ts.productId)
+      .map(ts => ts.productId as string);
+
+    if (topSellerProductIds.length === 0) {
+      return [];
+    }
+
+    const searchTerms = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 1);
+    
+    const matchingProducts = await db.select()
+      .from(products)
+      .where(and(
+        sql`${products.id} IN (${sql.join(topSellerProductIds.map(id => sql`${id}`), sql`, `)})`,
+        eq(products.isOnline, true),
+        eq(products.isActive, true),
+        or(
+          ...searchTerms.map(term => ilike(products.name, `%${term}%`)),
+          ...searchTerms.map(term => ilike(products.sku, `%${term}%`)),
+          ...searchTerms.map(term => ilike(products.category, `%${term}%`)),
+          ...searchTerms.map(term => ilike(products.brand, `%${term}%`)),
+          ...searchTerms.map(term => ilike(products.description, `%${term}%`))
+        )
+      ))
+      .limit(limit);
+
+    const rankMap = new Map<string, number>();
+    cachedTopSellers.forEach((ts, idx) => {
+      if (ts.productId) {
+        rankMap.set(ts.productId, ts.rank);
+      }
+    });
+
+    return matchingProducts.sort((a, b) => 
+      (rankMap.get(a.id) || 999) - (rankMap.get(b.id) || 999)
+    );
+  }
+
   async getHiddenProducts(): Promise<Product[]> {
     return db.select()
       .from(products)

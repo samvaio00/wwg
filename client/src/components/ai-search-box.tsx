@@ -67,6 +67,19 @@ const TOP_SELLERS_PATTERNS = [
   /^(?:get|buy|order)\s+(?:the\s+)?(\d+)\s+(?:best|top)\s+sell(?:ing|er)s?\s+(.+)$/i,
 ];
 
+// Patterns for detecting "top seller" search filter (not action commands)
+const TOP_SELLER_SEARCH_PATTERNS = [
+  /\btop\s*sell(?:er|ing|ers)?\b/i,
+  /\bbest\s*sell(?:er|ing|ers)?\b/i,
+  /\bmost\s*popular\b/i,
+  /\bhot\s*sell(?:er|ing|ers)?\b/i,
+  /\btrending\b/i,
+];
+
+function hasTopSellerSearchFilter(query: string): boolean {
+  return TOP_SELLER_SEARCH_PATTERNS.some(pattern => pattern.test(query));
+}
+
 interface ParsedAction {
   isAction: boolean;
   isTopSellers?: boolean;
@@ -151,7 +164,7 @@ export function AISearchBox({
   const queryClient = useQueryClient();
 
   const dynamicPlaceholder = placeholder || (aiEnabled 
-    ? "AI Search - try 'add 1 each of geek bar flavors to cart'" 
+    ? "AI Search - try 'top seller cables' or 'best selling chargers'" 
     : "Search by name, SKU, or keyword...");
 
   const executeTopSellersAction = useMutation({
@@ -409,6 +422,10 @@ export function AISearchBox({
   const showActionIndicator = aiEnabled && parsed.isAction && value.length > 5;
   const isTopSellersAction = parsed.isTopSellers;
   const isAddEachAction = parsed.isAddEach;
+  
+  // Detect "top seller" search filter (for non-action searches)
+  const hasTopSellerFilter = aiEnabled && !parsed.isAction && value.length > 5 && hasTopSellerSearchFilter(value);
+  const showTopSellerSearchIndicator = hasTopSellerFilter;
 
   return (
     <div className="flex items-center gap-3">
@@ -442,7 +459,7 @@ export function AISearchBox({
               onKeyDown={handleKeyDown}
               className={`pr-20 h-9 focus-ring-animate transition-all ${
                 showActionIndicator ? "border-primary/50 bg-primary/5" : ""
-              }`}
+              } ${showTopSellerSearchIndicator ? "border-amber-500/50 bg-amber-500/5" : ""}`}
               data-testid={testId}
               disabled={isProcessingAction}
             />
@@ -470,6 +487,12 @@ export function AISearchBox({
                   )}
                 </Badge>
               )}
+              {showTopSellerSearchIndicator && !isProcessingAction && !showActionIndicator && (
+                <Badge variant="secondary" className="text-xs gap-1 badge-pop">
+                  <TrendingUp className="h-3 w-3" />
+                  Top Seller
+                </Badge>
+              )}
               {isSearching && !isProcessingAction && !showActionIndicator && (
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               )}
@@ -481,7 +504,7 @@ export function AISearchBox({
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
           {aiEnabled ? (
-            <p className="text-sm">Try: "cheap cables", "add 1 each of geek bar flavors to cart", or "add 5 top sellers cbd to cart"</p>
+            <p className="text-sm">Try: "top seller cables", "best selling chargers", or "add 1 each of geek bar to cart"</p>
           ) : (
             <p className="text-sm">Search by product name, SKU, or keywords</p>
           )}

@@ -377,12 +377,12 @@ export default function AdminAnalyticsPage() {
             ) : (
               <>
                 <div className="text-2xl font-bold" data-testid="metric-zoho-api-hour">
-                  {zohoStats?.lastHour.total || 0}
+                  {zohoStats?.lastHour?.total || 0}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  <span className="text-green-600">{zohoStats?.lastHour.success || 0} success</span>
+                  <span className="text-green-600">{zohoStats?.lastHour?.success || 0} success</span>
                   {" · "}
-                  <span className="text-red-600">{zohoStats?.lastHour.failed || 0} failed</span>
+                  <span className="text-red-600">{zohoStats?.lastHour?.failed || 0} failed</span>
                 </p>
               </>
             )}
@@ -399,12 +399,12 @@ export default function AdminAnalyticsPage() {
             ) : (
               <>
                 <div className="text-2xl font-bold" data-testid="metric-zoho-api-today">
-                  {zohoStats?.today.total || 0}
+                  {zohoStats?.today?.total || 0}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  <span className="text-green-600">{zohoStats?.today.success || 0} success</span>
+                  <span className="text-green-600">{zohoStats?.today?.success || 0} success</span>
                   {" · "}
-                  <span className="text-red-600">{zohoStats?.today.failed || 0} failed</span>
+                  <span className="text-red-600">{zohoStats?.today?.failed || 0} failed</span>
                 </p>
               </>
             )}

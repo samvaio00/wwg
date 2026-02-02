@@ -13,6 +13,7 @@ interface SchedulerConfig {
   offHoursIntervalMinutes: number;
   businessStartHour: number;
   businessEndHour: number;
+  enableFrequentZohoSync: boolean;
 }
 
 const DEFAULT_CONFIG: SchedulerConfig = {
@@ -25,6 +26,7 @@ const DEFAULT_CONFIG: SchedulerConfig = {
   offHoursIntervalMinutes: 360,
   businessStartHour: 8,
   businessEndHour: 18,
+  enableFrequentZohoSync: false,
 };
 
 function isBusinessHours(): boolean {
@@ -51,11 +53,13 @@ let customerSyncInterval: NodeJS.Timeout | null = null;
 let embeddingsInterval: NodeJS.Timeout | null = null;
 let topSellersInterval: NodeJS.Timeout | null = null;
 let emailCampaignInterval: NodeJS.Timeout | null = null;
+let weeklyZohoBackupInterval: NodeJS.Timeout | null = null;
 let lastZohoSync: Date | null = null;
 let lastCustomerSync: Date | null = null;
 let lastEmbeddingsUpdate: Date | null = null;
 let lastTopSellersSync: Date | null = null;
 let lastEmailCampaignRun: Date | null = null;
+let lastWeeklyZohoBackup: Date | null = null;
 
 export function getSchedulerStatus() {
   const currentInterval = getCurrentSyncInterval();
@@ -66,13 +70,22 @@ export function getSchedulerStatus() {
     currentIntervalMinutes: currentInterval,
     businessHoursIntervalMinutes: config.businessHoursIntervalMinutes,
     offHoursIntervalMinutes: config.offHoursIntervalMinutes,
+    enableFrequentZohoSync: config.enableFrequentZohoSync,
     zohoSync: {
-      intervalMinutes: currentInterval,
+      mode: config.enableFrequentZohoSync ? "frequent" : "webhook",
+      intervalMinutes: config.enableFrequentZohoSync ? currentInterval : null,
       lastRun: lastZohoSync,
-      nextRun: lastZohoSync && config.enabled
+      nextRun: config.enableFrequentZohoSync && lastZohoSync && config.enabled
         ? new Date(lastZohoSync.getTime() + currentInterval * 60 * 1000)
         : null,
       running: zohoSyncInterval !== null,
+      dormant: !config.enableFrequentZohoSync,
+    },
+    weeklyZohoBackup: {
+      schedule: "Weekly (Sunday 2AM)",
+      lastRun: lastWeeklyZohoBackup,
+      nextRun: getNextSundayBackupTime(),
+      running: weeklyZohoBackupInterval !== null,
     },
     customerSync: {
       intervalMinutes: config.customerSyncIntervalMinutes,
@@ -103,6 +116,21 @@ export function getSchedulerStatus() {
       running: emailCampaignInterval !== null,
     },
   };
+}
+
+function getNextSundayBackupTime(): Date {
+  const now = new Date();
+  const daysUntilSunday = (7 - now.getDay()) % 7 || 7;
+  const nextSunday = new Date(now);
+  nextSunday.setDate(now.getDate() + daysUntilSunday);
+  nextSunday.setHours(2, 0, 0, 0);
+  return nextSunday;
+}
+
+function getMsUntilNextSundayBackup(): number {
+  const now = new Date();
+  const nextBackup = getNextSundayBackupTime();
+  return nextBackup.getTime() - now.getTime();
 }
 
 function getNextSundayMidnight(): Date {
@@ -307,6 +335,46 @@ function scheduleNextZohoSync() {
   }, interval * 60 * 1000);
 }
 
+async function runWeeklyZohoBackup() {
+  console.log("[Scheduler] Starting weekly Zoho inventory backup sync (full sync)...");
+  try {
+    const catResult = await syncCategoriesFromZoho();
+    console.log(`[Scheduler] Backup - Category sync complete: ${catResult.synced} synced`);
+    
+    const result = await syncProductsFromZoho("scheduler-weekly-backup");
+    lastWeeklyZohoBackup = new Date();
+    console.log(`[Scheduler] Weekly backup sync complete: ${result.created} created, ${result.updated} updated, ${result.delisted} delisted`);
+    
+    try {
+      const groupResult = await syncItemGroupsFromZoho();
+      console.log(`[Scheduler] Backup - Item groups sync complete: ${groupResult.synced} groups, ${groupResult.updated} products updated`);
+    } catch (groupError) {
+      console.error("[Scheduler] Backup - Item groups sync error:", groupError);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error("[Scheduler] Weekly backup sync error:", error);
+    throw error;
+  }
+}
+
+function scheduleNextWeeklyZohoBackup() {
+  const msUntilBackup = getMsUntilNextSundayBackup();
+  const hoursUntil = Math.round(msUntilBackup / (1000 * 60 * 60));
+  console.log(`[Scheduler] Next weekly Zoho backup scheduled in ${hoursUntil} hours (Sunday 2 AM)`);
+  
+  weeklyZohoBackupInterval = setTimeout(async () => {
+    try {
+      await runWeeklyZohoBackup();
+    } catch (error) {
+      console.error("[Scheduler] Weekly backup sync failed, will retry next week:", error);
+    } finally {
+      scheduleNextWeeklyZohoBackup();
+    }
+  }, msUntilBackup);
+}
+
 export function startScheduler(newConfig?: Partial<SchedulerConfig>) {
   if (newConfig) {
     config = { ...config, ...newConfig };
@@ -319,17 +387,29 @@ export function startScheduler(newConfig?: Partial<SchedulerConfig>) {
 
   stopScheduler();
 
-  if (config.useBusinessHours) {
-    console.log(`[Scheduler] Starting scheduler with dynamic intervals:`);
-    console.log(`[Scheduler]   Business hours (${config.businessStartHour}:00-${config.businessEndHour}:00): ${config.businessHoursIntervalMinutes} minutes`);
-    console.log(`[Scheduler]   Off-hours/weekends: ${config.offHoursIntervalMinutes} minutes`);
+  console.log(`[Scheduler] Starting scheduler:`);
+  
+  if (config.enableFrequentZohoSync) {
+    if (config.useBusinessHours) {
+      console.log(`[Scheduler]   Frequent Zoho API sync: ENABLED (2-6 hour intervals)`);
+      console.log(`[Scheduler]     Business hours (${config.businessStartHour}:00-${config.businessEndHour}:00): ${config.businessHoursIntervalMinutes} minutes`);
+      console.log(`[Scheduler]     Off-hours/weekends: ${config.offHoursIntervalMinutes} minutes`);
+    } else {
+      console.log(`[Scheduler]   Frequent Zoho API sync: ENABLED (every ${config.zohoSyncIntervalMinutes} minutes)`);
+    }
   } else {
-    console.log(`[Scheduler] Starting scheduler with Zoho sync every ${config.zohoSyncIntervalMinutes} minutes`);
+    console.log(`[Scheduler]   Frequent Zoho API sync: DISABLED (using webhooks for real-time updates)`);
+    console.log(`[Scheduler]   Weekly backup sync: Sunday 2 AM`);
   }
-  console.log(`[Scheduler] Customer sync every ${config.customerSyncIntervalMinutes} minutes`);
-  console.log(`[Scheduler] Embeddings update every ${config.embeddingsUpdateIntervalMinutes} minutes`);
+  
+  console.log(`[Scheduler]   Customer sync: every ${config.customerSyncIntervalMinutes} minutes`);
+  console.log(`[Scheduler]   Embeddings update: every ${config.embeddingsUpdateIntervalMinutes} minutes`);
 
-  scheduleNextZohoSync();
+  if (config.enableFrequentZohoSync) {
+    scheduleNextZohoSync();
+  } else {
+    scheduleNextWeeklyZohoBackup();
+  }
 
   customerSyncInterval = setInterval(
     runCustomerSync,
@@ -349,7 +429,11 @@ export function startScheduler(newConfig?: Partial<SchedulerConfig>) {
 
   setTimeout(() => {
     console.log("[Scheduler] Running initial sync on startup...");
-    runZohoSync()
+    const initialSyncPromise = config.enableFrequentZohoSync
+      ? runZohoSync()
+      : Promise.resolve();
+    
+    initialSyncPromise
       .then(() => runCustomerSync())
       .then(() => runEmbeddingsUpdate())
       .then(() => runTopSellersSync())
@@ -362,6 +446,11 @@ export function stopScheduler() {
     clearTimeout(zohoSyncInterval);
     zohoSyncInterval = null;
     console.log("[Scheduler] Zoho sync stopped");
+  }
+  if (weeklyZohoBackupInterval) {
+    clearTimeout(weeklyZohoBackupInterval);
+    weeklyZohoBackupInterval = null;
+    console.log("[Scheduler] Weekly Zoho backup stopped");
   }
   if (customerSyncInterval) {
     clearInterval(customerSyncInterval);

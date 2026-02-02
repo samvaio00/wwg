@@ -2,6 +2,7 @@ import { db } from "./db";
 import { products, users, categories } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { UserStatus } from "@shared/schema";
+import { recordWebhookEvent } from "./webhook-stats";
 
 interface ZohoItemWebhookPayload {
   action: string;
@@ -98,6 +99,7 @@ export async function handleItemWebhook(
           .where(eq(products.id, existingProduct[0].id));
 
         console.log(`[Zoho Webhook] Product delisted: ${existingProduct[0].sku}`);
+        recordWebhookEvent("items", action, true, `Delisted ${existingProduct[0].sku}`);
         return {
           success: true,
           action,
@@ -143,6 +145,7 @@ export async function handleItemWebhook(
         .where(eq(products.id, existingProduct[0].id));
 
       console.log(`[Zoho Webhook] Product updated: ${productData.sku}`);
+      recordWebhookEvent("items", action, true, `Updated ${productData.sku}`);
       return {
         success: true,
         action,
@@ -163,6 +166,7 @@ export async function handleItemWebhook(
         .returning();
 
       console.log(`[Zoho Webhook] Product created: ${productData.sku}`);
+      recordWebhookEvent("items", action, true, `Created ${productData.sku}`);
       return {
         success: true,
         action,
@@ -172,6 +176,7 @@ export async function handleItemWebhook(
     }
   } catch (error) {
     console.error(`[Zoho Webhook] Error processing item webhook:`, error);
+    recordWebhookEvent("items", action, false, error instanceof Error ? error.message : "Unknown error");
     return {
       success: false,
       action,
@@ -227,6 +232,7 @@ export async function handleCustomerWebhook(
         .where(eq(users.id, user.id));
 
       console.log(`[Zoho Webhook] Customer suspended (deleted in Zoho): ${user.email}`);
+      recordWebhookEvent("customers", action, true, `Customer ${user.email} suspended (deleted in Zoho)`);
       return {
         success: true,
         action,
@@ -277,16 +283,19 @@ export async function handleCustomerWebhook(
       })
       .where(eq(users.id, user.id));
 
+    const message = statusChanged
+      ? `Customer ${user.email} status ${isActive ? "reactivated" : "suspended"}`
+      : `Customer ${user.email} synced (no status change)`;
+    recordWebhookEvent("customers", action, true, message);
     return {
       success: true,
       action,
-      message: statusChanged
-        ? `Customer ${user.email} status ${isActive ? "reactivated" : "suspended"}`
-        : `Customer ${user.email} synced (no status change)`,
+      message,
       userId: user.id,
     };
   } catch (error) {
     console.error(`[Zoho Webhook] Error processing customer webhook:`, error);
+    recordWebhookEvent("customers", action, false, error instanceof Error ? error.message : "Unknown error");
     return {
       success: false,
       action,

@@ -134,3 +134,23 @@ The platform includes AI-generated promotional email campaigns powered by OpenAI
 - **Resend** (RESEND_API_KEY): Primary provider
 - **SendGrid** (SENDGRID_API_KEY): Fallback provider
 - **Console**: Development fallback (logs email details to console)
+
+## Server Alert System
+
+The platform includes an alert system that sends email notifications for critical server events.
+
+### Alert Types
+1. **Server Crash**: Triggered by uncaught exceptions or unhandled promise rejections. The process will exit after sending the alert.
+2. **Server Error**: Triggered when a 500-level error occurs while a customer is using the site. Includes route, method, and user context.
+3. **Site Down**: Triggered when the site is detected as unresponsive.
+
+### Configuration
+- **Alert Email**: warnergears@gmail.com (configurable via ALERT_EMAIL env var)
+- **Cooldown**: 5 minutes between alerts of the same type to prevent spam
+- **Email Provider**: Uses SendGrid (SENDGRID_API_KEY) if configured, otherwise logs to console
+
+### Setup Note (Feb 2026)
+SendGrid integration was declined. To enable actual email delivery for alerts:
+1. Set up SendGrid integration via Replit, OR
+2. Add SENDGRID_API_KEY as a secret manually
+Until configured, alerts are logged to the server console.

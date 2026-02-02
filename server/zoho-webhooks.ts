@@ -322,7 +322,9 @@ export function verifyWebhookSecret(
     return false;
   }
 
-  return providedSecret === expectedSecret;
+  // Zoho sometimes appends trailing '&' to webhook URLs - strip it for comparison
+  const cleanedSecret = providedSecret.replace(/&+$/, "");
+  return cleanedSecret === expectedSecret;
 }
 
 interface ZohoInvoiceLineItem {

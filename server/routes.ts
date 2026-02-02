@@ -28,6 +28,7 @@ import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./
 import { sendShipmentNotification, sendDeliveryNotification, sendNewUserNotification, sendNewOrderNotification } from "./email-service";
 import { processJobQueue } from "./job-worker";
 import { handleItemWebhook, handleCustomerWebhook, verifyWebhookSecret } from "./zoho-webhooks";
+import { getWebhookStats } from "./webhook-stats";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -2171,6 +2172,17 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Zoho API stats error:", error);
       res.status(500).json({ message: "Failed to load Zoho API stats" });
+    }
+  });
+
+  // Get Zoho webhook statistics
+  app.get("/api/admin/analytics/webhook-stats", requireAdmin, async (_req, res) => {
+    try {
+      const stats = getWebhookStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Webhook stats error:", error);
+      res.status(500).json({ message: "Failed to load webhook stats" });
     }
   });
 

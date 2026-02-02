@@ -2,6 +2,10 @@ import { db } from "./db";
 import { products, syncRuns, SyncType, priceLists, customerPrices, categories, zohoApiLogs } from "@shared/schema";
 import { eq, isNotNull, desc, and, sql } from "drizzle-orm";
 import { storage } from "./storage";
+import * as fs from "fs";
+import * as path from "path";
+
+const PRODUCT_IMAGES_DIR = path.join(process.cwd(), "public", "product-images");
 
 // Helper to log Zoho API calls
 async function logZohoApiCall(endpoint: string, method: string, statusCode: number | null, success: boolean, errorMessage?: string) {
@@ -982,25 +986,76 @@ export async function syncItemGroupsFromZoho(): Promise<{ synced: number; update
   return result;
 }
 
-// In-memory image cache to reduce Zoho API calls
-const imageCache = new Map<string, { data: Buffer; contentType: string; cachedAt: number }>();
-const IMAGE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-const IMAGE_CACHE_MAX_SIZE = 500; // Max 500 images in memory
-const NO_IMAGE_MARKER = "NO_IMAGE"; // Marker for items without images
-
-// Track items known to have no image to avoid repeated API calls
+// Persistent image storage - images are saved to disk and never expire
+// Track items known to have no image to avoid repeated API calls (in-memory only)
 const noImageItems = new Set<string>();
 
+// Ensure product images directory exists
+function ensureImagesDirExists(): void {
+  if (!fs.existsSync(PRODUCT_IMAGES_DIR)) {
+    fs.mkdirSync(PRODUCT_IMAGES_DIR, { recursive: true });
+  }
+}
+
+// Get local image path for a Zoho item
+function getLocalImagePath(zohoItemId: string): string {
+  return path.join(PRODUCT_IMAGES_DIR, `${zohoItemId}.jpg`);
+}
+
+// Check if local image exists
+function hasLocalImage(zohoItemId: string): boolean {
+  return fs.existsSync(getLocalImagePath(zohoItemId));
+}
+
+// Get local image from disk
+function getLocalImage(zohoItemId: string): { data: Buffer; contentType: string } | null {
+  const imagePath = getLocalImagePath(zohoItemId);
+  if (fs.existsSync(imagePath)) {
+    try {
+      const data = fs.readFileSync(imagePath);
+      return { data, contentType: "image/jpeg" };
+    } catch (err) {
+      console.error(`[Image Storage] Failed to read local image for ${zohoItemId}:`, err);
+      return null;
+    }
+  }
+  return null;
+}
+
+// Save image to disk
+function saveLocalImage(zohoItemId: string, data: Buffer): void {
+  ensureImagesDirExists();
+  const imagePath = getLocalImagePath(zohoItemId);
+  try {
+    fs.writeFileSync(imagePath, data);
+    console.log(`[Image Storage] Saved image for ${zohoItemId}`);
+  } catch (err) {
+    console.error(`[Image Storage] Failed to save image for ${zohoItemId}:`, err);
+  }
+}
+
+// Delete local image (for refresh)
+function deleteLocalImage(zohoItemId: string): void {
+  const imagePath = getLocalImagePath(zohoItemId);
+  if (fs.existsSync(imagePath)) {
+    try {
+      fs.unlinkSync(imagePath);
+    } catch (err) {
+      console.error(`[Image Storage] Failed to delete image for ${zohoItemId}:`, err);
+    }
+  }
+}
+
 export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data: Buffer; contentType: string } | null> {
-  // Check if item is known to have no image
+  // Check if item is known to have no image (in-memory cache only)
   if (noImageItems.has(zohoItemId)) {
     return null;
   }
   
-  // Check memory cache first
-  const cached = imageCache.get(zohoItemId);
-  if (cached && Date.now() - cached.cachedAt < IMAGE_CACHE_TTL) {
-    return { data: cached.data, contentType: cached.contentType };
+  // Check for local image first - this is the primary storage
+  const localImage = getLocalImage(zohoItemId);
+  if (localImage) {
+    return localImage;
   }
   
   try {
@@ -1054,15 +1109,10 @@ export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data:
     const arrayBuffer = await response.arrayBuffer();
     const data = Buffer.from(arrayBuffer);
 
-    // Cache the image
-    if (imageCache.size >= IMAGE_CACHE_MAX_SIZE) {
-      // Remove oldest entries (first 100)
-      const keysToDelete = Array.from(imageCache.keys()).slice(0, 100);
-      keysToDelete.forEach(key => imageCache.delete(key));
-    }
-    imageCache.set(zohoItemId, { data, contentType, cachedAt: Date.now() });
+    // Save image to disk for persistent storage
+    saveLocalImage(zohoItemId, data);
 
-    return { data, contentType };
+    return { data, contentType: "image/jpeg" };
   } catch (error) {
     console.error(`[Zoho Image] Error fetching image for ${zohoItemId}:`, error);
     return null;
@@ -1071,7 +1121,58 @@ export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data:
 
 // Function to clear image cache (useful for admin)
 export function clearImageCache(): void {
-  imageCache.clear();
   noImageItems.clear();
-  console.log("[Zoho Image] Cache cleared");
+  console.log("[Zoho Image] No-image tracking cleared");
+}
+
+// Function to refresh a single product image from Zoho
+export async function refreshProductImage(zohoItemId: string): Promise<boolean> {
+  // Delete local image to force re-fetch
+  deleteLocalImage(zohoItemId);
+  noImageItems.delete(zohoItemId);
+  
+  // Fetch fresh image from Zoho
+  const result = await fetchZohoProductImage(zohoItemId);
+  return result !== null;
+}
+
+// Function to sync all product images from Zoho (bulk download)
+export async function syncAllProductImages(): Promise<{ downloaded: number; skipped: number; failed: number; noImage: number }> {
+  const result = { downloaded: 0, skipped: 0, failed: 0, noImage: 0 };
+  
+  try {
+    // Get all products with Zoho item IDs
+    const allProducts = await storage.getAllProducts();
+    const productsWithZoho = allProducts.filter(p => p.zohoItemId);
+    
+    console.log(`[Image Sync] Starting sync for ${productsWithZoho.length} products with Zoho IDs`);
+    
+    for (const product of productsWithZoho) {
+      if (!product.zohoItemId) continue;
+      
+      // Skip if already have local image
+      if (hasLocalImage(product.zohoItemId)) {
+        result.skipped++;
+        continue;
+      }
+      
+      // Add small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const imageData = await fetchZohoProductImage(product.zohoItemId);
+      if (imageData) {
+        result.downloaded++;
+      } else if (noImageItems.has(product.zohoItemId)) {
+        result.noImage++;
+      } else {
+        result.failed++;
+      }
+    }
+    
+    console.log(`[Image Sync] Complete: ${result.downloaded} downloaded, ${result.skipped} skipped, ${result.noImage} no image, ${result.failed} failed`);
+  } catch (error) {
+    console.error("[Image Sync] Error during sync:", error);
+  }
+  
+  return result;
 }

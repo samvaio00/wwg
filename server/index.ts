@@ -43,6 +43,12 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Serve product images from public folder with long cache headers
+app.use("/product-images", express.static(path.join(process.cwd(), "public", "product-images"), {
+  maxAge: "30d",
+  immutable: true,
+}));
+
 // Session setup with PostgreSQL store
 const PgSession = connectPgSimple(session);
 

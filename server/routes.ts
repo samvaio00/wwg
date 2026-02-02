@@ -21,7 +21,7 @@ import { db } from "./db";
 import { users, products, orders } from "@shared/schema";
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
-import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, syncItemGroupsFromZoho, clearImageCache } from "./zoho-service";
+import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, syncItemGroupsFromZoho, clearImageCache, syncAllProductImages, refreshProductImage } from "./zoho-service";
 import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, syncTopSellersFromZoho, type ZohoLineItem } from "./zoho-books-service";
 import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
@@ -2046,6 +2046,50 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Clear image cache error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Sync all product images from Zoho (bulk download to local storage)
+  app.post("/api/admin/images/sync", requireAdmin, async (_req, res) => {
+    try {
+      console.log("[Admin] Starting product image sync...");
+      const result = await syncAllProductImages();
+      res.json({
+        success: true,
+        message: `Image sync complete: ${result.downloaded} downloaded, ${result.skipped} already cached, ${result.noImage} have no image, ${result.failed} failed`,
+        ...result,
+      });
+    } catch (error) {
+      console.error("Image sync error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Refresh a single product image from Zoho
+  app.post("/api/admin/products/:id/refresh-image", requireAdmin, async (req, res) => {
+    try {
+      const product = await storage.getProductInternal(req.params.id);
+      if (!product) {
+        return res.status(404).json({ success: false, message: "Product not found" });
+      }
+      if (!product.zohoItemId) {
+        return res.status(400).json({ success: false, message: "Product has no Zoho item ID" });
+      }
+      
+      const success = await refreshProductImage(product.zohoItemId);
+      res.json({
+        success,
+        message: success ? "Image refreshed successfully" : "No image available for this product",
+      });
+    } catch (error) {
+      console.error("Refresh image error:", error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : "Unknown error",

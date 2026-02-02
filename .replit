@@ -45,6 +45,7 @@ ALLOW_ADMIN_SETUP = "true"
 
 [userenv.shared]
 ZOHO_ORG_ID = "669968813"
+ZOHO_WEBHOOK_SECRET = "webhookzohoinventorywarnergears10165"
 
 [userenv.production]
 

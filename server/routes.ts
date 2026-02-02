@@ -27,6 +27,7 @@ import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
 import { sendShipmentNotification, sendDeliveryNotification, sendNewUserNotification, sendNewOrderNotification } from "./email-service";
 import { processJobQueue } from "./job-worker";
+import { handleItemWebhook, handleCustomerWebhook, verifyWebhookSecret } from "./zoho-webhooks";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -2490,6 +2491,64 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error regenerating email template:", error);
       res.status(500).json({ message: "Failed to regenerate email template" });
+    }
+  });
+
+  // ================================================================
+  // ZOHO WEBHOOKS (Real-time sync from Zoho Inventory and Books)
+  // ================================================================
+
+  // Items webhook - handles create, update, delete from Zoho Inventory
+  app.post("/api/webhooks/zoho/items", async (req, res) => {
+    try {
+      const webhookSecret = process.env.ZOHO_WEBHOOK_SECRET;
+      const providedSecret = req.headers["x-zoho-webhook-secret"] as string || req.query.secret as string;
+
+      if (!verifyWebhookSecret(providedSecret, webhookSecret)) {
+        console.warn("[Zoho Webhook] Unauthorized items webhook request");
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const result = await handleItemWebhook(req.body, webhookSecret);
+      
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (error) {
+      console.error("[Zoho Webhook] Items webhook error:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: error instanceof Error ? error.message : "Internal server error" 
+      });
+    }
+  });
+
+  // Customers webhook - handles status changes from Zoho Books
+  app.post("/api/webhooks/zoho/customers", async (req, res) => {
+    try {
+      const webhookSecret = process.env.ZOHO_WEBHOOK_SECRET;
+      const providedSecret = req.headers["x-zoho-webhook-secret"] as string || req.query.secret as string;
+
+      if (!verifyWebhookSecret(providedSecret, webhookSecret)) {
+        console.warn("[Zoho Webhook] Unauthorized customers webhook request");
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const result = await handleCustomerWebhook(req.body, webhookSecret);
+      
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (error) {
+      console.error("[Zoho Webhook] Customers webhook error:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: error instanceof Error ? error.message : "Internal server error" 
+      });
     }
   });
 

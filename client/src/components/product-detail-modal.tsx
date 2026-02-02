@@ -256,13 +256,13 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="modal-product-detail">
-        <DialogHeader>
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden" data-testid="modal-product-detail">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="sr-only">{product.name}</DialogTitle>
         </DialogHeader>
         
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="h-64 md:h-80">
+        <div className="grid gap-4 md:grid-cols-2 flex-shrink-0">
+          <div className="h-36 md:h-44">
             <ProductImage product={product} isOutOfStock={isOutOfStock} />
           </div>
           
@@ -380,13 +380,13 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
         </div>
 
         {isGroupedProduct && (
-          <div className="border-t pt-4 mt-4">
-            <h3 className="font-medium mb-3 flex items-center gap-2">
+          <div className="border-t pt-3 mt-3 flex-1 flex flex-col min-h-0">
+            <h3 className="font-medium mb-2 flex items-center gap-2 flex-shrink-0">
               <Layers className="h-4 w-4" />
               Available Variants
             </h3>
             {isLoadingGroup ? (
-              <div className="space-y-3">
+              <div className="space-y-3 overflow-y-auto flex-1">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <Card key={i}>
                     <CardContent className="p-3 flex gap-3">
@@ -401,7 +401,7 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
                 ))}
               </div>
             ) : groupVariants.length > 0 ? (
-              <div className="space-y-3 max-h-80 overflow-y-auto">
+              <div className="space-y-3 overflow-y-auto flex-1 pr-1">
                 {groupVariants.map((variant) => (
                   <VariantCard
                     key={variant.id}

@@ -32,6 +32,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import type { Product, Category } from "@shared/schema";
 
 const sortOptions = [
@@ -40,7 +42,6 @@ const sortOptions = [
   { value: "price-high", label: "Price: High to Low" },
   { value: "name-asc", label: "Name: A to Z" },
   { value: "name-desc", label: "Name: Z to A" },
-  { value: "instock", label: "In Stock Only" },
 ];
 
 function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {
@@ -485,6 +486,22 @@ export default function ProductsPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox 
+              id="in-stock-filter" 
+              checked={inStockOnly}
+              onCheckedChange={(checked) => setInStockOnly(checked === true)}
+              data-testid="checkbox-in-stock"
+            />
+            <Label 
+              htmlFor="in-stock-filter" 
+              className="text-sm cursor-pointer whitespace-nowrap"
+              data-testid="label-in-stock"
+            >
+              In Stock Only
+            </Label>
           </div>
         </div>
       </div>

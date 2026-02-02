@@ -31,11 +31,229 @@ import {
   Truck,
   Package,
   AlertCircle,
-  User
+  User,
+  Eye,
+  Minus,
+  Plus,
+  Trash2,
+  Save,
+  Loader2
 } from "lucide-react";
-import type { Order, SafeUser } from "@shared/schema";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import type { Order, SafeUser, Product, OrderItem } from "@shared/schema";
+
+type OrderItemWithProduct = OrderItem & { product: Product };
 
 type OrderWithUser = Order & { user: SafeUser };
+
+function OrderEditModal({ 
+  orderId, 
+  isOpen, 
+  onClose,
+  onSaveSuccess
+}: { 
+  orderId: string | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSaveSuccess: () => void;
+}) {
+  const { toast } = useToast();
+  const [editedItems, setEditedItems] = useState<Record<string, number>>({});
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const { data: orderData, isLoading } = useQuery<{ order: Order; items: OrderItemWithProduct[] }>({
+    queryKey: ["/api/admin/orders", orderId],
+    enabled: !!orderId && isOpen,
+  });
+
+  const updateItemsMutation = useMutation({
+    mutationFn: async (items: { id: string; quantity: number }[]) => {
+      const res = await apiRequest("PATCH", `/api/admin/orders/${orderId}/items`, { items });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      toast({ title: "Order updated", description: "The order items have been updated." });
+      setHasChanges(false);
+      onSaveSuccess();
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to update order items.", 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const handleQuantityChange = (itemId: string, originalQty: number, delta: number) => {
+    const currentQty = editedItems[itemId] ?? originalQty;
+    const newQty = Math.max(0, currentQty + delta);
+    setEditedItems(prev => ({ ...prev, [itemId]: newQty }));
+    setHasChanges(true);
+  };
+
+  const handleSave = () => {
+    if (!orderData) return;
+    
+    const itemsToUpdate = orderData.items.map(item => ({
+      id: item.id,
+      quantity: editedItems[item.id] ?? item.quantity
+    }));
+    
+    updateItemsMutation.mutate(itemsToUpdate);
+  };
+
+  const handleClose = () => {
+    setEditedItems({});
+    setHasChanges(false);
+    onClose();
+  };
+
+  if (!orderId) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Eye className="h-5 w-5" />
+            Order Details
+            {orderData?.order && (
+              <Badge variant="secondary">#{orderData.order.orderNumber}</Badge>
+            )}
+          </DialogTitle>
+          <DialogDescription>
+            View and edit order items. Changes only apply to pending orders.
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        ) : orderData ? (
+          <ScrollArea className="max-h-[50vh]">
+            <div className="space-y-3 pr-4">
+              {orderData.items.map((item) => {
+                const currentQty = editedItems[item.id] ?? item.quantity;
+                const isDeleted = currentQty === 0;
+                const stockQty = item.product.stockQuantity ?? 0;
+                
+                return (
+                  <div 
+                    key={item.id}
+                    className={`flex items-center gap-4 p-3 rounded-lg border ${isDeleted ? "bg-destructive/10 border-destructive/20" : "bg-muted/30"}`}
+                    data-testid={`order-item-${item.id}`}
+                  >
+                    <div className="w-12 h-12 rounded bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {item.product.imageUrl ? (
+                        <img 
+                          src={item.product.imageUrl} 
+                          alt={item.product.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Package className="h-6 w-6 text-muted-foreground" />
+                      )}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-medium truncate ${isDeleted ? "line-through text-muted-foreground" : ""}`}>
+                        {item.product.name}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        SKU: {item.product.sku} | ${item.unitPrice} each
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge 
+                          variant={stockQty > 0 ? "outline" : "destructive"} 
+                          className="text-xs"
+                        >
+                          Stock: {stockQty}
+                        </Badge>
+                        {currentQty > stockQty && stockQty > 0 && (
+                          <Badge variant="secondary" className="text-xs">
+                            Exceeds stock
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        onClick={() => handleQuantityChange(item.id, item.quantity, -1)}
+                        disabled={updateItemsMutation.isPending}
+                        data-testid={`button-decrease-${item.id}`}
+                      >
+                        {currentQty === 1 ? <Trash2 className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+                      </Button>
+                      <span className={`w-12 text-center font-medium ${isDeleted ? "text-destructive" : ""}`}>
+                        {isDeleted ? "DEL" : currentQty}
+                      </span>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        onClick={() => handleQuantityChange(item.id, item.quantity, 1)}
+                        disabled={updateItemsMutation.isPending}
+                        data-testid={`button-increase-${item.id}`}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    <div className="w-20 text-right font-medium">
+                      ${(parseFloat(item.unitPrice) * currentQty).toFixed(2)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        ) : null}
+
+        {orderData && (
+          <div className="border-t pt-4 mt-4">
+            <div className="flex justify-between items-center text-lg font-semibold">
+              <span>New Total:</span>
+              <span data-testid="text-new-total">
+                ${orderData.items.reduce((sum, item) => {
+                  const qty = editedItems[item.id] ?? item.quantity;
+                  return sum + (parseFloat(item.unitPrice) * qty);
+                }, 0).toFixed(2)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSave}
+            disabled={!hasChanges || updateItemsMutation.isPending}
+            data-testid="button-save-order-changes"
+          >
+            {updateItemsMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Save Changes
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof Clock }> = {
   pending_approval: { label: "Pending", variant: "secondary", icon: Clock },
@@ -57,6 +275,7 @@ function OrderRow({
   onShip,
   onDeliver,
   onUpdateTracking,
+  onViewEdit,
   isUpdating 
 }: { 
   order: OrderWithUser;
@@ -66,6 +285,7 @@ function OrderRow({
   onShip: (id: string, trackingNumber: string, carrier: string) => void;
   onDeliver: (id: string) => void;
   onUpdateTracking: (id: string, trackingNumber: string, carrier: string) => void;
+  onViewEdit: (id: string) => void;
   isUpdating: boolean;
 }) {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
@@ -129,6 +349,16 @@ function OrderRow({
             <div className="flex items-center gap-2 flex-wrap">
               {order.status === "pending_approval" && (
                 <>
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onViewEdit(order.id)}
+                    disabled={isUpdating}
+                    data-testid={`button-view-edit-order-${order.id}`}
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    View/Edit
+                  </Button>
                   <Button 
                     size="sm"
                     onClick={() => onApprove(order.id)}
@@ -384,6 +614,8 @@ function OrderSkeleton() {
 
 export default function AdminOrdersPage() {
   const { toast } = useToast();
+  const [editOrderId, setEditOrderId] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const { data, isLoading, error } = useQuery<{ orders: OrderWithUser[] }>({
     queryKey: ["/api/admin/orders"],
@@ -479,6 +711,10 @@ export default function AdminOrdersPage() {
   const handleShip = (id: string, trackingNumber: string, carrier: string) => shipMutation.mutate({ id, trackingNumber, carrier });
   const handleDeliver = (id: string) => deliverMutation.mutate(id);
   const handleUpdateTracking = (id: string, trackingNumber: string, carrier: string) => updateTrackingMutation.mutate({ id, trackingNumber, carrier });
+  const handleViewEdit = (id: string) => {
+    setEditOrderId(id);
+    setShowEditModal(true);
+  };
 
   const orders = data?.orders || [];
   const isUpdating = approveMutation.isPending || rejectMutation.isPending || updateStatusMutation.isPending || shipMutation.isPending || deliverMutation.isPending || updateTrackingMutation.isPending;
@@ -596,6 +832,7 @@ export default function AdminOrdersPage() {
                   onShip={handleShip}
                   onDeliver={handleDeliver}
                   onUpdateTracking={handleUpdateTracking}
+                  onViewEdit={handleViewEdit}
                   isUpdating={isUpdating}
                 />
               ))
@@ -620,6 +857,7 @@ export default function AdminOrdersPage() {
                   onShip={handleShip}
                   onDeliver={handleDeliver}
                   onUpdateTracking={handleUpdateTracking}
+                  onViewEdit={handleViewEdit}
                   isUpdating={isUpdating}
                 />
               ))
@@ -644,6 +882,7 @@ export default function AdminOrdersPage() {
                   onShip={handleShip}
                   onDeliver={handleDeliver}
                   onUpdateTracking={handleUpdateTracking}
+                  onViewEdit={handleViewEdit}
                   isUpdating={isUpdating}
                 />
               ))
@@ -661,12 +900,26 @@ export default function AdminOrdersPage() {
                 onShip={handleShip}
                 onDeliver={handleDeliver}
                 onUpdateTracking={handleUpdateTracking}
+                onViewEdit={handleViewEdit}
                 isUpdating={isUpdating}
               />
             ))}
           </TabsContent>
         </Tabs>
       )}
+
+      <OrderEditModal
+        orderId={editOrderId}
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditOrderId(null);
+        }}
+        onSaveSuccess={() => {
+          setShowEditModal(false);
+          setEditOrderId(null);
+        }}
+      />
     </div>
   );
 }

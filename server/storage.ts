@@ -1133,7 +1133,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async searchWithinTopSellers(searchQuery: string, limit: number = 50): Promise<Product[]> {
-    const cachedTopSellers = await db.select({ productId: topSellersCache.productId, rank: topSellersCache.rank })
+    const cachedTopSellers = await db.select({ 
+      productId: topSellersCache.productId, 
+      rank: topSellersCache.rank,
+      totalQuantitySold: topSellersCache.totalQuantitySold
+    })
       .from(topSellersCache)
       .orderBy(asc(topSellersCache.rank));
 
@@ -1142,36 +1146,64 @@ export class DatabaseStorage implements IStorage {
       .map(ts => ts.productId as string);
 
     if (topSellerProductIds.length === 0) {
+      console.log("[searchWithinTopSellers] No top sellers in cache");
       return [];
     }
 
-    const searchTerms = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 1);
+    // Split and filter search terms, also add singular forms (remove trailing 's')
+    let searchTerms = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 1);
+    // Add singular forms for plural terms (simple stemming)
+    const singularTerms = searchTerms
+      .filter(t => t.endsWith('s') && t.length > 3)
+      .map(t => t.slice(0, -1));
+    searchTerms = [...new Set([...searchTerms, ...singularTerms])];
+    console.log(`[searchWithinTopSellers] Query: "${searchQuery}", Terms: ${JSON.stringify(searchTerms)}, Top seller count: ${topSellerProductIds.length}`);
     
-    const matchingProducts = await db.select()
-      .from(products)
-      .where(and(
-        sql`${products.id} IN (${sql.join(topSellerProductIds.map(id => sql`${id}`), sql`, `)})`,
-        eq(products.isOnline, true),
-        eq(products.isActive, true),
-        or(
-          ...searchTerms.map(term => ilike(products.name, `%${term}%`)),
-          ...searchTerms.map(term => ilike(products.sku, `%${term}%`)),
-          ...searchTerms.map(term => ilike(products.category, `%${term}%`)),
-          ...searchTerms.map(term => ilike(products.brand, `%${term}%`)),
-          ...searchTerms.map(term => ilike(products.description, `%${term}%`))
-        )
-      ))
-      .limit(limit);
+    // Build search conditions - if no valid search terms, return all top sellers
+    let matchingProducts: typeof products.$inferSelect[] = [];
+    
+    if (searchTerms.length > 0) {
+      const termConditions = searchTerms.flatMap(term => [
+        ilike(products.name, `%${term}%`),
+        ilike(products.sku, `%${term}%`),
+        ilike(products.category, `%${term}%`),
+        ilike(products.brand, `%${term}%`),
+        ilike(products.description, `%${term}%`)
+      ]);
+      
+      matchingProducts = await db.select()
+        .from(products)
+        .where(and(
+          inArray(products.id, topSellerProductIds),
+          eq(products.isOnline, true),
+          eq(products.isActive, true),
+          or(...termConditions)
+        ))
+        .limit(limit);
+    } else {
+      // No search terms - return all top sellers
+      matchingProducts = await db.select()
+        .from(products)
+        .where(and(
+          inArray(products.id, topSellerProductIds),
+          eq(products.isOnline, true),
+          eq(products.isActive, true)
+        ))
+        .limit(limit);
+    }
+    
+    console.log(`[searchWithinTopSellers] Found ${matchingProducts.length} products`);
 
+    // Sort by sales rank (quantity sold)
     const rankMap = new Map<string, number>();
-    cachedTopSellers.forEach((ts, idx) => {
+    cachedTopSellers.forEach((ts) => {
       if (ts.productId) {
         rankMap.set(ts.productId, ts.rank);
       }
     });
 
     return matchingProducts.sort((a, b) => 
-      (rankMap.get(a.id) || 999) - (rankMap.get(b.id) || 999)
+      (rankMap.get(a.id) || 999999) - (rankMap.get(b.id) || 999999)
     );
   }
 

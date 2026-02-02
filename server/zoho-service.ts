@@ -982,7 +982,27 @@ export async function syncItemGroupsFromZoho(): Promise<{ synced: number; update
   return result;
 }
 
+// In-memory image cache to reduce Zoho API calls
+const imageCache = new Map<string, { data: Buffer; contentType: string; cachedAt: number }>();
+const IMAGE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const IMAGE_CACHE_MAX_SIZE = 500; // Max 500 images in memory
+const NO_IMAGE_MARKER = "NO_IMAGE"; // Marker for items without images
+
+// Track items known to have no image to avoid repeated API calls
+const noImageItems = new Set<string>();
+
 export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data: Buffer; contentType: string } | null> {
+  // Check if item is known to have no image
+  if (noImageItems.has(zohoItemId)) {
+    return null;
+  }
+  
+  // Check memory cache first
+  const cached = imageCache.get(zohoItemId);
+  if (cached && Date.now() - cached.cachedAt < IMAGE_CACHE_TTL) {
+    return { data: cached.data, contentType: cached.contentType };
+  }
+  
   try {
     const accessToken = await getAccessToken();
     const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
@@ -1007,6 +1027,7 @@ export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data:
     if (!response.ok) {
       // Handle 404 or 400 with "Attachment not found" as no image available
       if (response.status === 404) {
+        noImageItems.add(zohoItemId);
         return null;
       }
       
@@ -1014,6 +1035,13 @@ export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data:
       
       // Zoho returns 400 with "Attachment not found" when there's no image
       if (response.status === 400 && errorText.includes('Attachment not found')) {
+        noImageItems.add(zohoItemId);
+        return null;
+      }
+      
+      // Rate limit - don't mark as no image, just return null
+      if (response.status === 429) {
+        console.log(`[Zoho Image] Rate limited for ${zohoItemId}, will retry later`);
         return null;
       }
       
@@ -1026,9 +1054,24 @@ export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data:
     const arrayBuffer = await response.arrayBuffer();
     const data = Buffer.from(arrayBuffer);
 
+    // Cache the image
+    if (imageCache.size >= IMAGE_CACHE_MAX_SIZE) {
+      // Remove oldest entries (first 100)
+      const keysToDelete = Array.from(imageCache.keys()).slice(0, 100);
+      keysToDelete.forEach(key => imageCache.delete(key));
+    }
+    imageCache.set(zohoItemId, { data, contentType, cachedAt: Date.now() });
+
     return { data, contentType };
   } catch (error) {
     console.error(`[Zoho Image] Error fetching image for ${zohoItemId}:`, error);
     return null;
   }
+}
+
+// Function to clear image cache (useful for admin)
+export function clearImageCache(): void {
+  imageCache.clear();
+  noImageItems.clear();
+  console.log("[Zoho Image] Cache cleared");
 }

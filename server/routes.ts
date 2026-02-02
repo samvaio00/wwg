@@ -21,7 +21,7 @@ import { db } from "./db";
 import { users, products, orders } from "@shared/schema";
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
-import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, syncItemGroupsFromZoho } from "./zoho-service";
+import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, syncItemGroupsFromZoho, clearImageCache } from "./zoho-service";
 import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, syncTopSellersFromZoho, type ZohoLineItem } from "./zoho-books-service";
 import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
@@ -2029,6 +2029,23 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Embedding generation error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Clear image cache (admin utility)
+  app.post("/api/admin/cache/clear-images", requireAdmin, async (_req, res) => {
+    try {
+      clearImageCache();
+      res.json({
+        success: true,
+        message: "Image cache cleared successfully",
+      });
+    } catch (error) {
+      console.error("Clear image cache error:", error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : "Unknown error",

@@ -785,10 +785,11 @@ export async function syncTopSellersFromZoho(): Promise<TopSellersSyncResult> {
       };
     }
 
-    // Sort by quantity sold and take top 48 (more than 24 to account for groups)
+    // Sort by quantity sold - store top 500 items for category-specific queries
+    // (Limit to prevent DB parameter overflow in inArray queries)
     const sortedItems = Array.from(salesByItem.values())
       .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 48);
+      .slice(0, 500);
 
     // Build cache data first, then atomically update
     const cacheData: Array<{

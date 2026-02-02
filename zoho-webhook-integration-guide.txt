@@ -1,0 +1,337 @@
+================================================================================
+ZOHO INVENTORY WEBHOOK INTEGRATION GUIDE FOR WHOLESALEHUB
+================================================================================
+Last Updated: February 2026
+
+This guide explains how to configure Zoho Inventory webhooks to push real-time 
+updates (items, item groups, categories, customers) to your WholesaleHub app.
+
+================================================================================
+PREREQUISITES
+================================================================================
+
+1. Zoho Inventory PAID PLAN (webhooks not available on free tier)
+2. Your published WholesaleHub app URL (e.g., https://your-app.replit.app)
+3. Admin access to Zoho Inventory
+
+================================================================================
+PART 1: UNDERSTANDING WEBHOOKS
+================================================================================
+
+WHAT ARE WEBHOOKS?
+- Webhooks are automated notifications sent from Zoho to your app
+- They trigger instantly when data changes (no polling delay)
+- Much faster than scheduled sync (current: every 2-6 hours)
+
+ZOHO INVENTORY SUPPORTS TWO TYPES:
+
+1. OUTGOING WEBHOOKS (Zoho → Your App)
+   - Sends data TO your app when events occur in Zoho
+   - Used for: item updates, new products, stock changes, customer changes
+   - This is what you need for real-time sync
+
+2. INCOMING WEBHOOKS (Your App → Zoho)
+   - Receives data FROM external apps to create records in Zoho
+   - Used for: creating orders, adding customers from your app to Zoho
+
+================================================================================
+PART 2: YOUR APP'S WEBHOOK ENDPOINTS
+================================================================================
+
+After implementing webhook support, your app will have these endpoints:
+
+ENDPOINT                                  PURPOSE
+--------------------------------------------------------------------------------
+/api/webhooks/zoho/items                  Receive item create/update/delete
+/api/webhooks/zoho/itemgroups             Receive item group changes
+/api/webhooks/zoho/categories             Receive category changes
+/api/webhooks/zoho/customers              Receive customer changes
+
+FULL URLS (replace with your actual domain):
+- https://your-app.replit.app/api/webhooks/zoho/items
+- https://your-app.replit.app/api/webhooks/zoho/itemgroups
+- https://your-app.replit.app/api/webhooks/zoho/categories
+- https://your-app.replit.app/api/webhooks/zoho/customers
+
+================================================================================
+PART 3: CONFIGURING OUTGOING WEBHOOKS IN ZOHO INVENTORY
+================================================================================
+
+STEP 1: NAVIGATE TO WEBHOOK SETTINGS
+--------------------------------------
+1. Log into Zoho Inventory (https://inventory.zoho.com)
+2. Click the SETTINGS icon (gear) in the top right corner
+3. Scroll to AUTOMATION section
+4. Click WORKFLOW ACTIONS
+5. Click WEBHOOKS in the left sidebar
+
+STEP 2: CREATE WEBHOOK FOR ITEMS
+--------------------------------------
+1. Click "+ New Webhook" button (top right)
+
+2. Fill in the form:
+   - Name: "Push Items to WholesaleHub"
+   - Module: Select "Items"
+   - Description: "Sends item updates to WholesaleHub app"
+
+3. Configure URL and Method:
+   - URL to Notify: https://your-app.replit.app/api/webhooks/zoho/items
+   - Method: POST
+
+4. Add Custom Parameters (optional):
+   - Click "Add Parameters"
+   - Add any query parameters if needed
+
+5. Add Headers:
+   - Click "Add Headers"
+   - Header 1:
+     - Name: Content-Type
+     - Value: application/json
+   - Header 2 (for security):
+     - Name: X-Webhook-Secret
+     - Value: [create a strong secret key, save it for later]
+
+6. Configure Body/Payload:
+   - Select "Custom Payload" or use Zoho's template
+   - Include fields you want to sync:
+     - item_id, name, sku, rate, stock_on_hand
+     - category_id, group_id, group_name
+     - is_returnable, show_in_online_store
+     - description, image_url
+
+7. Click SAVE
+
+STEP 3: CREATE WORKFLOW RULE TO TRIGGER WEBHOOK
+--------------------------------------
+1. Go to AUTOMATION → WORKFLOW RULES
+2. Click "+ New Workflow Rule"
+
+3. Configure the rule:
+   - Module: Items
+   - Rule Name: "Sync Items to WholesaleHub"
+   
+4. Set Trigger:
+   - When: "Record is Created, Edited, or Deleted"
+   - (This covers all item changes)
+
+5. Set Conditions (optional):
+   - You can add conditions like "Only if Show in Online Store = true"
+   - Or leave blank to sync all items
+
+6. Add Instant Action:
+   - Click "Instant Actions"
+   - Select "Call Webhook"
+   - Choose the webhook you created ("Push Items to WholesaleHub")
+
+7. Click SAVE
+
+STEP 4: REPEAT FOR OTHER MODULES
+--------------------------------------
+Repeat Steps 2-3 for each module you want to sync:
+
+FOR ITEM GROUPS:
+- Module: Item Groups (if available as separate module)
+- Or use Items module with group fields included
+- Endpoint: /api/webhooks/zoho/itemgroups
+
+FOR CATEGORIES:
+- Module: Categories
+- Endpoint: /api/webhooks/zoho/categories
+
+FOR CUSTOMERS:
+- Module: Customers  
+- Endpoint: /api/webhooks/zoho/customers
+
+================================================================================
+PART 4: WEBHOOK PAYLOAD EXAMPLES
+================================================================================
+
+ITEM CREATED/UPDATED PAYLOAD:
+{
+  "module": "item",
+  "action": "created",
+  "data": {
+    "item_id": "1424313000656326236",
+    "name": "Wireless Bluetooth Speaker",
+    "sku": "WBS-001",
+    "rate": 45.99,
+    "purchase_rate": 25.00,
+    "stock_on_hand": 150,
+    "category_id": "1424313000000035003",
+    "category_name": "Electronics",
+    "group_id": "1424313000656326254",
+    "group_name": "Bluetooth Speakers",
+    "is_returnable": true,
+    "show_in_online_store": true,
+    "description": "High-quality portable speaker",
+    "image_url": "https://..."
+  }
+}
+
+ITEM DELETED PAYLOAD:
+{
+  "module": "item",
+  "action": "deleted",
+  "data": {
+    "item_id": "1424313000656326236"
+  }
+}
+
+CUSTOMER CREATED/UPDATED PAYLOAD:
+{
+  "module": "customer",
+  "action": "updated",
+  "data": {
+    "contact_id": "1424313000000012345",
+    "contact_name": "ABC Retail Store",
+    "email": "contact@abcretail.com",
+    "phone": "555-123-4567",
+    "status": "active",
+    "billing_address": {...},
+    "shipping_address": {...}
+  }
+}
+
+================================================================================
+PART 5: SECURITY CONFIGURATION
+================================================================================
+
+WEBHOOK SECRET VERIFICATION:
+1. Create a strong secret key (32+ characters recommended)
+   Example: "wh_abc123def456ghi789jkl012mno345"
+
+2. Add this secret as a header in Zoho webhook configuration:
+   Header Name: X-Webhook-Secret
+   Header Value: [your secret key]
+
+3. Store the same secret in your app's environment variables:
+   ZOHO_WEBHOOK_SECRET=wh_abc123def456ghi789jkl012mno345
+
+4. Your app will verify this header on every webhook request
+
+IP WHITELISTING (Optional but Recommended):
+- Zoho sends webhooks from specific IP ranges
+- You can whitelist these IPs for additional security
+- Contact Zoho support for their current webhook IP ranges
+
+================================================================================
+PART 6: TESTING WEBHOOKS
+================================================================================
+
+TEST IN ZOHO:
+1. Go to Settings → Workflow Actions → Webhooks
+2. Find your webhook and click the dropdown menu
+3. Select "Test Webhook" or "Execute"
+4. Zoho will send a test payload to your endpoint
+
+CHECK YOUR APP LOGS:
+1. After sending a test, check your app's server logs
+2. Look for incoming webhook requests
+3. Verify the data was processed correctly
+
+MANUAL TESTING:
+1. Make a change in Zoho Inventory (edit an item)
+2. Check if your app received the webhook
+3. Verify the product was updated in your app
+
+TROUBLESHOOTING:
+- If webhooks aren't arriving, check:
+  - Is your app URL correct and publicly accessible?
+  - Is the webhook enabled in Zoho?
+  - Is the workflow rule active?
+  - Are there any firewall issues?
+  
+- Check Zoho's webhook logs:
+  Settings → Workflow Actions → Webhooks → [Your Webhook] → View Logs
+
+================================================================================
+PART 7: WEBHOOK LIMITATIONS & BEST PRACTICES
+================================================================================
+
+ZOHO LIMITATIONS:
+- Maximum 6 webhooks per workflow rule (1 instant + 5 time-based)
+- Maximum 10 CRM fields per webhook transfer
+- Webhooks only send data out (not bidirectional retrieval)
+- Rate limits may apply on high-volume accounts
+
+BEST PRACTICES:
+
+1. ALWAYS VERIFY THE SECRET
+   - Never process webhooks without verifying X-Webhook-Secret header
+   - Reject requests with invalid or missing secrets
+
+2. RESPOND QUICKLY
+   - Return 200 OK as soon as you receive the webhook
+   - Process data asynchronously if it takes time
+   - Zoho may retry if response takes too long (>30 seconds)
+
+3. HANDLE DUPLICATES
+   - Webhooks may be sent multiple times (retries)
+   - Use item_id/contact_id to detect and skip duplicates
+   - Store last processed timestamp to avoid reprocessing
+
+4. LOG EVERYTHING
+   - Log all incoming webhooks for debugging
+   - Log any processing errors
+   - Keep logs for at least 7 days
+
+5. HANDLE FAILURES GRACEFULLY
+   - If processing fails, log the error and the payload
+   - Don't lose data - consider a retry queue
+   - Alert admins on repeated failures
+
+6. KEEP SCHEDULED SYNC AS BACKUP
+   - Webhooks can fail or be delayed
+   - Keep your scheduled sync running (less frequently)
+   - Use scheduled sync to catch any missed updates
+
+================================================================================
+PART 8: ZOHO NOTIFICATION PREFERENCES
+================================================================================
+
+Configure webhook failure notifications:
+
+1. Go to Settings → Workflow Actions
+2. Click "Configure Notification Preferences" (top right)
+3. Set up:
+   - Usage Limit Notifications: Get warned before hitting limits
+   - Failure Log Notifications: Get notified when webhooks fail
+   - Frequency: Daily or Weekly digest
+   - Recipients: Admin email addresses
+
+================================================================================
+PART 9: CURRENT APP STATUS
+================================================================================
+
+CURRENT SYNC METHOD:
+- Scheduled polling every 2-6 hours (business hours vs off-hours)
+- Full sync available via manual trigger
+- Incremental sync with early termination for efficiency
+
+WEBHOOK IMPLEMENTATION STATUS:
+- Webhook endpoints: NOT YET IMPLEMENTED
+- To enable webhooks, the app needs new API routes
+
+NEXT STEPS TO ENABLE WEBHOOKS:
+1. Request implementation of webhook endpoints in the app
+2. Configure webhooks in Zoho Inventory (using this guide)
+3. Test the integration
+4. Optionally reduce scheduled sync frequency
+
+================================================================================
+RESOURCES & LINKS
+================================================================================
+
+ZOHO DOCUMENTATION:
+- Webhooks Overview: https://www.zoho.com/us/inventory/help/settings/automation.html
+- Create Webhook Guide: https://www.zoho.com/us/inventory/kb/automation/create-webhook.html
+- Incoming Webhooks: https://www.zoho.com/us/inventory/help/settings/incoming-webhooks.html
+- Workflow Rules: https://www.zoho.com/us/inventory/help/settings/workflow-rules.html
+
+ZOHO SUPPORT:
+- Help Center: https://help.zoho.com/portal/en/kb/inventory
+- Contact Support: Settings → Help & Support in Zoho Inventory
+
+================================================================================
+END OF GUIDE
+================================================================================

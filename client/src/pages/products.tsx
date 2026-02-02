@@ -403,9 +403,17 @@ export default function ProductsPage() {
       });
     },
     onError: (error: Error) => {
+      let errorMessage = error.message || "Failed to add product to cart";
+      
+      if (errorMessage.includes("sign in") || errorMessage.includes("session")) {
+        errorMessage = "Please sign in to add items to your cart.";
+      } else if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
+        errorMessage = "Connection error. Please check your internet and try again.";
+      }
+      
       toast({
         title: "Unable to add to cart",
-        description: error.message || "Failed to add product to cart. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     },

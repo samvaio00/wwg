@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, WifiOff, AlertCircle } from "lucide-react";
 import wwgLogo from "@assets/wwg-logo_1769841225412.jpg";
 
 const loginSchema = z.object({
@@ -24,6 +25,21 @@ export default function LoginPage() {
   const { login } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -34,7 +50,14 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (data: LoginFormValues) => {
+    if (!isOnline) {
+      setLoginError("You appear to be offline. Please check your internet connection.");
+      return;
+    }
+    
     setIsLoading(true);
+    setLoginError(null);
+    
     try {
       await login(data.email, data.password);
       toast({
@@ -43,11 +66,12 @@ export default function LoginPage() {
       });
       navigate("/");
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Login failed",
-        description: error.message || "Invalid email or password",
-      });
+      const message = error.message || "Invalid email or password";
+      setLoginError(message);
+      
+      if (message.includes("network") || message.includes("fetch")) {
+        setLoginError("Connection error. Please check your internet and try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -69,6 +93,22 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {!isOnline && (
+              <Alert variant="destructive" className="mb-4">
+                <WifiOff className="h-4 w-4" />
+                <AlertDescription>
+                  You appear to be offline. Please check your internet connection.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            {loginError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{loginError}</AlertDescription>
+              </Alert>
+            )}
+            
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField

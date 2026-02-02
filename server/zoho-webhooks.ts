@@ -74,6 +74,7 @@ export async function handleItemWebhook(
 
   try {
     if (!payload.item_id) {
+      recordWebhookEvent("items", action, false, "Missing item_id in payload");
       return {
         success: false,
         action,
@@ -107,6 +108,7 @@ export async function handleItemWebhook(
           productId: existingProduct[0].id,
         };
       } else {
+        recordWebhookEvent("items", action, true, `Product with Zoho ID ${payload.item_id} not found (already deleted or never synced)`);
         return {
           success: true,
           action,
@@ -194,6 +196,7 @@ export async function handleCustomerWebhook(
 
   try {
     if (!payload.contact_id) {
+      recordWebhookEvent("customers", action, false, "Missing contact_id in payload");
       return {
         success: false,
         action,
@@ -209,6 +212,7 @@ export async function handleCustomerWebhook(
 
     if (existingUser.length === 0) {
       console.log(`[Zoho Webhook] Customer not found in database: ${payload.contact_id}`);
+      recordWebhookEvent("customers", action, true, `Customer with Zoho ID ${payload.contact_id} not found (not registered)`);
       return {
         success: true,
         action,

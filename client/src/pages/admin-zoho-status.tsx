@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { RefreshCw, CheckCircle, XCircle, Loader2, Package, AlertTriangle, Clock, RotateCcw, Play } from "lucide-react";
+import { RefreshCw, CheckCircle, XCircle, Loader2, Package, AlertTriangle, Clock, RotateCcw, Play, Webhook, Radio, Calendar } from "lucide-react";
 
 interface ZohoStats {
   today: {
@@ -58,6 +58,44 @@ interface JobsResponse {
   totalFailed: number;
 }
 
+interface WebhookEvent {
+  type: string;
+  action: string;
+  timestamp: string;
+  success: boolean;
+  details?: string;
+}
+
+interface WebhookStats {
+  today: {
+    total: number;
+    successful: number;
+    failed: number;
+    byAction: Record<string, number>;
+  };
+  month: {
+    total: number;
+    successful: number;
+    failed: number;
+  };
+  lastReceived: string | null;
+  recentEvents: WebhookEvent[];
+}
+
+interface SchedulerStatus {
+  enabled: boolean;
+  enableFrequentZohoSync: boolean;
+  zohoSync: {
+    mode: string;
+    dormant: boolean;
+  };
+  weeklyZohoBackup: {
+    schedule: string;
+    lastRun: string | null;
+    nextRun: string;
+  };
+}
+
 export default function AdminZohoStatus() {
   const { toast } = useToast();
   const [lastSyncResult, setLastSyncResult] = useState<SyncResult | null>(null);
@@ -71,6 +109,17 @@ export default function AdminZohoStatus() {
 
   const { data: jobsData, isLoading: jobsLoading } = useQuery<JobsResponse>({
     queryKey: ["/api/admin/jobs"],
+  });
+
+  const { data: webhookStats, isLoading: webhookLoading, refetch: refetchWebhooks } = useQuery<WebhookStats>({
+    queryKey: ["/api/admin/analytics/webhook-stats"],
+    refetchOnWindowFocus: false,
+    staleTime: 30000,
+  });
+
+  const { data: schedulerStatus } = useQuery<SchedulerStatus>({
+    queryKey: ["/api/admin/scheduler/status"],
+    refetchOnWindowFocus: false,
   });
 
   const retryJobMutation = useMutation({
@@ -182,15 +231,158 @@ export default function AdminZohoStatus() {
           </p>
         </div>
         <Button 
-          onClick={() => refetch()} 
-          disabled={isFetching}
+          onClick={() => {
+            refetch();
+            refetchWebhooks();
+          }} 
+          disabled={isFetching || webhookLoading}
           variant="outline"
           data-testid="button-refresh-stats"
         >
-          <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-4 w-4 mr-2 ${isFetching || webhookLoading ? 'animate-spin' : ''}`} />
           Refresh Stats
         </Button>
       </div>
+
+      {/* Sync Mode Status */}
+      <Card data-testid="card-sync-mode">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Radio className="h-5 w-5" />
+            Sync Mode
+          </CardTitle>
+          <CardDescription>
+            Current data synchronization configuration
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-4">
+            {schedulerStatus?.enableFrequentZohoSync ? (
+              <Badge variant="secondary" className="text-sm" data-testid="badge-sync-mode-polling">
+                <Clock className="h-3 w-3 mr-1" />
+                Frequent API Polling (2-6 hours)
+              </Badge>
+            ) : (
+              <>
+                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-sm" data-testid="badge-sync-mode-webhooks">
+                  <Webhook className="h-3 w-3 mr-1" />
+                  Real-time Webhooks
+                </Badge>
+                <Badge variant="outline" className="text-sm" data-testid="badge-weekly-backup">
+                  <Calendar className="h-3 w-3 mr-1" />
+                  Weekly Backup: {schedulerStatus?.weeklyZohoBackup?.schedule || "Sunday 2 AM"}
+                </Badge>
+                <Badge variant="secondary" className="text-sm text-muted-foreground" data-testid="badge-polling-dormant">
+                  API Polling: Dormant
+                </Badge>
+              </>
+            )}
+          </div>
+          {schedulerStatus?.weeklyZohoBackup && !schedulerStatus.enableFrequentZohoSync && (
+            <div className="mt-4 text-sm text-muted-foreground">
+              <p>Next backup sync: {new Date(schedulerStatus.weeklyZohoBackup.nextRun).toLocaleString()}</p>
+              {schedulerStatus.weeklyZohoBackup.lastRun && (
+                <p>Last backup: {new Date(schedulerStatus.weeklyZohoBackup.lastRun).toLocaleString()}</p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Webhook Stats */}
+      <Card data-testid="card-webhook-stats">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Webhook className="h-5 w-5" />
+            Webhook Activity
+          </CardTitle>
+          <CardDescription>
+            Real-time updates received from Zoho via webhooks
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {webhookLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading webhook stats...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Today's Webhooks</p>
+                  <p className="text-2xl font-bold" data-testid="text-webhooks-today">{webhookStats?.today?.total || 0}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Successful</p>
+                  <p className="text-2xl font-bold text-green-600" data-testid="text-webhooks-successful">{webhookStats?.today?.successful || 0}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Failed</p>
+                  <p className="text-2xl font-bold text-red-600" data-testid="text-webhooks-failed">{webhookStats?.today?.failed || 0}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">This Month</p>
+                  <p className="text-2xl font-bold" data-testid="text-webhooks-month">{webhookStats?.month?.total || 0}</p>
+                </div>
+              </div>
+
+              {webhookStats?.lastReceived && (
+                <div className="pt-2 border-t text-sm text-muted-foreground">
+                  Last webhook received: {new Date(webhookStats.lastReceived).toLocaleString()}
+                </div>
+              )}
+
+              {webhookStats?.today?.byAction && Object.keys(webhookStats.today.byAction).length > 0 && (
+                <div className="pt-2 border-t">
+                  <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Today's Events by Type</h5>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(webhookStats.today.byAction).map(([action, count]) => (
+                      <Badge key={action} variant="outline" className="text-xs">
+                        {action}: {count}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {webhookStats?.recentEvents && webhookStats.recentEvents.length > 0 && (
+                <div className="pt-2 border-t">
+                  <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Recent Events</h5>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {webhookStats.recentEvents.slice(0, 10).map((event, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm p-2 rounded bg-muted/30">
+                        <div className="flex items-center gap-2">
+                          {event.success ? (
+                            <CheckCircle className="h-3 w-3 text-green-500" />
+                          ) : (
+                            <XCircle className="h-3 w-3 text-red-500" />
+                          )}
+                          <span className="font-mono text-xs">{event.type}.{event.action}</span>
+                          {event.details && (
+                            <span className="text-muted-foreground truncate max-w-[200px]">{event.details}</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(event.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(!webhookStats?.today?.total && !webhookStats?.recentEvents?.length) && (
+                <div className="text-center py-4 text-muted-foreground">
+                  <Webhook className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No webhooks received yet</p>
+                  <p className="text-xs">Webhooks will appear here as Zoho sends updates</p>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Zoho Inventory Integration */}
       <Card>

@@ -1,8 +1,9 @@
 import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Loader2, ShoppingCart, TrendingUp, Sparkles, Search } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Loader2, ShoppingCart, TrendingUp, Sparkles } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -277,28 +278,25 @@ export function AISearchBox({
   const isTopSellersAction = parsed.isTopSellers;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       {showAIToggle && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={aiEnabled ? "default" : "outline"}
-              size="icon"
-              className={`h-9 w-9 shrink-0 transition-all ${aiEnabled ? "bg-primary text-primary-foreground" : ""}`}
-              onClick={() => onAIToggle?.(!aiEnabled)}
-              data-testid="button-ai-toggle"
-            >
-              {aiEnabled ? (
-                <Sparkles className="h-4 w-4" />
-              ) : (
-                <Search className="h-4 w-4" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p className="text-sm">{aiEnabled ? "AI Search ON - Click to use basic search" : "Basic Search - Click to enable AI"}</p>
-          </TooltipContent>
-        </Tooltip>
+        <div className="flex items-center gap-2 shrink-0">
+          <Switch
+            id="ai-toggle"
+            checked={aiEnabled}
+            onCheckedChange={(checked) => onAIToggle?.(checked)}
+            data-testid="switch-ai-toggle"
+          />
+          <Label 
+            htmlFor="ai-toggle" 
+            className={`text-sm font-medium cursor-pointer flex items-center gap-1.5 transition-colors ${
+              aiEnabled ? "text-primary" : "text-muted-foreground"
+            }`}
+          >
+            <Sparkles className={`h-3.5 w-3.5 ${aiEnabled ? "text-primary" : "text-muted-foreground"}`} />
+            AI
+          </Label>
+        </div>
       )}
       <Tooltip>
         <TooltipTrigger asChild>

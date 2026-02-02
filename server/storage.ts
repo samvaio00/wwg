@@ -103,6 +103,7 @@ export interface IStorage {
   getAllOrders(): Promise<(Order & { user: SafeUser })[]>;
   updateOrderStatus(id: string, status: OrderStatusType, adminId?: string, reason?: string): Promise<Order | undefined>;
   updateOrderZohoInfo(id: string, zohoSalesOrderId: string): Promise<Order | undefined>;
+  updateOrderItems(orderId: string, items: { id: string; quantity: number }[]): Promise<{ order: Order; items: (OrderItem & { product: Product })[] } | undefined>;
   
   // Admin visibility operations
   getHighlightedProducts(): Promise<Product[]>;
@@ -819,6 +820,52 @@ export class DatabaseStorage implements IStorage {
         product: item.products
       }))
     };
+  }
+
+  async updateOrderItems(orderId: string, items: { id: string; quantity: number }[]): Promise<{ order: Order; items: (OrderItem & { product: Product })[] } | undefined> {
+    const order = await this.getOrder(orderId);
+    if (!order) return undefined;
+    
+    // Only allow editing pending orders
+    if (order.status !== 'pending_approval') {
+      throw new Error('Can only edit pending orders');
+    }
+    
+    // Update each item's quantity and line total
+    for (const itemUpdate of items) {
+      if (itemUpdate.quantity <= 0) {
+        // Delete item if quantity is 0 or less
+        await db.delete(orderItems).where(eq(orderItems.id, itemUpdate.id));
+      } else {
+        // Get current item to calculate new line total
+        const [currentItem] = await db.select().from(orderItems).where(eq(orderItems.id, itemUpdate.id));
+        if (currentItem) {
+          const newLineTotal = (parseFloat(currentItem.unitPrice) * itemUpdate.quantity).toFixed(2);
+          await db.update(orderItems)
+            .set({ 
+              quantity: itemUpdate.quantity, 
+              lineTotal: newLineTotal 
+            })
+            .where(eq(orderItems.id, itemUpdate.id));
+        }
+      }
+    }
+    
+    // Recalculate order totals
+    const updatedItems = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+    const newSubtotal = updatedItems.reduce((sum, item) => sum + parseFloat(item.lineTotal), 0);
+    const newTotal = newSubtotal; // Add shipping/tax if applicable
+    
+    await db.update(orders)
+      .set({ 
+        subtotal: newSubtotal.toFixed(2),
+        totalAmount: newTotal.toFixed(2),
+        itemCount: updatedItems.reduce((sum, item) => sum + item.quantity, 0),
+        updatedAt: new Date()
+      })
+      .where(eq(orders.id, orderId));
+    
+    return this.getOrderWithItems(orderId);
   }
 
   async getUserOrders(userId: string): Promise<Order[]> {

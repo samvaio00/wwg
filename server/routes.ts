@@ -1465,6 +1465,39 @@ export async function registerRoutes(
     }
   });
 
+  // Get order details with items (for admin/staff)
+  app.get("/api/admin/orders/:id", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const orderData = await storage.getOrderWithItems(req.params.id as string);
+      if (!orderData) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      res.json(orderData);
+    } catch (error) {
+      console.error("Error fetching order details:", error);
+      res.status(500).json({ message: "Failed to fetch order details" });
+    }
+  });
+
+  // Update order items (for pending orders only)
+  app.patch("/api/admin/orders/:id/items", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { items } = req.body;
+      if (!Array.isArray(items)) {
+        return res.status(400).json({ message: "Items must be an array" });
+      }
+      
+      const orderData = await storage.updateOrderItems(req.params.id as string, items);
+      if (!orderData) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      res.json(orderData);
+    } catch (error: any) {
+      console.error("Error updating order items:", error);
+      res.status(400).json({ message: error.message || "Failed to update order items" });
+    }
+  });
+
   // Update order status
   app.patch("/api/admin/orders/:id/status", requireStaffOrAdmin, async (req, res) => {
     try {

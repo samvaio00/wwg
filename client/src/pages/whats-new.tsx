@@ -239,6 +239,8 @@ export default function WhatsNewPage() {
   const [submittedSearch, setSubmittedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [aiEnabled, setAIEnabled] = useState(true);
+  const [sortOption, setSortOption] = useState("newest");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   // AI-powered search - only triggers when Enter is pressed and AI is enabled
   const { 
@@ -276,21 +278,53 @@ export default function WhatsNewPage() {
 
   // Filter products - use AI search when active, otherwise fall back to basic filtering
   const allFilteredProducts = useMemo(() => {
+    let products: Product[] = [];
+    
     // Use AI search when active
     if (isAISearchActive && aiSearchResults.length > 0) {
-      return aiSearchResults;
+      products = [...aiSearchResults];
+    } else {
+      products = [...(latestData?.products || [])];
+      
+      if (search.trim()) {
+        const searchLower = search.toLowerCase().trim();
+        products = products.filter(p => 
+          p.name.toLowerCase().includes(searchLower) ||
+          p.sku?.toLowerCase().includes(searchLower) ||
+          p.description?.toLowerCase().includes(searchLower)
+        );
+      }
     }
-
-    const products = latestData?.products || [];
-    if (!search.trim()) return products;
     
-    const searchLower = search.toLowerCase().trim();
-    return products.filter(p => 
-      p.name.toLowerCase().includes(searchLower) ||
-      p.sku?.toLowerCase().includes(searchLower) ||
-      p.description?.toLowerCase().includes(searchLower)
-    );
-  }, [latestData?.products, search, isAISearchActive, aiSearchResults]);
+    // Apply category filter
+    if (categoryFilter !== "all") {
+      products = products.filter(p => p.category === categoryFilter);
+    }
+    
+    // Apply in-stock filter if selected
+    if (sortOption === "instock") {
+      products = products.filter(p => (p.stockQuantity || 0) > 0);
+    }
+    
+    // Apply sorting
+    switch (sortOption) {
+      case "price-low":
+        products.sort((a, b) => parseFloat(a.basePrice) - parseFloat(b.basePrice));
+        break;
+      case "price-high":
+        products.sort((a, b) => parseFloat(b.basePrice) - parseFloat(a.basePrice));
+        break;
+      case "name-asc":
+        products.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "newest":
+      default:
+        // Keep original order (newest from API)
+        break;
+    }
+    
+    return products;
+  }, [latestData?.products, search, isAISearchActive, aiSearchResults, categoryFilter, sortOption]);
 
   const isLoading = isAISearchActive ? isAISearching : isLatestLoading;
 
@@ -353,7 +387,7 @@ export default function WhatsNewPage() {
           />
           
           <div className="flex items-center gap-1">
-            <Select value="all" onValueChange={() => {}}>
+            <Select value={categoryFilter} onValueChange={(value) => { setCategoryFilter(value); setCurrentPage(1); }}>
               <SelectTrigger className="w-[140px] h-9" data-testid="select-category-whats-new">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
@@ -368,7 +402,7 @@ export default function WhatsNewPage() {
             </Select>
           </div>
 
-          <Select value="newest" onValueChange={() => {}}>
+          <Select value={sortOption} onValueChange={(value) => { setSortOption(value); setCurrentPage(1); }}>
             <SelectTrigger className="w-[140px] h-9" data-testid="select-sort-whats-new">
               <SelectValue placeholder="Sort" />
             </SelectTrigger>

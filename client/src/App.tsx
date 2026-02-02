@@ -166,12 +166,6 @@ function HeaderUserMenu() {
                 Edit Profile
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/contact" className="cursor-pointer" data-testid="menu-item-contact">
-                <Mail className="mr-2 h-4 w-4" />
-                Contact Us
-              </Link>
-            </DropdownMenuItem>
           </>
         )}
         <DropdownMenuSeparator />

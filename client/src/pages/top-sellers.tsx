@@ -235,6 +235,8 @@ export default function TopSellersPage() {
   const [submittedSearch, setSubmittedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [aiEnabled, setAIEnabled] = useState(true);
+  const [sortOption, setSortOption] = useState("bestselling");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   // AI-powered search - only triggers when Enter is pressed and AI is enabled
   const { 
@@ -271,21 +273,53 @@ export default function TopSellersPage() {
   };
 
   const allFilteredProducts = useMemo(() => {
+    let products: Product[] = [];
+    
     // Use AI search when active
     if (isAISearchActive && aiSearchResults.length > 0) {
-      return aiSearchResults;
+      products = [...aiSearchResults];
+    } else {
+      products = [...(topSellersData?.products || [])];
+      
+      if (search.trim()) {
+        const searchLower = search.toLowerCase().trim();
+        products = products.filter(p => 
+          p.name.toLowerCase().includes(searchLower) ||
+          p.sku?.toLowerCase().includes(searchLower) ||
+          p.description?.toLowerCase().includes(searchLower)
+        );
+      }
     }
-
-    const products = topSellersData?.products || [];
-    if (!search.trim()) return products;
     
-    const searchLower = search.toLowerCase().trim();
-    return products.filter(p => 
-      p.name.toLowerCase().includes(searchLower) ||
-      p.sku?.toLowerCase().includes(searchLower) ||
-      p.description?.toLowerCase().includes(searchLower)
-    );
-  }, [topSellersData?.products, search, isAISearchActive, aiSearchResults]);
+    // Apply category filter
+    if (categoryFilter !== "all") {
+      products = products.filter(p => p.category === categoryFilter);
+    }
+    
+    // Apply in-stock filter if selected
+    if (sortOption === "instock") {
+      products = products.filter(p => (p.stockQuantity || 0) > 0);
+    }
+    
+    // Apply sorting
+    switch (sortOption) {
+      case "price-low":
+        products.sort((a, b) => parseFloat(a.basePrice) - parseFloat(b.basePrice));
+        break;
+      case "price-high":
+        products.sort((a, b) => parseFloat(b.basePrice) - parseFloat(a.basePrice));
+        break;
+      case "name-asc":
+        products.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "bestselling":
+      default:
+        // Keep original order (best selling from API)
+        break;
+    }
+    
+    return products;
+  }, [topSellersData?.products, search, isAISearchActive, aiSearchResults, categoryFilter, sortOption]);
 
   const isLoading = isAISearchActive ? isAISearching : isTopSellersLoading;
 
@@ -348,7 +382,7 @@ export default function TopSellersPage() {
           />
           
           <div className="flex items-center gap-1">
-            <Select value="all" onValueChange={() => {}}>
+            <Select value={categoryFilter} onValueChange={(value) => { setCategoryFilter(value); setCurrentPage(1); }}>
               <SelectTrigger className="w-[140px] h-9" data-testid="select-category-top-sellers">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
@@ -363,7 +397,7 @@ export default function TopSellersPage() {
             </Select>
           </div>
 
-          <Select value="bestselling" onValueChange={() => {}}>
+          <Select value={sortOption} onValueChange={(value) => { setSortOption(value); setCurrentPage(1); }}>
             <SelectTrigger className="w-[140px] h-9" data-testid="select-sort-top-sellers">
               <SelectValue placeholder="Sort" />
             </SelectTrigger>

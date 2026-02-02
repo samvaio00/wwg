@@ -247,6 +247,8 @@ function CustomerHomePage() {
   const [submittedSearch, setSubmittedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [aiEnabled, setAIEnabled] = useState(true);
+  const [sortOption, setSortOption] = useState("newest");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   // AI-powered search - only triggers when Enter is pressed and AI is enabled
   const { 
@@ -330,23 +332,54 @@ function CustomerHomePage() {
     ? highlightedProducts 
     : warnerData?.products || [];
   
-  // Filter products - use AI search when active, otherwise fall back to basic filtering
+  // Filter and sort products - use AI search when active, otherwise fall back to basic filtering
   const filteredProducts = useMemo(() => {
+    let products: Product[] = [];
+    
     if (isAISearchActive && aiSearchResults.length > 0) {
-      return aiSearchResults;
+      products = [...aiSearchResults];
+    } else if (!search.trim()) {
+      products = baseProducts.filter(p => p.isOnline);
+    } else {
+      const searchLower = search.toLowerCase().trim();
+      products = baseProducts.filter(p => 
+        p.isOnline && (
+          p.name.toLowerCase().includes(searchLower) ||
+          p.sku?.toLowerCase().includes(searchLower) ||
+          p.description?.toLowerCase().includes(searchLower)
+        )
+      );
     }
     
-    if (!search.trim()) return baseProducts.filter(p => p.isOnline);
+    // Apply category filter
+    if (categoryFilter !== "all") {
+      products = products.filter(p => p.category === categoryFilter);
+    }
     
-    const searchLower = search.toLowerCase().trim();
-    return baseProducts.filter(p => 
-      p.isOnline && (
-        p.name.toLowerCase().includes(searchLower) ||
-        p.sku?.toLowerCase().includes(searchLower) ||
-        p.description?.toLowerCase().includes(searchLower)
-      )
-    );
-  }, [baseProducts, search, isAISearchActive, aiSearchResults]);
+    // Apply in-stock filter if selected
+    if (sortOption === "instock") {
+      products = products.filter(p => (p.stockQuantity || 0) > 0);
+    }
+    
+    // Apply sorting
+    switch (sortOption) {
+      case "price-low":
+        products.sort((a, b) => parseFloat(a.basePrice) - parseFloat(b.basePrice));
+        break;
+      case "price-high":
+        products.sort((a, b) => parseFloat(b.basePrice) - parseFloat(a.basePrice));
+        break;
+      case "name-asc":
+        products.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "newest":
+      default:
+        // Keep original order (newest first from API)
+        break;
+    }
+    
+    return products;
+  }, [baseProducts, search, isAISearchActive, aiSearchResults, categoryFilter, sortOption]);
 
   // Loading state - consider AI search loading
   const isLoading = isAISearchActive ? isAISearching : (highlightedLoading || (shouldFetchWarner && warnerLoading));
@@ -391,7 +424,7 @@ function CustomerHomePage() {
           />
           
           <div className="flex items-center gap-1">
-            <Select value="all" onValueChange={() => {}}>
+            <Select value={categoryFilter} onValueChange={(value) => { setCategoryFilter(value); setCurrentPage(1); }}>
               <SelectTrigger className="w-[140px] h-9" data-testid="select-category-home">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
@@ -406,7 +439,7 @@ function CustomerHomePage() {
             </Select>
           </div>
 
-          <Select value="newest" onValueChange={() => {}}>
+          <Select value={sortOption} onValueChange={(value) => { setSortOption(value); setCurrentPage(1); }}>
             <SelectTrigger className="w-[140px] h-9" data-testid="select-sort-home">
               <SelectValue placeholder="Sort" />
             </SelectTrigger>

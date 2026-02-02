@@ -288,11 +288,15 @@ export default function ProductsPage() {
     isSearching: isAISearching,
     isAISearchActive,
     searchType,
+    error: aiSearchError,
   } = useAISearch(submittedSearch, { 
     category: category !== "all" ? category : undefined,
     minQueryLength: 2,
     enabled: aiEnabled,
   });
+  
+  // Safe array for AI search results to prevent crashes
+  const safeAIResults = Array.isArray(aiSearchResults) ? aiSearchResults : [];
   
   const handleSearch = (query: string) => {
     setSubmittedSearch(query);
@@ -376,12 +380,13 @@ export default function ProductsPage() {
   });
 
   // Use AI search results when searching, otherwise use regular API results
-  const displayProducts = isAISearchActive 
-    ? aiSearchResults.slice((page - 1) * 12, page * 12)
+  // If AI search has error, fall back to empty results with error shown
+  const displayProducts = (isAISearchActive && !aiSearchError)
+    ? safeAIResults.slice((page - 1) * 12, page * 12)
     : data?.products || [];
 
-  const totalPages = isAISearchActive 
-    ? Math.ceil(aiSearchResults.length / 12)
+  const totalPages = (isAISearchActive && !aiSearchError)
+    ? Math.ceil(safeAIResults.length / 12) || 1
     : data?.pagination?.totalPages || 1;
 
   const isLoading = isAISearchActive ? isAISearching : isRegularLoading;
@@ -504,7 +509,7 @@ export default function ProductsPage() {
             <Package className="h-16 w-16 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No products found</h3>
             <p className="text-muted-foreground text-center">
-              {debouncedSearch || category !== "all" 
+              {submittedSearch || category !== "all" 
                 ? "Try adjusting your search or filters."
                 : "No products are currently available."}
             </p>

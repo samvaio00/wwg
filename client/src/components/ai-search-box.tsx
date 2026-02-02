@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Loader2, ShoppingCart, TrendingUp, Sparkles } from "lucide-react";
+import { Loader2, ShoppingCart, TrendingUp, Sparkles, Layers } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +42,22 @@ const ACTION_PATTERNS = [
   /^get\s+me\s+(\d+)\s+(.+)$/i,
 ];
 
+// Patterns for "add each of" type commands - matches products and adds each one
+const ADD_EACH_PATTERNS = [
+  // "add 1 box each of available geek bar pulse x flavors to my cart"
+  /^add\s+(\d+)\s+(?:box(?:es)?|piece(?:s)?|unit(?:s)?|item(?:s)?|pack(?:s)?|case(?:s)?|)?\s*(?:each|of\s+each)\s+(?:of\s+)?(?:available\s+|in\s*stock\s+)?(.+?)\s+to\s+(?:my\s+)?cart$/i,
+  // "add 1 of each available geek bar to cart"
+  /^add\s+(\d+)\s+(?:of\s+)?each\s+(?:available\s+|in\s*stock\s+)?(.+?)\s+to\s+(?:my\s+)?cart$/i,
+  // "add each available geek bar pulse x to cart" (quantity defaults to 1)
+  /^add\s+(?:each|all)\s+(?:available\s+|in\s*stock\s+)?(.+?)\s+to\s+(?:my\s+)?cart$/i,
+  // "add all geek bar flavors to my cart"
+  /^add\s+all\s+(.+?)\s+to\s+(?:my\s+)?cart$/i,
+  // "order 1 each of geek bar pulse x flavors"
+  /^(?:order|buy|get)\s+(\d+)\s+(?:of\s+)?each\s+(?:available\s+|in\s*stock\s+)?(.+)$/i,
+  // "get me 2 of each available geek bar"
+  /^get\s+me\s+(\d+)\s+(?:of\s+)?each\s+(?:available\s+|in\s*stock\s+)?(.+)$/i,
+];
+
 const TOP_SELLERS_PATTERNS = [
   /^add\s+(?:the\s+)?(\d+)\s+top\s+sell(?:ing|er)s?\s+(.+?)\s+to\s+(?:my\s+)?cart[,\s]*(\d+)\s+(?:pieces?|pcs?|units?|items?)\s+each$/i,
   /^add\s+(?:the\s+)?(\d+)\s+(?:best|top)\s+sell(?:ing|er)s?\s+(.+?)\s+to\s+(?:my\s+)?cart$/i,
@@ -54,6 +70,7 @@ const TOP_SELLERS_PATTERNS = [
 interface ParsedAction {
   isAction: boolean;
   isTopSellers?: boolean;
+  isAddEach?: boolean;
   quantity?: number;
   productQuery?: string;
   topCount?: number;
@@ -63,6 +80,29 @@ interface ParsedAction {
 
 function parseActionCommand(query: string): ParsedAction {
   const trimmed = query.trim();
+  
+  // Check for "add each of" patterns first (must be before regular ACTION_PATTERNS)
+  for (const pattern of ADD_EACH_PATTERNS) {
+    const match = trimmed.match(pattern);
+    if (match) {
+      // Patterns have either (quantity, productQuery) or just (productQuery)
+      if (match.length === 3) {
+        return { 
+          isAction: true, 
+          isAddEach: true,
+          quantityEach: parseInt(match[1], 10),
+          productQuery: match[2].trim(),
+        };
+      } else if (match.length === 2) {
+        return { 
+          isAction: true, 
+          isAddEach: true,
+          quantityEach: 1,
+          productQuery: match[1].trim(),
+        };
+      }
+    }
+  }
   
   for (const pattern of TOP_SELLERS_PATTERNS) {
     const match = trimmed.match(pattern);
@@ -111,7 +151,7 @@ export function AISearchBox({
   const queryClient = useQueryClient();
 
   const dynamicPlaceholder = placeholder || (aiEnabled 
-    ? "AI Search - try 'cheap cables' or 'add 5 headsets to cart'" 
+    ? "AI Search - try 'add 1 each of geek bar flavors to cart'" 
     : "Search by name, SKU, or keyword...");
 
   const executeTopSellersAction = useMutation({
@@ -243,6 +283,92 @@ export function AISearchBox({
     },
   });
 
+  // Mutation for "add each of" commands - searches and adds all matching in-stock products
+  const executeAddEachAction = useMutation({
+    mutationFn: async (params: { productQuery: string; quantityEach: number }) => {
+      // Search for matching products using AI search
+      const searchRes = await fetch(`/api/ai/search?query=${encodeURIComponent(params.productQuery)}&limit=50`, {
+        credentials: "include",
+      });
+      const searchData = await searchRes.json();
+      
+      if (!searchData.products || searchData.products.length === 0) {
+        throw new Error(`No products found matching "${params.productQuery}"`);
+      }
+
+      // Filter to in-stock products only
+      const inStockProducts = searchData.products.filter((p: { stockQuantity?: number }) => (p.stockQuantity || 0) > 0);
+      
+      if (inStockProducts.length === 0) {
+        throw new Error(`No in-stock products found matching "${params.productQuery}"`);
+      }
+
+      const addedProducts: Array<{ id: string; name: string; quantity: number }> = [];
+      const failedProducts: string[] = [];
+      
+      // Add each matching product to cart
+      for (const product of inStockProducts) {
+        try {
+          const addRes = await apiRequest("POST", "/api/cart/items", {
+            productId: product.id,
+            quantity: params.quantityEach,
+          });
+          
+          if (addRes.ok) {
+            addedProducts.push({ id: product.id, name: product.name, quantity: params.quantityEach });
+          } else {
+            const errorData = await addRes.json().catch(() => ({}));
+            failedProducts.push(product.name + (errorData.message ? ` (${errorData.message})` : ""));
+          }
+        } catch {
+          failedProducts.push(product.name);
+        }
+      }
+
+      const totalItems = addedProducts.reduce((sum, p) => sum + p.quantity, 0);
+      
+      if (addedProducts.length === 0) {
+        throw new Error(`Could not add any products. ${failedProducts.length > 0 ? `Failed: ${failedProducts.join(", ")}` : ""}`);
+      }
+
+      let message = `Added ${addedProducts.length} matching ${addedProducts.length === 1 ? 'product' : 'products'} (${totalItems} total pieces) to your cart`;
+      if (failedProducts.length > 0) {
+        const failedNames = failedProducts.slice(0, 3).map(f => f.split(" (")[0]).join(", ");
+        message += `. Could not add: ${failedNames}${failedProducts.length > 3 ? ` and ${failedProducts.length - 3} more` : ''}`;
+      }
+
+      return {
+        action: "add_each",
+        success: true,
+        message,
+        itemsAdded: totalItems,
+        products: addedProducts,
+        failedCount: failedProducts.length,
+      } as ActionResult & { failedCount?: number };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cart/items"] });
+      toast({
+        title: result.failedCount && result.failedCount > 0 ? "Partially added" : "Products added",
+        description: result.message,
+        variant: result.failedCount && result.failedCount > 0 ? "default" : "default",
+      });
+      onChange("");
+      onActionExecuted?.();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Action failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setIsProcessingAction(false);
+    },
+  });
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && value.trim()) {
       if (aiEnabled) {
@@ -251,7 +377,13 @@ export function AISearchBox({
           e.preventDefault();
           setIsProcessingAction(true);
           
-          if (parsed.isTopSellers && parsed.category && parsed.topCount) {
+          if (parsed.isAddEach && parsed.productQuery) {
+            // "add each of" / "add all matching" type commands
+            executeAddEachAction.mutate({
+              productQuery: parsed.productQuery,
+              quantityEach: parsed.quantityEach || 1,
+            });
+          } else if (parsed.isTopSellers && parsed.category && parsed.topCount) {
             executeTopSellersAction.mutate({
               topCount: parsed.topCount,
               category: parsed.category,
@@ -271,11 +403,12 @@ export function AISearchBox({
         onSearch?.(value.trim());
       }
     }
-  }, [value, aiEnabled, executeActionMutation, executeTopSellersAction, onSearch]);
+  }, [value, aiEnabled, executeActionMutation, executeTopSellersAction, executeAddEachAction, onSearch]);
 
   const parsed = aiEnabled ? parseActionCommand(value) : { isAction: false };
   const showActionIndicator = aiEnabled && parsed.isAction && value.length > 5;
   const isTopSellersAction = parsed.isTopSellers;
+  const isAddEachAction = parsed.isAddEach;
 
   return (
     <div className="flex items-center gap-3">
@@ -324,6 +457,11 @@ export function AISearchBox({
                       <TrendingUp className="h-3 w-3" />
                       Top Sellers
                     </>
+                  ) : isAddEachAction ? (
+                    <>
+                      <Layers className="h-3 w-3" />
+                      Bulk Add
+                    </>
                   ) : (
                     <>
                       <ShoppingCart className="h-3 w-3" />
@@ -343,7 +481,7 @@ export function AISearchBox({
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
           {aiEnabled ? (
-            <p className="text-sm">Try: "cheap cables" or "add 5 headsets to cart"</p>
+            <p className="text-sm">Try: "cheap cables", "add 1 each of geek bar flavors to cart", or "add 5 top sellers cbd to cart"</p>
           ) : (
             <p className="text-sm">Search by product name, SKU, or keywords</p>
           )}

@@ -27,7 +27,8 @@ The platform utilizes a modern web stack:
     - **Homepage Customization**: Admins can highlight featured products on the homepage.
     - **Shopping Cart & Order Management**: Full cart functionality, secure checkout, customer order history, and admin order approval workflow.
     - **Customer Self-Service**: "My Account" section with order history, profile editing (with admin approval), and contact pages. Includes a "Top Sellers" page based on recent order volume.
-    - **AI Features**: AI Cart Builder for natural language product recommendations and AI-enhanced semantic product search (using `gpt-4o-mini`). Includes natural language commands for adding top sellers by category to the cart.
+    - **AI Features**: AI Cart Builder for natural language product recommendations and AI-enhanced semantic product search (using `gpt-4o-mini`). Includes natural language commands for adding top sellers by category to the cart. Top seller search queries within the top 500 items with Zoho Books sales data for category-specific filtering, with simple stemming for plural/singular matching.
+    - **Image Caching**: In-memory cache for Zoho product images with 24-hour TTL and 500-item max size to reduce API rate limiting (429 errors). Admin endpoint at `/api/admin/cache/clear-images` available for cache management.
     - **Admin & Analytics**: Dashboard for order metrics, sales trends, customer insights, and product performance.
     - **Bulk Operations**: Supports bulk order import from CSV with validation.
     - **Job Queue & Retries**: Manages retryable Zoho operations for robustness.

@@ -8,6 +8,9 @@ import pg from "pg";
 import { startScheduler } from "./scheduler";
 import { seedUsers } from "./seed-users";
 import path from "path";
+import { setupProcessAlertHandlers, sendServerErrorAlert } from "./alert-service";
+
+setupProcessAlertHandlers();
 
 const app = express();
 const httpServer = createServer(app);
@@ -108,11 +111,20 @@ app.use((req, res, next) => {
   
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
+
+    if (status >= 500) {
+      const error = err instanceof Error ? err : new Error(message);
+      sendServerErrorAlert(error, {
+        route: req.path,
+        method: req.method,
+        userId: req.session?.userId,
+      }).catch(alertErr => console.error("[Alert] Failed to send error alert:", alertErr));
+    }
 
     if (res.headersSent) {
       return next(err);

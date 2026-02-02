@@ -153,14 +153,16 @@ export default function ContactPage() {
                 <Phone className="h-5 w-5 text-primary mt-0.5" />
                 <div>
                   <p className="font-medium">Phone</p>
-                  <p className="text-muted-foreground">Contact us via email</p>
+                  <a href="tel:832-659-0666" className="text-muted-foreground hover:text-primary">
+                    832-659-0666
+                  </a>
                 </div>
               </div>
               <div className="flex items-start gap-3">
                 <MapPin className="h-5 w-5 text-primary mt-0.5" />
                 <div>
                   <p className="font-medium">Location</p>
-                  <p className="text-muted-foreground">United States</p>
+                  <p className="text-muted-foreground">Houston, TX, USA</p>
                 </div>
               </div>
             </CardContent>
@@ -174,8 +176,8 @@ export default function ContactPage() {
               <div className="flex items-start gap-3">
                 <Clock className="h-5 w-5 text-primary mt-0.5" />
                 <div>
-                  <p className="font-medium">Monday - Friday</p>
-                  <p className="text-muted-foreground">9:00 AM - 5:00 PM EST</p>
+                  <p className="font-medium">Mon - Sat</p>
+                  <p className="text-muted-foreground">9:30 AM - 6:00 PM</p>
                 </div>
               </div>
             </CardContent>

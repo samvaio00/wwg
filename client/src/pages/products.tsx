@@ -280,8 +280,9 @@ export default function ProductsPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [inStockOnly, setInStockOnly] = useState(false);
+  const [aiEnabled, setAIEnabled] = useState(true);
 
-  // AI-powered search - only triggers when Enter is pressed
+  // AI-powered search - only triggers when Enter is pressed and AI is enabled
   const { 
     results: aiSearchResults, 
     isSearching: isAISearching,
@@ -290,10 +291,18 @@ export default function ProductsPage() {
   } = useAISearch(submittedSearch, { 
     category: category !== "all" ? category : undefined,
     minQueryLength: 2,
+    enabled: aiEnabled,
   });
   
   const handleSearch = (query: string) => {
     setSubmittedSearch(query);
+    setPage(1);
+  };
+
+  const handleAIToggle = (enabled: boolean) => {
+    setAIEnabled(enabled);
+    setSubmittedSearch("");
+    setSearch("");
     setPage(1);
   };
 
@@ -332,9 +341,12 @@ export default function ProductsPage() {
     }
   };
 
-  // Build query params for non-AI search (when no search term)
+  // Build query params for non-AI search
   const queryParams = new URLSearchParams();
   if (category !== "all") queryParams.set("category", category);
+  if (!aiEnabled && submittedSearch.trim()) {
+    queryParams.set("search", submittedSearch.trim());
+  }
   if (sort === "price-low") {
     queryParams.set("sortBy", "price");
     queryParams.set("sortOrder", "asc");
@@ -351,9 +363,9 @@ export default function ProductsPage() {
   queryParams.set("page", page.toString());
   queryParams.set("limit", "12");
 
-  // Fetch products from regular API (used when no AI search is active)
+  // Fetch products from regular API (used when AI search is disabled or no search term)
   const { data, isLoading: isRegularLoading, error } = useQuery<{ products: Product[]; pagination: PaginationInfo }>({
-    queryKey: ["/api/products", queryParams.toString()],
+    queryKey: ["/api/products", queryParams.toString(), aiEnabled],
     queryFn: async () => {
       const url = `/api/products${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
       const res = await fetch(url, { credentials: "include" });
@@ -426,6 +438,8 @@ export default function ProductsPage() {
             onSearch={handleSearch}
             isSearching={isAISearching}
             testId="input-search"
+            aiEnabled={aiEnabled}
+            onAIToggle={handleAIToggle}
           />
           
           <div className="flex items-center gap-1">

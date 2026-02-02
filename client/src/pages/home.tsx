@@ -246,16 +246,24 @@ function CustomerHomePage() {
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [aiEnabled, setAIEnabled] = useState(true);
 
-  // AI-powered search - only triggers when Enter is pressed (submittedSearch changes)
+  // AI-powered search - only triggers when Enter is pressed and AI is enabled
   const { 
     results: aiSearchResults, 
     isSearching: isAISearching,
     isAISearchActive,
-  } = useAISearch(submittedSearch, { minQueryLength: 2 });
+  } = useAISearch(submittedSearch, { minQueryLength: 2, enabled: aiEnabled });
   
   const handleSearch = (query: string) => {
     setSubmittedSearch(query);
+    setCurrentPage(1);
+  };
+
+  const handleAIToggle = (enabled: boolean) => {
+    setAIEnabled(enabled);
+    setSubmittedSearch("");
+    setSearch("");
     setCurrentPage(1);
   };
   
@@ -378,6 +386,8 @@ function CustomerHomePage() {
             onSearch={handleSearch}
             isSearching={isAISearching}
             testId="input-search-home"
+            aiEnabled={aiEnabled}
+            onAIToggle={handleAIToggle}
           />
           
           <div className="flex items-center gap-1">

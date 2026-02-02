@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ShoppingCart, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, ShoppingCart, TrendingUp, Sparkles, Search } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -19,6 +20,9 @@ interface AISearchBoxProps {
   placeholder?: string;
   testId?: string;
   onActionExecuted?: () => void;
+  aiEnabled?: boolean;
+  onAIToggle?: (enabled: boolean) => void;
+  showAIToggle?: boolean;
 }
 
 interface ActionResult {
@@ -94,13 +98,20 @@ export function AISearchBox({
   onChange,
   onSearch,
   isSearching = false,
-  placeholder = "AI Search",
+  placeholder,
   testId = "input-ai-search",
   onActionExecuted,
+  aiEnabled = true,
+  onAIToggle,
+  showAIToggle = true,
 }: AISearchBoxProps) {
   const [isProcessingAction, setIsProcessingAction] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const dynamicPlaceholder = placeholder || (aiEnabled 
+    ? "AI Search - try 'cheap cables' or 'add 5 headsets to cart'" 
+    : "Search by name, SKU, or keyword...");
 
   const executeTopSellersAction = useMutation({
     mutationFn: async (params: { topCount: number; category: string; quantityEach: number }) => {
@@ -233,82 +244,113 @@ export function AISearchBox({
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && value.trim()) {
-      const parsed = parseActionCommand(value);
-      if (parsed.isAction) {
-        e.preventDefault();
-        setIsProcessingAction(true);
-        
-        if (parsed.isTopSellers && parsed.category && parsed.topCount) {
-          executeTopSellersAction.mutate({
-            topCount: parsed.topCount,
-            category: parsed.category,
-            quantityEach: parsed.quantityEach || 1,
-          });
-        } else if (parsed.productQuery) {
-          executeActionMutation.mutate({
-            query: value,
-            quantity: parsed.quantity || 1,
-            productQuery: parsed.productQuery,
-          });
+      if (aiEnabled) {
+        const parsed = parseActionCommand(value);
+        if (parsed.isAction) {
+          e.preventDefault();
+          setIsProcessingAction(true);
+          
+          if (parsed.isTopSellers && parsed.category && parsed.topCount) {
+            executeTopSellersAction.mutate({
+              topCount: parsed.topCount,
+              category: parsed.category,
+              quantityEach: parsed.quantityEach || 1,
+            });
+          } else if (parsed.productQuery) {
+            executeActionMutation.mutate({
+              query: value,
+              quantity: parsed.quantity || 1,
+              productQuery: parsed.productQuery,
+            });
+          }
+        } else {
+          onSearch?.(value.trim());
         }
       } else {
-        // Regular search - trigger onSearch callback
         onSearch?.(value.trim());
       }
     }
-  }, [value, executeActionMutation, executeTopSellersAction, onSearch]);
+  }, [value, aiEnabled, executeActionMutation, executeTopSellersAction, onSearch]);
 
-  const parsed = parseActionCommand(value);
-  const showActionIndicator = parsed.isAction && value.length > 5;
+  const parsed = aiEnabled ? parseActionCommand(value) : { isAction: false };
+  const showActionIndicator = aiEnabled && parsed.isAction && value.length > 5;
   const isTopSellersAction = parsed.isTopSellers;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="relative w-80 lg:w-96 ml-24">
-          <Input
-            type="search"
-            placeholder={placeholder}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className={`pr-24 h-9 focus-ring-animate transition-all ${
-              showActionIndicator ? "border-primary/50 bg-primary/5" : ""
-            }`}
-            data-testid={testId}
-            disabled={isProcessingAction}
-          />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            {isProcessingAction && (
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            )}
-            {showActionIndicator && !isProcessingAction && (
-              <Badge variant="default" className="text-xs gap-1 badge-pop">
-                {isTopSellersAction ? (
-                  <>
-                    <TrendingUp className="h-3 w-3" />
-                    Top Sellers
-                  </>
-                ) : (
-                  <>
-                    <ShoppingCart className="h-3 w-3" />
-                    Action
-                  </>
-                )}
-              </Badge>
-            )}
-            {isSearching && !isProcessingAction && !showActionIndicator && (
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            )}
-            {!isSearching && !showActionIndicator && !isProcessingAction && value.length === 0 && (
-              <span className="text-xs text-muted-foreground">Press Enter</span>
-            )}
+    <div className="flex items-center gap-2">
+      {showAIToggle && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={aiEnabled ? "default" : "outline"}
+              size="icon"
+              className={`h-9 w-9 shrink-0 transition-all ${aiEnabled ? "bg-primary text-primary-foreground" : ""}`}
+              onClick={() => onAIToggle?.(!aiEnabled)}
+              data-testid="button-ai-toggle"
+            >
+              {aiEnabled ? (
+                <Sparkles className="h-4 w-4" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p className="text-sm">{aiEnabled ? "AI Search ON - Click to use basic search" : "Basic Search - Click to enable AI"}</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="relative w-72 lg:w-80">
+            <Input
+              type="search"
+              placeholder={dynamicPlaceholder}
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className={`pr-20 h-9 focus-ring-animate transition-all ${
+                showActionIndicator ? "border-primary/50 bg-primary/5" : ""
+              }`}
+              data-testid={testId}
+              disabled={isProcessingAction}
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {isProcessingAction && (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              )}
+              {showActionIndicator && !isProcessingAction && (
+                <Badge variant="default" className="text-xs gap-1 badge-pop">
+                  {isTopSellersAction ? (
+                    <>
+                      <TrendingUp className="h-3 w-3" />
+                      Top Sellers
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="h-3 w-3" />
+                      Action
+                    </>
+                  )}
+                </Badge>
+              )}
+              {isSearching && !isProcessingAction && !showActionIndicator && (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+              {!isSearching && !showActionIndicator && !isProcessingAction && value.length === 0 && (
+                <span className="text-xs text-muted-foreground">Enter</span>
+              )}
+            </div>
           </div>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="max-w-xs">
-        <p className="text-sm">Try: "cheap cables" or "add 5 headsets to cart"</p>
-      </TooltipContent>
-    </Tooltip>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-xs">
+          {aiEnabled ? (
+            <p className="text-sm">Try: "cheap cables" or "add 5 headsets to cart"</p>
+          ) : (
+            <p className="text-sm">Search by product name, SKU, or keywords</p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </div>
   );
 }

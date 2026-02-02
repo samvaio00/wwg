@@ -32,8 +32,8 @@ The platform utilizes a modern web stack:
     - **Bulk Operations**: Supports bulk order import from CSV with validation.
     - **Job Queue & Retries**: Manages retryable Zoho operations for robustness.
     - **Email Action Tokens**: Allows admin to approve/reject orders, users, or profile updates directly from email notifications without logging in.
-    - **Scheduler**: Incremental Zoho sync (every 2 hours, pulls only changes), customer status sync (hourly), embeddings updates (2 hours), weekly top sellers sync, bi-weekly AI email campaigns, and weekly full Zoho backup sync (Sunday 2 AM).
-    - **Zoho Webhooks**: Real-time product and customer updates from Zoho Inventory and Zoho Books via webhooks, with security through a shared secret. Webhook stats are tracked and displayed in admin dashboard. Note: Webhooks may not trigger for all field updates in Zoho.
+    - **Scheduler**: Customer status sync (hourly), embeddings updates (2 hours), weekly top sellers sync, bi-weekly AI email campaigns, daily Zoho incremental sync (3 AM), and weekly full Zoho backup sync (Sunday 2 AM).
+    - **Zoho Webhooks**: Real-time product and customer updates from Zoho Inventory and Zoho Books via webhooks (primary sync method for inventory receipt/sale events), with security through a shared secret. Webhook stats are tracked and displayed in admin dashboard. Note: Webhooks reliably trigger for accounting events (receipts, sales) but may not trigger for all field updates in Zoho.
     - **AI Email Campaigns**: Generates promotional emails (New Highlighted Items, New SKUs, Cart Abandonment) using AI (gpt-4o-mini). Features an opt-in system, unsubscribe functionality, and an admin approval workflow for email templates.
     - **Server Alert System**: Notifies administrators via email for critical server events like crashes, errors, or site downtime, with a cooldown mechanism to prevent spam.
 

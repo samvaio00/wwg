@@ -89,6 +89,11 @@ interface SchedulerStatus {
     mode: string;
     dormant: boolean;
   };
+  dailyZohoSync: {
+    schedule: string;
+    lastRun: string | null;
+    nextRun: string;
+  };
   weeklyZohoBackup: {
     schedule: string;
     lastRun: string | null;
@@ -303,14 +308,15 @@ export default function AdminZohoStatus() {
               <>
                 <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-sm" data-testid="badge-sync-mode-webhooks">
                   <Webhook className="h-3 w-3 mr-1" />
-                  Real-time Webhooks
+                  Real-time Webhooks (Primary)
+                </Badge>
+                <Badge variant="outline" className="text-sm" data-testid="badge-daily-sync">
+                  <Clock className="h-3 w-3 mr-1" />
+                  Daily Backup: 3 AM
                 </Badge>
                 <Badge variant="outline" className="text-sm" data-testid="badge-weekly-backup">
                   <Calendar className="h-3 w-3 mr-1" />
-                  Weekly Backup: {schedulerStatus?.weeklyZohoBackup?.schedule || "Sunday 2 AM"}
-                </Badge>
-                <Badge variant="secondary" className="text-sm text-muted-foreground" data-testid="badge-polling-dormant">
-                  API Polling: Dormant
+                  Weekly Full Sync: Sunday 2 AM
                 </Badge>
               </>
             )}
@@ -337,11 +343,23 @@ export default function AdminZohoStatus() {
               Pull latest changes from Zoho Inventory
             </span>
           </div>
-          {schedulerStatus?.weeklyZohoBackup && !schedulerStatus.enableFrequentZohoSync && (
-            <div className="mt-4 text-sm text-muted-foreground">
-              <p>Next backup sync: {new Date(schedulerStatus.weeklyZohoBackup.nextRun).toLocaleString()}</p>
-              {schedulerStatus.weeklyZohoBackup.lastRun && (
-                <p>Last backup: {new Date(schedulerStatus.weeklyZohoBackup.lastRun).toLocaleString()}</p>
+          {!schedulerStatus?.enableFrequentZohoSync && (
+            <div className="mt-4 text-sm text-muted-foreground space-y-1">
+              {schedulerStatus?.dailyZohoSync && (
+                <>
+                  <p>Next daily sync: {new Date(schedulerStatus.dailyZohoSync.nextRun).toLocaleString()}</p>
+                  {schedulerStatus.dailyZohoSync.lastRun && (
+                    <p>Last daily sync: {new Date(schedulerStatus.dailyZohoSync.lastRun).toLocaleString()}</p>
+                  )}
+                </>
+              )}
+              {schedulerStatus?.weeklyZohoBackup && (
+                <>
+                  <p>Next weekly sync: {new Date(schedulerStatus.weeklyZohoBackup.nextRun).toLocaleString()}</p>
+                  {schedulerStatus.weeklyZohoBackup.lastRun && (
+                    <p>Last weekly sync: {new Date(schedulerStatus.weeklyZohoBackup.lastRun).toLocaleString()}</p>
+                  )}
+                </>
               )}
             </div>
           )}

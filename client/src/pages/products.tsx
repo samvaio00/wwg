@@ -365,6 +365,9 @@ export default function ProductsPage() {
     queryParams.set("sortBy", "name");
     queryParams.set("sortOrder", "desc");
   }
+  if (inStockOnly) {
+    queryParams.set("inStock", "true");
+  }
   queryParams.set("page", page.toString());
   queryParams.set("limit", "12");
 
@@ -382,12 +385,17 @@ export default function ProductsPage() {
 
   // Use AI search results when searching, otherwise use regular API results
   // If AI search has error, fall back to empty results with error shown
+  // Apply in-stock filter to AI results (server-side filter only works for non-AI)
+  const filteredAIResults = inStockOnly 
+    ? safeAIResults.filter(p => (p.stockQuantity || 0) > 0)
+    : safeAIResults;
+  
   const displayProducts = (isAISearchActive && !aiSearchError)
-    ? safeAIResults.slice((page - 1) * 12, page * 12)
+    ? filteredAIResults.slice((page - 1) * 12, page * 12)
     : data?.products || [];
 
   const totalPages = (isAISearchActive && !aiSearchError)
-    ? Math.ceil(safeAIResults.length / 12) || 1
+    ? Math.ceil(filteredAIResults.length / 12) || 1
     : data?.pagination?.totalPages || 1;
 
   const isLoading = isAISearchActive ? isAISearching : isRegularLoading;
@@ -429,11 +437,8 @@ export default function ProductsPage() {
     addToCartMutation.mutate({ productId, quantity });
   };
 
-  // Apply client-side filtering for in-stock only toggle
-  const products = displayProducts.filter(p => {
-    if (inStockOnly && (p.stockQuantity || 0) <= 0) return false;
-    return true;
-  });
+  // Products are now filtered server-side (for regular API) or in filteredAIResults (for AI search)
+  const products = displayProducts;
 
   return (
     <div className="space-y-6 fade-in-up">

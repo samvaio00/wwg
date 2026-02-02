@@ -865,7 +865,7 @@ export async function registerRoutes(
   // Get all products (with optional filters and customer pricing)
   app.get("/api/products", async (req, res) => {
     try {
-      const { category, search, sortBy, sortOrder, limit, page } = req.query;
+      const { category, search, sortBy, sortOrder, limit, page, inStock } = req.query;
       
       // Default to 12 products per page for storefront display
       const pageSize = limit ? parseInt(limit as string, 10) : 12;
@@ -879,7 +879,8 @@ export async function registerRoutes(
         sortBy: sortBy as string | undefined,
         sortOrder: sortOrder as string | undefined,
         limit: pageSize,
-        offset
+        offset,
+        inStock: inStock === 'true'
       });
       
       // Apply customer-specific pricing if user has a price list

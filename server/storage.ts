@@ -352,6 +352,7 @@ export class DatabaseStorage implements IStorage {
     sortOrder?: string; 
     limit?: number;
     offset?: number;
+    inStock?: boolean;
   }): Promise<{ products: Product[]; totalCount: number }> {
     const conditions = [
       eq(products.isActive, true),
@@ -424,6 +425,11 @@ export class DatabaseStorage implements IStorage {
 
     // Combine and sort
     let consolidated = [...ungrouped, ...Array.from(groupMap.values())];
+    
+    // Apply in-stock filter (after consolidation so groups are properly aggregated)
+    if (options?.inStock) {
+      consolidated = consolidated.filter(p => (p.stockQuantity || 0) > 0);
+    }
     
     // Apply sorting
     if (options?.sortBy === 'price') {

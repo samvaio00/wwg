@@ -5,8 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { RefreshCw, CheckCircle, XCircle, Loader2, Package, AlertTriangle, Clock, RotateCcw, Play, Webhook, Radio, Calendar, Image, Download } from "lucide-react";
+import { RefreshCw, CheckCircle, XCircle, Loader2, Package, AlertTriangle, Clock, RotateCcw, Play, Webhook, Radio, Calendar, Image, Download, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { useDebounce } from "@/hooks/use-debounce";
+
+interface ItemGroup {
+  zohoGroupId: string;
+  groupName: string;
+  productCount: number;
+}
 
 interface ZohoStats {
   today: {
@@ -117,7 +124,9 @@ export default function AdminZohoStatus() {
   const [lastSyncResult, setLastSyncResult] = useState<SyncResult | null>(null);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [singleProductId, setSingleProductId] = useState("");
-  const [groupId, setGroupId] = useState("");
+  const [groupSearchQuery, setGroupSearchQuery] = useState("");
+  const [selectedGroup, setSelectedGroup] = useState<ItemGroup | null>(null);
+  const debouncedGroupSearch = useDebounce(groupSearchQuery, 300);
 
   const { data: zohoStats, isLoading, refetch, isFetching } = useQuery<ZohoStats>({
     queryKey: ['/api/admin/analytics/zoho-api-stats'],
@@ -145,6 +154,21 @@ export default function AdminZohoStatus() {
     refetchInterval: (query) => {
       return query.state.data?.isRunning ? 2000 : false;
     },
+  });
+
+  const { data: groupSearchResults, isLoading: groupSearchLoading } = useQuery<{ groups: ItemGroup[] }>({
+    queryKey: ["/api/admin/groups/search", debouncedGroupSearch],
+    queryFn: async () => {
+      if (!debouncedGroupSearch || debouncedGroupSearch.length < 2) {
+        return { groups: [] };
+      }
+      const res = await fetch(`/api/admin/groups/search?q=${encodeURIComponent(debouncedGroupSearch)}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Search failed");
+      return res.json();
+    },
+    enabled: debouncedGroupSearch.length >= 2,
   });
 
   const bulkImageSyncMutation = useMutation({
@@ -555,36 +579,104 @@ export default function AdminZohoStatus() {
           {/* Group Image Refresh */}
           <div className="space-y-3 pt-4 border-t">
             <h4 className="font-medium text-sm">Refresh Item Group Images</h4>
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                type="text"
-                placeholder="Zoho Group ID (e.g., 1424313000183487445)"
-                value={groupId}
-                onChange={(e) => setGroupId(e.target.value)}
-                className="w-80"
-                data-testid="input-group-id"
-              />
-              <Button
-                onClick={() => {
-                  if (groupId.trim()) {
-                    groupImageRefreshMutation.mutate(groupId.trim());
-                    setGroupId("");
-                  }
-                }}
-                disabled={groupImageRefreshMutation.isPending || !groupId.trim()}
-                variant="outline"
-                data-testid="button-refresh-group-images"
-              >
-                {groupImageRefreshMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-              </Button>
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search by item name, group name, or SKU..."
+                  value={groupSearchQuery}
+                  onChange={(e) => {
+                    setGroupSearchQuery(e.target.value);
+                    setSelectedGroup(null);
+                  }}
+                  className="pl-9 w-full max-w-md"
+                  data-testid="input-group-search"
+                />
+              </div>
+              
+              {/* Search Results */}
+              {groupSearchQuery.length >= 2 && !selectedGroup && (
+                <div className="rounded-lg border bg-background max-w-md max-h-60 overflow-auto">
+                  {groupSearchLoading ? (
+                    <div className="p-4 flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Searching...
+                    </div>
+                  ) : groupSearchResults?.groups && groupSearchResults.groups.length > 0 ? (
+                    <div className="divide-y">
+                      {groupSearchResults.groups.map((group) => (
+                        <button
+                          key={group.zohoGroupId}
+                          onClick={() => {
+                            setSelectedGroup(group);
+                            setGroupSearchQuery(group.groupName);
+                          }}
+                          className="w-full p-3 text-left hover-elevate flex items-center justify-between gap-2"
+                          data-testid={`group-result-${group.zohoGroupId}`}
+                        >
+                          <div>
+                            <p className="font-medium text-sm">{group.groupName}</p>
+                            <p className="text-xs text-muted-foreground">ID: {group.zohoGroupId}</p>
+                          </div>
+                          <Badge variant="secondary" className="text-xs">
+                            {group.productCount} items
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-sm text-muted-foreground text-center">
+                      No groups found matching "{groupSearchQuery}"
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Selected Group */}
+              {selectedGroup && (
+                <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg border bg-muted/30 max-w-md">
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{selectedGroup.groupName}</p>
+                    <p className="text-xs text-muted-foreground">{selectedGroup.productCount} products in group</p>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      groupImageRefreshMutation.mutate(selectedGroup.zohoGroupId);
+                    }}
+                    disabled={groupImageRefreshMutation.isPending}
+                    data-testid="button-refresh-group-images"
+                  >
+                    {groupImageRefreshMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Refreshing...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh Images
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedGroup(null);
+                      setGroupSearchQuery("");
+                    }}
+                    data-testid="button-clear-group-selection"
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              
+              <p className="text-xs text-muted-foreground">
+                Search for an item group by name, product name, or SKU to refresh all images in that group
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Enter a Zoho Group ID to refresh images for all products in that group
-            </p>
           </div>
         </CardContent>
       </Card>

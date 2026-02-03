@@ -19,7 +19,7 @@ import {
 import { z } from "zod";
 import { db } from "./db";
 import { users, products, orders } from "@shared/schema";
-import { eq, and, gt, isNull } from "drizzle-orm";
+import { eq, and, gt, isNull, sql } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
 import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, fetchProductImageWithFallback, syncItemGroupsFromZoho, clearImageCache, syncAllProductImages, refreshProductImage, getImageSyncStatus } from "./zoho-service";
 import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, syncTopSellersFromZoho, type ZohoLineItem } from "./zoho-books-service";
@@ -2111,6 +2111,46 @@ export async function registerRoutes(
         success: false,
         message: error instanceof Error ? error.message : "Unknown error",
       });
+    }
+  });
+
+  // Search for item groups by name
+  app.get("/api/admin/groups/search", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q || typeof q !== 'string' || q.trim().length < 2) {
+        return res.json({ groups: [] });
+      }
+      
+      const searchTerm = q.trim().toLowerCase();
+      
+      // Find unique groups with matching names
+      const result = await db.execute(sql`
+        SELECT DISTINCT zoho_group_id, zoho_group_name, 
+               COUNT(*) as product_count
+        FROM products 
+        WHERE zoho_group_id IS NOT NULL 
+          AND zoho_group_name IS NOT NULL
+          AND (
+            LOWER(zoho_group_name) LIKE ${`%${searchTerm}%`}
+            OR LOWER(name) LIKE ${`%${searchTerm}%`}
+            OR LOWER(sku) LIKE ${`%${searchTerm}%`}
+          )
+        GROUP BY zoho_group_id, zoho_group_name
+        ORDER BY zoho_group_name
+        LIMIT 20
+      `);
+      
+      const groups = result.rows.map((row: any) => ({
+        zohoGroupId: row.zoho_group_id,
+        groupName: row.zoho_group_name,
+        productCount: Number(row.product_count),
+      }));
+      
+      res.json({ groups });
+    } catch (error) {
+      console.error("Group search error:", error);
+      res.status(500).json({ groups: [], error: "Search failed" });
     }
   });
 

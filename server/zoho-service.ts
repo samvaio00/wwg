@@ -87,6 +87,132 @@ interface ZohoItemsResponse {
 let cachedAccessToken: string | null = null;
 let tokenExpiresAt: number = 0;
 
+// Rate limit tracking
+let rateLimitedUntil: number = 0;
+const RATE_LIMIT_BACKOFF_BASE_MS = 30000; // Start with 30 seconds
+const RATE_LIMIT_MAX_BACKOFF_MS = 300000; // Max 5 minutes
+let consecutiveRateLimits = 0;
+
+// Helper to check if we're rate limited
+function isRateLimited(): boolean {
+  if (Date.now() < rateLimitedUntil) {
+    const remainingSec = Math.round((rateLimitedUntil - Date.now()) / 1000);
+    console.log(`[Zoho API] Rate limited for ${remainingSec} more seconds`);
+    return true;
+  }
+  return false;
+}
+
+// Helper to handle rate limit response and calculate backoff
+function handleRateLimit(): void {
+  consecutiveRateLimits++;
+  const backoffMs = Math.min(
+    RATE_LIMIT_BACKOFF_BASE_MS * Math.pow(2, consecutiveRateLimits - 1),
+    RATE_LIMIT_MAX_BACKOFF_MS
+  );
+  rateLimitedUntil = Date.now() + backoffMs;
+  console.log(`[Zoho API] Rate limited - backing off for ${Math.round(backoffMs / 1000)} seconds (attempt ${consecutiveRateLimits})`);
+}
+
+// Reset rate limit tracking on success
+function resetRateLimitTracking(): void {
+  if (consecutiveRateLimits > 0) {
+    console.log(`[Zoho API] Rate limit cleared after ${consecutiveRateLimits} consecutive limits`);
+  }
+  consecutiveRateLimits = 0;
+  rateLimitedUntil = 0;
+}
+
+// Retry helper with exponential backoff
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  options: { 
+    maxRetries?: number; 
+    initialDelayMs?: number;
+    operationName?: string;
+  } = {}
+): Promise<T> {
+  const { maxRetries = 3, initialDelayMs = 1000, operationName = "operation" } = options;
+  
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // Check rate limit before attempting - wait the full duration
+    if (isRateLimited()) {
+      const waitTime = rateLimitedUntil - Date.now();
+      if (waitTime > 0) {
+        console.log(`[Zoho API] Waiting ${Math.round(waitTime / 1000)}s for rate limit before ${operationName}`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
+    
+    try {
+      const result = await fn();
+      resetRateLimitTracking();
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      // Check if this is a rate limit error
+      const isRateLimitError = lastError.message.includes("too many requests") ||
+                               lastError.message.includes("Access Denied") ||
+                               lastError.message.includes("rate limit");
+      
+      if (isRateLimitError) {
+        handleRateLimit();
+        
+        if (attempt < maxRetries) {
+          const waitTime = rateLimitedUntil - Date.now();
+          if (waitTime > 0) {
+            console.log(`[Zoho API] ${operationName} rate limited, waiting ${Math.round(waitTime / 1000)}s before retry ${attempt + 1}/${maxRetries}`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
+        }
+      }
+      
+      // Regular backoff for other errors (non-rate-limit)
+      if (attempt < maxRetries && !isRateLimitError) {
+        const delay = Math.min(initialDelayMs * Math.pow(2, attempt), RATE_LIMIT_MAX_BACKOFF_MS);
+        console.log(`[Zoho API] ${operationName} failed, retrying in ${Math.round(delay / 1000)}s (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError || new Error(`${operationName} failed after ${maxRetries} retries`);
+}
+
+// Exported helper for making rate-limit-aware API calls
+export async function zohoApiRequest<T>(
+  requestFn: () => Promise<Response>,
+  options: { operationName?: string } = {}
+): Promise<T> {
+  const { operationName = "API request" } = options;
+  
+  return retryWithBackoff(
+    async () => {
+      // Ensure we have a valid token before making the request
+      await getAccessToken();
+      const response = await requestFn();
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        
+        // Handle rate limit responses
+        if (response.status === 429 || errorText.includes("too many requests")) {
+          throw new Error(`Rate limit: ${errorText}`);
+        }
+        
+        throw new Error(`API error (${response.status}): ${errorText}`);
+      }
+      
+      return response.json() as Promise<T>;
+    },
+    { maxRetries: 3, initialDelayMs: 2000, operationName }
+  );
+}
+
 async function getAccessToken(): Promise<string> {
   if (cachedAccessToken && Date.now() < tokenExpiresAt - 60000) {
     return cachedAccessToken;
@@ -100,29 +226,34 @@ async function getAccessToken(): Promise<string> {
     throw new Error("Zoho credentials not configured");
   }
 
-  const params = new URLSearchParams({
-    refresh_token: refreshToken,
-    client_id: clientId,
-    client_secret: clientSecret,
-    grant_type: "refresh_token",
-  });
+  return retryWithBackoff(
+    async () => {
+      const params = new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "refresh_token",
+      });
 
-  const response = await fetch("https://accounts.zoho.com/oauth/v2/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params.toString(),
-  });
+      const response = await fetch("https://accounts.zoho.com/oauth/v2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+      });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to refresh Zoho token: ${errorText}`);
-  }
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to refresh Zoho token: ${errorText}`);
+      }
 
-  const data: ZohoTokenResponse = await response.json();
-  cachedAccessToken = data.access_token;
-  tokenExpiresAt = Date.now() + data.expires_in * 1000;
+      const data: ZohoTokenResponse = await response.json();
+      cachedAccessToken = data.access_token;
+      tokenExpiresAt = Date.now() + data.expires_in * 1000;
 
-  return cachedAccessToken;
+      return cachedAccessToken;
+    },
+    { maxRetries: 3, initialDelayMs: 2000, operationName: "token refresh" }
+  );
 }
 
 interface FetchZohoItemsOptions {

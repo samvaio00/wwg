@@ -3,6 +3,57 @@ import { products, users, categories } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { UserStatus } from "@shared/schema";
 import { recordWebhookEvent } from "./webhook-stats";
+import { fetchProductImageWithFallback } from "./zoho-service";
+
+// Queue for background image fetches from webhooks
+const imageDownloadQueue: Array<{ zohoItemId: string; zohoGroupId: string | null; productName: string }> = [];
+let isProcessingImageQueue = false;
+
+// Process image download queue in background
+async function processImageQueue(): Promise<void> {
+  if (isProcessingImageQueue || imageDownloadQueue.length === 0) {
+    return;
+  }
+  
+  isProcessingImageQueue = true;
+  console.log(`[Webhook Image Queue] Processing ${imageDownloadQueue.length} images in background`);
+  
+  while (imageDownloadQueue.length > 0) {
+    const item = imageDownloadQueue.shift();
+    if (!item) continue;
+    
+    try {
+      const result = await fetchProductImageWithFallback(item.zohoItemId, item.zohoGroupId);
+      if (result) {
+        console.log(`[Webhook Image Queue] Downloaded image for ${item.productName} (${item.zohoItemId})`);
+      } else {
+        console.log(`[Webhook Image Queue] No image available for ${item.productName} (${item.zohoItemId})`);
+      }
+    } catch (error) {
+      console.error(`[Webhook Image Queue] Error downloading image for ${item.productName}:`, error);
+    }
+    
+    // Rate limit: 500ms between image fetches
+    if (imageDownloadQueue.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  
+  isProcessingImageQueue = false;
+  console.log(`[Webhook Image Queue] Queue processing complete`);
+}
+
+// Add item to image download queue
+function queueImageDownload(zohoItemId: string, zohoGroupId: string | null, productName: string): void {
+  // Avoid duplicates
+  if (!imageDownloadQueue.some(item => item.zohoItemId === zohoItemId)) {
+    imageDownloadQueue.push({ zohoItemId, zohoGroupId, productName });
+    console.log(`[Webhook Image Queue] Queued image download for ${productName} (${zohoItemId})`);
+    
+    // Start processing if not already running
+    setImmediate(() => processImageQueue());
+  }
+}
 
 interface ZohoItemWebhookPayload {
   action: string;
@@ -148,6 +199,10 @@ export async function handleItemWebhook(
 
       console.log(`[Zoho Webhook] Product updated: ${productData.sku}`);
       recordWebhookEvent("items", action, true, `Updated ${productData.sku}`);
+      
+      // Queue image download in background (non-blocking)
+      queueImageDownload(payload.item_id, payload.group_id || null, productData.name);
+      
       return {
         success: true,
         action,
@@ -169,6 +224,10 @@ export async function handleItemWebhook(
 
       console.log(`[Zoho Webhook] Product created: ${productData.sku}`);
       recordWebhookEvent("items", action, true, `Created ${productData.sku}`);
+      
+      // Queue image download in background (non-blocking)
+      queueImageDownload(payload.item_id, payload.group_id || null, productData.name);
+      
       return {
         success: true,
         action,
@@ -385,9 +444,9 @@ function checkAndRecordProcessed(type: "invoice" | "bill", id: string, status: s
   // Clean old entries if cache is large
   if (processedWebhooks.size > MAX_CACHE_SIZE) {
     const cutoff = new Date(Date.now() - CACHE_TTL_MS);
-    for (const [k, v] of processedWebhooks) {
+    Array.from(processedWebhooks.entries()).forEach(([k, v]) => {
       if (v < cutoff) processedWebhooks.delete(k);
-    }
+    });
   }
   
   if (processedWebhooks.has(key)) {

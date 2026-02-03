@@ -2,6 +2,7 @@ import { syncProductsFromZoho, syncCategoriesFromZoho, syncItemGroupsFromZoho } 
 import { syncCustomerStatusFromZoho, syncTopSellersFromZoho } from "./zoho-books-service";
 import { generateProductEmbeddings } from "./ai-service";
 import { sendNewHighlightedItemsEmail, sendNewSkusEmail, sendCartAbandonmentEmails } from "./email-campaign-service";
+import { storage } from "./storage";
 
 interface SchedulerConfig {
   zohoSyncIntervalMinutes: number;
@@ -55,6 +56,7 @@ let topSellersInterval: NodeJS.Timeout | null = null;
 let emailCampaignInterval: NodeJS.Timeout | null = null;
 let weeklyZohoBackupInterval: NodeJS.Timeout | null = null;
 let dailyZohoSyncInterval: NodeJS.Timeout | null = null;
+let specialsExpirationInterval: NodeJS.Timeout | null = null;
 let lastZohoSync: Date | null = null;
 let lastCustomerSync: Date | null = null;
 let lastEmbeddingsUpdate: Date | null = null;
@@ -311,6 +313,20 @@ async function runEmailCampaigns() {
   }
 }
 
+async function runSpecialsExpiration() {
+  console.log("[Scheduler] Checking for expired specials...");
+  try {
+    const expiredCount = await storage.expireOldSpecials();
+    if (expiredCount > 0) {
+      console.log(`[Scheduler] Expired ${expiredCount} specials`);
+    } else {
+      console.log("[Scheduler] No specials to expire");
+    }
+  } catch (error) {
+    console.error("[Scheduler] Specials expiration error:", error);
+  }
+}
+
 function scheduleNextTopSellersSync() {
   const msUntilSunday = getMsUntilNextSunday();
   const hoursUntil = Math.round(msUntilSunday / (1000 * 60 * 60));
@@ -495,6 +511,10 @@ export function startScheduler(newConfig?: Partial<SchedulerConfig>) {
   // Schedule email campaigns on Wednesday and Saturday at 9 AM
   scheduleNextEmailCampaign();
 
+  // Schedule specials expiration check (every hour)
+  console.log(`[Scheduler]   Specials expiration: every 60 minutes`);
+  specialsExpirationInterval = setInterval(runSpecialsExpiration, 60 * 60 * 1000);
+
   setTimeout(() => {
     console.log("[Scheduler] Running initial sync on startup...");
     const initialSyncPromise = config.enableFrequentZohoSync
@@ -524,6 +544,11 @@ export function stopScheduler() {
     clearTimeout(weeklyZohoBackupInterval);
     weeklyZohoBackupInterval = null;
     console.log("[Scheduler] Weekly Zoho backup stopped");
+  }
+  if (specialsExpirationInterval) {
+    clearInterval(specialsExpirationInterval);
+    specialsExpirationInterval = null;
+    console.log("[Scheduler] Specials expiration stopped");
   }
   if (customerSyncInterval) {
     clearInterval(customerSyncInterval);

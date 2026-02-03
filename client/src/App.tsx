@@ -28,6 +28,7 @@ import RegisterPage from "@/pages/register";
 import HomePage from "@/pages/home";
 import WhatsNewPage from "@/pages/whats-new";
 import TopSellersPage from "@/pages/top-sellers";
+import SpecialsPage from "@/pages/specials";
 import OrderHistoryPage from "@/pages/order-history";
 import ProfilePage from "@/pages/profile";
 import ContactPage from "@/pages/contact";
@@ -251,6 +252,7 @@ function AppRouter() {
         <Route path="/" component={HomePage} />
         <Route path="/whats-new" component={WhatsNewPage} />
         <Route path="/top-sellers" component={TopSellersPage} />
+        <Route path="/specials" component={SpecialsPage} />
         <Route path="/order-history" component={OrderHistoryPage} />
         <Route path="/profile" component={ProfilePage} />
         <Route path="/contact" component={ContactPage} />

@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Package, Plus, Minus, Check, ShoppingCart, Layers } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { Package, Plus, Minus, Check, ShoppingCart, Layers, RefreshCw } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import type { Product } from "@shared/schema";
@@ -170,11 +171,14 @@ function VariantCard({
 
 export function ProductDetailModal({ product, open, onOpenChange }: ProductDetailModalProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [quantity, setQuantity] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
   const [variantsInStockOnly, setVariantsInStockOnly] = useState(false);
+  const [imageKey, setImageKey] = useState(0);
 
   const isGroupedProduct = !!product?.zohoGroupId;
+  const isAdminOrStaff = user?.role === "admin" || user?.role === "staff";
 
   const { data: groupData, isLoading: isLoadingGroup } = useQuery<{ products: Product[] }>({
     queryKey: ["/api/products/group", product?.zohoGroupId],
@@ -216,6 +220,31 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
       toast({
         title: "Unable to add to cart",
         description: error.message || "Failed to add product to cart.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const refreshImageMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const res = await apiRequest("POST", `/api/admin/products/${productId}/refresh-image`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to refresh image");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setImageKey(prev => prev + 1);
+      toast({
+        title: data.success ? "Image Refreshed" : "No Image",
+        description: data.message,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to refresh image",
         variant: "destructive",
       });
     },
@@ -269,8 +298,21 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
         </DialogHeader>
         
         <div className="grid gap-4 md:grid-cols-2 flex-shrink-0">
-          <div className="h-36 md:h-44">
-            <ProductImage product={product} isOutOfStock={isOutOfStock} />
+          <div className="h-36 md:h-44 relative">
+            <ProductImage key={imageKey} product={product} isOutOfStock={isOutOfStock} />
+            {isAdminOrStaff && product.zohoItemId && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="absolute bottom-2 right-2 h-8 w-8 bg-background/80 backdrop-blur-sm"
+                onClick={() => refreshImageMutation.mutate(product.id)}
+                disabled={refreshImageMutation.isPending}
+                title="Refresh image from Zoho"
+                data-testid="button-refresh-image"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshImageMutation.isPending ? "animate-spin" : ""}`} />
+              </Button>
+            )}
           </div>
           
           <div className="space-y-4">

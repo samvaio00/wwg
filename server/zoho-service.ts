@@ -466,6 +466,13 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual", force
                 updatedAt: new Date(),
               });
               result.created++;
+              
+              // Download image for new product (don't wait to avoid blocking sync)
+              if (item.item_id && !hasLocalImage(item.item_id)) {
+                fetchZohoProductImage(item.item_id).catch(() => {
+                  // Silently fail - image can be downloaded later
+                });
+              }
             }
           } catch (err) {
             result.errors.push(`Item ${item.item_id}: ${err instanceof Error ? err.message : "Unknown error"}`);

@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { RefreshCw, CheckCircle, XCircle, Loader2, Package, AlertTriangle, Clock, RotateCcw, Play, Webhook, Radio, Calendar } from "lucide-react";
+import { RefreshCw, CheckCircle, XCircle, Loader2, Package, AlertTriangle, Clock, RotateCcw, Play, Webhook, Radio, Calendar, Image, Download } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 interface ZohoStats {
   today: {
@@ -101,10 +102,22 @@ interface SchedulerStatus {
   };
 }
 
+interface ImageSyncStatus {
+  isRunning: boolean;
+  processed: number;
+  total: number;
+  downloaded: number;
+  skipped: number;
+  errors: number;
+  startedAt: string | null;
+}
+
 export default function AdminZohoStatus() {
   const { toast } = useToast();
   const [lastSyncResult, setLastSyncResult] = useState<SyncResult | null>(null);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [singleProductId, setSingleProductId] = useState("");
+  const [groupId, setGroupId] = useState("");
 
   const { data: zohoStats, isLoading, refetch, isFetching } = useQuery<ZohoStats>({
     queryKey: ['/api/admin/analytics/zoho-api-stats'],
@@ -125,6 +138,76 @@ export default function AdminZohoStatus() {
   const { data: schedulerStatus } = useQuery<SchedulerStatus>({
     queryKey: ["/api/admin/scheduler/status"],
     refetchOnWindowFocus: false,
+  });
+
+  const { data: imageSyncStatus, refetch: refetchImageStatus } = useQuery<ImageSyncStatus>({
+    queryKey: ["/api/admin/images/sync-status"],
+    refetchInterval: (query) => {
+      return query.state.data?.isRunning ? 2000 : false;
+    },
+  });
+
+  const bulkImageSyncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/images/sync", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchImageStatus();
+      toast({
+        title: "Image Sync Started",
+        description: "Downloading product images in the background. This may take a while due to rate limiting.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Image Sync Failed",
+        description: error instanceof Error ? error.message : "Failed to start image sync",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const singleImageRefreshMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const res = await apiRequest("POST", `/api/admin/products/${productId}/refresh-image`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({
+        title: "Image Refreshed",
+        description: data.message || "Product image has been refreshed",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Image Refresh Failed",
+        description: error instanceof Error ? error.message : "Failed to refresh image",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const groupImageRefreshMutation = useMutation({
+    mutationFn: async (zohoGroupId: string) => {
+      const res = await apiRequest("POST", `/api/admin/groups/${zohoGroupId}/refresh-images`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({
+        title: "Group Images Refreshed",
+        description: `Refreshed images for ${data.updated || 0} products in the group`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Group Image Refresh Failed",
+        description: error instanceof Error ? error.message : "Failed to refresh group images",
+        variant: "destructive",
+      });
+    },
   });
 
   const retryJobMutation = useMutation({
@@ -363,6 +446,146 @@ export default function AdminZohoStatus() {
               )}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Image Management */}
+      <Card data-testid="card-image-management">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Image className="h-5 w-5" />
+            Product Image Management
+          </CardTitle>
+          <CardDescription>
+            Download and refresh product images from Zoho Inventory
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Bulk Image Sync */}
+          <div className="space-y-3">
+            <h4 className="font-medium text-sm">Bulk Image Sync</h4>
+            <div className="flex flex-wrap items-center gap-4">
+              <Button
+                onClick={() => bulkImageSyncMutation.mutate()}
+                disabled={bulkImageSyncMutation.isPending || imageSyncStatus?.isRunning}
+                data-testid="button-bulk-image-sync"
+              >
+                {bulkImageSyncMutation.isPending || imageSyncStatus?.isRunning ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {imageSyncStatus?.isRunning ? "Syncing..." : "Starting..."}
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download All Images
+                  </>
+                )}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Download images for all products from Zoho (runs in background)
+              </span>
+            </div>
+            {imageSyncStatus?.isRunning && (
+              <div className="p-3 rounded-lg border bg-muted/30 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-sm font-medium">Image sync in progress...</span>
+                </div>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p>Processed: {imageSyncStatus.processed} / {imageSyncStatus.total}</p>
+                  <p>Downloaded: {imageSyncStatus.downloaded} | Skipped: {imageSyncStatus.skipped} | Errors: {imageSyncStatus.errors}</p>
+                  {imageSyncStatus.startedAt && (
+                    <p>Started: {new Date(imageSyncStatus.startedAt).toLocaleString()}</p>
+                  )}
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div 
+                    className="bg-primary h-2 rounded-full transition-all" 
+                    style={{ width: `${imageSyncStatus.total > 0 ? (imageSyncStatus.processed / imageSyncStatus.total) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            {!imageSyncStatus?.isRunning && imageSyncStatus?.processed && imageSyncStatus.processed > 0 && (
+              <div className="p-3 rounded-lg border bg-green-50 dark:bg-green-950 text-sm">
+                <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Last sync completed: {imageSyncStatus.downloaded} downloaded, {imageSyncStatus.skipped} skipped, {imageSyncStatus.errors} errors</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Single Product Image Refresh */}
+          <div className="space-y-3 pt-4 border-t">
+            <h4 className="font-medium text-sm">Refresh Single Product Image</h4>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="text"
+                placeholder="Product ID (UUID)"
+                value={singleProductId}
+                onChange={(e) => setSingleProductId(e.target.value)}
+                className="w-80"
+                data-testid="input-product-id"
+              />
+              <Button
+                onClick={() => {
+                  if (singleProductId.trim()) {
+                    singleImageRefreshMutation.mutate(singleProductId.trim());
+                    setSingleProductId("");
+                  }
+                }}
+                disabled={singleImageRefreshMutation.isPending || !singleProductId.trim()}
+                variant="outline"
+                data-testid="button-refresh-single-image"
+              >
+                {singleImageRefreshMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Enter a product UUID to refresh its image from Zoho
+            </p>
+          </div>
+
+          {/* Group Image Refresh */}
+          <div className="space-y-3 pt-4 border-t">
+            <h4 className="font-medium text-sm">Refresh Item Group Images</h4>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="text"
+                placeholder="Zoho Group ID (e.g., 1424313000183487445)"
+                value={groupId}
+                onChange={(e) => setGroupId(e.target.value)}
+                className="w-80"
+                data-testid="input-group-id"
+              />
+              <Button
+                onClick={() => {
+                  if (groupId.trim()) {
+                    groupImageRefreshMutation.mutate(groupId.trim());
+                    setGroupId("");
+                  }
+                }}
+                disabled={groupImageRefreshMutation.isPending || !groupId.trim()}
+                variant="outline"
+                data-testid="button-refresh-group-images"
+              >
+                {groupImageRefreshMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Enter a Zoho Group ID to refresh images for all products in that group
+            </p>
+          </div>
         </CardContent>
       </Card>
 

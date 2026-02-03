@@ -18,6 +18,8 @@ import {
   type TopSellerCache,
   type EmailCampaignTemplate,
   type InsertEmailCampaignTemplate,
+  type Special,
+  type InsertSpecial,
   users,
   products,
   carts,
@@ -32,6 +34,7 @@ import {
   zohoApiLogs,
   topSellersCache,
   emailCampaignTemplates,
+  specials,
   EmailTemplateStatus,
   toSafeUser,
   UserRole,
@@ -154,6 +157,16 @@ export interface IStorage {
   approveEmailTemplate(id: string, approvedById: string): Promise<EmailCampaignTemplate | undefined>;
   rejectEmailTemplate(id: string, reason: string): Promise<EmailCampaignTemplate | undefined>;
   deleteEmailTemplate(id: string): Promise<boolean>;
+  
+  // Specials/Closeouts operations
+  getActiveSpecials(): Promise<Special[]>;
+  getAllSpecials(): Promise<Special[]>;
+  getSpecialByGroupId(zohoGroupId: string): Promise<Special | undefined>;
+  createSpecial(special: { zohoGroupId: string; zohoGroupName: string; specialPrice: string; originalPrice: string; createdBy?: string }): Promise<Special>;
+  updateSpecial(id: string, updates: Partial<InsertSpecial>): Promise<Special | undefined>;
+  deleteSpecial(id: string): Promise<boolean>;
+  expireOldSpecials(): Promise<number>;
+  getProductGroups(): Promise<{ zohoGroupId: string; zohoGroupName: string; basePrice: string }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1628,6 +1641,102 @@ export class DatabaseStorage implements IStorage {
     const result = await db.delete(emailCampaignTemplates)
       .where(eq(emailCampaignTemplates.id, id));
     return true;
+  }
+
+  // Specials/Closeouts operations
+  async getActiveSpecials(): Promise<Special[]> {
+    const now = new Date();
+    return db.select()
+      .from(specials)
+      .where(
+        and(
+          eq(specials.isActive, true),
+          lte(specials.startAt, now),
+          gte(specials.endAt, now)
+        )
+      )
+      .orderBy(desc(specials.createdAt));
+  }
+
+  async getAllSpecials(): Promise<Special[]> {
+    return db.select()
+      .from(specials)
+      .orderBy(desc(specials.createdAt));
+  }
+
+  async getSpecialByGroupId(zohoGroupId: string): Promise<Special | undefined> {
+    const [special] = await db.select()
+      .from(specials)
+      .where(eq(specials.zohoGroupId, zohoGroupId));
+    return special;
+  }
+
+  async createSpecial(special: { zohoGroupId: string; zohoGroupName: string; specialPrice: string; originalPrice: string; createdBy?: string }): Promise<Special> {
+    const now = new Date();
+    const twoWeeksFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    
+    const [created] = await db.insert(specials)
+      .values({
+        zohoGroupId: special.zohoGroupId,
+        zohoGroupName: special.zohoGroupName,
+        specialPrice: special.specialPrice,
+        originalPrice: special.originalPrice,
+        startAt: now,
+        endAt: twoWeeksFromNow,
+        isActive: true,
+        createdBy: special.createdBy || null,
+      })
+      .returning();
+    return created;
+  }
+
+  async updateSpecial(id: string, updates: Partial<InsertSpecial>): Promise<Special | undefined> {
+    const [updated] = await db.update(specials)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(specials.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSpecial(id: string): Promise<boolean> {
+    await db.delete(specials).where(eq(specials.id, id));
+    return true;
+  }
+
+  async expireOldSpecials(): Promise<number> {
+    const now = new Date();
+    const result = await db.update(specials)
+      .set({ isActive: false, updatedAt: now })
+      .where(
+        and(
+          eq(specials.isActive, true),
+          lte(specials.endAt, now)
+        )
+      )
+      .returning();
+    return result.length;
+  }
+
+  async getProductGroups(): Promise<{ zohoGroupId: string; zohoGroupName: string; basePrice: string }[]> {
+    const result = await db.selectDistinct({
+      zohoGroupId: products.zohoGroupId,
+      zohoGroupName: products.zohoGroupName,
+      basePrice: products.basePrice
+    })
+      .from(products)
+      .where(
+        and(
+          sql`${products.zohoGroupId} IS NOT NULL`,
+          eq(products.isActive, true),
+          eq(products.isOnline, true)
+        )
+      )
+      .orderBy(asc(products.zohoGroupName));
+    
+    return result.filter(r => r.zohoGroupId && r.zohoGroupName) as { zohoGroupId: string; zohoGroupName: string; basePrice: string }[];
   }
 }
 

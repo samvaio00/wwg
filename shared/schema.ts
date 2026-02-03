@@ -220,6 +220,49 @@ export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Category = typeof categories.$inferSelect;
 
 // ================================================================
+// SPECIALS TABLE (Closeouts/Special Pricing)
+// ================================================================
+
+export const specials = pgTable("specials", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Product group identification (using zohoGroupId to mark entire groups as special)
+  zohoGroupId: text("zoho_group_id").notNull().unique(),
+  zohoGroupName: text("zoho_group_name").notNull(),
+  
+  // Special pricing
+  specialPrice: decimal("special_price", { precision: 10, scale: 2 }).notNull(),
+  originalPrice: decimal("original_price", { precision: 10, scale: 2 }).notNull(),
+  
+  // Duration (2 weeks from creation by default)
+  startAt: timestamp("start_at").defaultNow().notNull(),
+  endAt: timestamp("end_at").notNull(),
+  
+  // Status
+  isActive: boolean("is_active").default(true),
+  
+  // Audit
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  groupIdx: index("specials_group_idx").on(table.zohoGroupId),
+  activeIdx: index("specials_active_idx").on(table.isActive),
+  endAtIdx: index("specials_end_at_idx").on(table.endAt),
+}));
+
+export const insertSpecialSchema = createInsertSchema(specials).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSpecial = z.infer<typeof insertSpecialSchema>;
+export type Special = typeof specials.$inferSelect;
+
+// ================================================================
 // CARTS TABLE
 // ================================================================
 

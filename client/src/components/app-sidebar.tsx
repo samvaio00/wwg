@@ -27,6 +27,7 @@ import {
   Mail,
   RefreshCw,
   Star,
+  Percent,
 } from "lucide-react";
 import type { Category } from "@shared/schema";
 
@@ -65,6 +66,11 @@ const adminNavItems = [
     title: "Highlighted Products",
     url: "/admin/highlighted-products",
     icon: Star,
+  },
+  {
+    title: "Specials / Closeouts",
+    url: "/admin/specials",
+    icon: Percent,
   },
   {
     title: "Zoho Status",
@@ -108,6 +114,11 @@ const staffNavItems = [
     title: "Highlighted Products",
     url: "/admin/highlighted-products",
     icon: Star,
+  },
+  {
+    title: "Specials / Closeouts",
+    url: "/admin/specials",
+    icon: Percent,
   },
   {
     title: "Settings",
@@ -209,6 +220,18 @@ export function AppSidebar() {
                       <Link href="/top-sellers">
                         <TrendingUp className="h-4 w-4" />
                         <span>Top Sellers</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location === "/specials"}
+                      data-testid="nav-specials"
+                    >
+                      <Link href="/specials">
+                        <Percent className="h-4 w-4" />
+                        <span>Specials/Closeouts</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

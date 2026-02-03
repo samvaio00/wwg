@@ -2639,6 +2639,147 @@ export async function registerRoutes(
   });
 
   // ================================================================
+  // SPECIALS / CLOSEOUTS ROUTES
+  // ================================================================
+
+  // Get active specials (customer-facing)
+  app.get("/api/specials", async (_req, res) => {
+    try {
+      const activeSpecials = await storage.getActiveSpecials();
+      
+      // Get products for each special group
+      const specialsWithProducts = await Promise.all(
+        activeSpecials.map(async (special) => {
+          const products = await storage.getProductsByGroupId(special.zohoGroupId);
+          return {
+            ...special,
+            products: products.filter(p => p.isOnline && p.isActive)
+          };
+        })
+      );
+      
+      res.json({ specials: specialsWithProducts });
+    } catch (error) {
+      console.error("Error fetching specials:", error);
+      res.status(500).json({ message: "Failed to fetch specials" });
+    }
+  });
+
+  // Get all specials (admin)
+  app.get("/api/admin/specials", requireStaffOrAdmin, async (_req, res) => {
+    try {
+      const allSpecials = await storage.getAllSpecials();
+      res.json({ specials: allSpecials });
+    } catch (error) {
+      console.error("Error fetching all specials:", error);
+      res.status(500).json({ message: "Failed to fetch specials" });
+    }
+  });
+
+  // Get product groups for selection (admin)
+  app.get("/api/admin/specials/groups", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const search = req.query.search as string | undefined;
+      let groups = await storage.getProductGroups();
+      
+      // Filter by search term if provided
+      if (search) {
+        const searchLower = search.toLowerCase();
+        groups = groups.filter(g => 
+          g.zohoGroupName.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      // Get existing specials to mark which groups already have specials
+      const existingSpecials = await storage.getAllSpecials();
+      const specialGroupIds = new Set(existingSpecials.map(s => s.zohoGroupId));
+      
+      const groupsWithStatus = groups.map(g => ({
+        ...g,
+        hasActiveSpecial: specialGroupIds.has(g.zohoGroupId)
+      }));
+      
+      res.json({ groups: groupsWithStatus });
+    } catch (error) {
+      console.error("Error fetching product groups:", error);
+      res.status(500).json({ message: "Failed to fetch product groups" });
+    }
+  });
+
+  // Create a new special (admin)
+  app.post("/api/admin/specials", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { zohoGroupId, zohoGroupName, specialPrice, originalPrice } = req.body;
+      
+      if (!zohoGroupId || !zohoGroupName || !specialPrice || !originalPrice) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      // Check if special already exists for this group
+      const existing = await storage.getSpecialByGroupId(zohoGroupId);
+      if (existing) {
+        return res.status(400).json({ message: "A special already exists for this product group" });
+      }
+      
+      const special = await storage.createSpecial({
+        zohoGroupId,
+        zohoGroupName,
+        specialPrice: specialPrice.toString(),
+        originalPrice: originalPrice.toString(),
+        createdBy: req.user?.id
+      });
+      
+      res.status(201).json({ special });
+    } catch (error) {
+      console.error("Error creating special:", error);
+      res.status(500).json({ message: "Failed to create special" });
+    }
+  });
+
+  // Update a special (admin)
+  app.patch("/api/admin/specials/:id", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { specialPrice, isActive } = req.body;
+      
+      const updates: any = {};
+      if (specialPrice !== undefined) updates.specialPrice = specialPrice.toString();
+      if (isActive !== undefined) updates.isActive = isActive;
+      
+      const updated = await storage.updateSpecial(req.params.id, updates);
+      if (!updated) {
+        return res.status(404).json({ message: "Special not found" });
+      }
+      
+      res.json({ special: updated });
+    } catch (error) {
+      console.error("Error updating special:", error);
+      res.status(500).json({ message: "Failed to update special" });
+    }
+  });
+
+  // Delete a special (admin)
+  app.delete("/api/admin/specials/:id", requireStaffOrAdmin, async (req, res) => {
+    try {
+      await storage.deleteSpecial(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting special:", error);
+      res.status(500).json({ message: "Failed to delete special" });
+    }
+  });
+
+  // Manually expire old specials (admin)
+  app.post("/api/admin/specials/expire", requireAdmin, async (_req, res) => {
+    try {
+      const expiredCount = await storage.expireOldSpecials();
+      res.json({ success: true, expiredCount });
+    } catch (error) {
+      console.error("Error expiring specials:", error);
+      res.status(500).json({ message: "Failed to expire specials" });
+    }
+  });
+
+  // ================================================================
   // ZOHO WEBHOOKS (Real-time sync from Zoho Inventory and Books)
   // ================================================================
 

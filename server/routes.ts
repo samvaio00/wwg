@@ -21,7 +21,7 @@ import { db } from "./db";
 import { users, products, orders } from "@shared/schema";
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
-import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, syncItemGroupsFromZoho, clearImageCache, syncAllProductImages, refreshProductImage, getImageSyncStatus } from "./zoho-service";
+import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, fetchProductImageWithFallback, syncItemGroupsFromZoho, clearImageCache, syncAllProductImages, refreshProductImage, getImageSyncStatus } from "./zoho-service";
 import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, syncTopSellersFromZoho, type ZohoLineItem } from "./zoho-books-service";
 import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
@@ -992,7 +992,8 @@ export async function registerRoutes(
         return res.status(404).json({ message: "No Zoho item linked" });
       }
       
-      const imageData = await fetchZohoProductImage(product.zohoItemId);
+      // Use fallback logic: try item image first, then group image
+      const imageData = await fetchProductImageWithFallback(product.zohoItemId, product.zohoGroupId || null);
       if (!imageData) {
         return res.status(404).json({ message: "No image available" });
       }
@@ -2099,7 +2100,7 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, message: "Product has no Zoho item ID" });
       }
       
-      const success = await refreshProductImage(product.zohoItemId);
+      const success = await refreshProductImage(product.zohoItemId, product.zohoGroupId);
       res.json({
         success,
         message: success ? "Image refreshed successfully" : "No image available for this product",
@@ -2132,7 +2133,7 @@ export async function registerRoutes(
         }
         
         try {
-          const success = await refreshProductImage(product.zohoItemId);
+          const success = await refreshProductImage(product.zohoItemId, product.zohoGroupId);
           if (success) {
             results.success++;
           } else {
@@ -2142,8 +2143,8 @@ export async function registerRoutes(
           results.failed++;
         }
         
-        // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Small delay to avoid rate limiting (longer for groups to allow item + group attempts)
+        await new Promise(resolve => setTimeout(resolve, 800));
       }
       
       res.json({

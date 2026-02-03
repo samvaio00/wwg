@@ -468,8 +468,9 @@ export async function syncProductsFromZoho(triggeredBy: string = "manual", force
               result.created++;
               
               // Download image for new product (don't wait to avoid blocking sync)
+              // Use fallback logic: try item image first, then group image
               if (item.item_id && !hasLocalImage(item.item_id)) {
-                fetchZohoProductImage(item.item_id).catch(() => {
+                fetchProductImageWithFallback(item.item_id, item.group_id || null).catch(() => {
                   // Silently fail - image can be downloaded later
                 });
               }
@@ -1053,6 +1054,143 @@ function deleteLocalImage(zohoItemId: string): void {
   }
 }
 
+// Track items/groups known to have no image (in-memory cache to reduce API calls)
+const noImageGroups = new Set<string>();
+
+// Fetch image from Zoho item group endpoint
+async function fetchZohoGroupImageRaw(groupId: string): Promise<Buffer | null> {
+  if (noImageGroups.has(groupId)) {
+    return null;
+  }
+  
+  try {
+    const accessToken = await getAccessToken();
+    const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
+
+    if (!organizationId) {
+      return null;
+    }
+
+    const url = `https://www.zohoapis.com/inventory/v1/itemgroups/${groupId}/image?organization_id=${organizationId}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+      },
+    });
+
+    await logZohoApiCall("/inventory/v1/itemgroups/image", "GET", response.status, response.ok, response.ok ? undefined : `Status: ${response.status}`);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        noImageGroups.add(groupId);
+        return null;
+      }
+      
+      const errorText = await response.text().catch(() => '');
+      if (response.status === 400 && errorText.includes('Attachment not found')) {
+        noImageGroups.add(groupId);
+        return null;
+      }
+      
+      if (response.status === 429) {
+        console.log(`[Zoho Image] Rate limited for group ${groupId}, will retry later`);
+        return null;
+      }
+      
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (error) {
+    console.error(`[Zoho Image] Error fetching group image for ${groupId}:`, error);
+    return null;
+  }
+}
+
+// Fetch image from Zoho item endpoint (raw, without local cache check)
+async function fetchZohoItemImageRaw(itemId: string): Promise<Buffer | null> {
+  if (noImageItems.has(itemId)) {
+    return null;
+  }
+  
+  try {
+    const accessToken = await getAccessToken();
+    const organizationId = process.env.ZOHO_ORG_ID || process.env.ZOHO_ORGANIZATION_ID;
+
+    if (!organizationId) {
+      return null;
+    }
+
+    const url = `https://www.zohoapis.com/inventory/v1/items/${itemId}/image?organization_id=${organizationId}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+      },
+    });
+
+    await logZohoApiCall("/inventory/v1/items/image", "GET", response.status, response.ok, response.ok ? undefined : `Status: ${response.status}`);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        noImageItems.add(itemId);
+        return null;
+      }
+      
+      const errorText = await response.text().catch(() => '');
+      if (response.status === 400 && errorText.includes('Attachment not found')) {
+        noImageItems.add(itemId);
+        return null;
+      }
+      
+      if (response.status === 429) {
+        console.log(`[Zoho Image] Rate limited for item ${itemId}, will retry later`);
+        return null;
+      }
+      
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (error) {
+    console.error(`[Zoho Image] Error fetching item image for ${itemId}:`, error);
+    return null;
+  }
+}
+
+// Fetch image for a product, trying item-level first, then group-level as fallback
+export async function fetchProductImageWithFallback(
+  zohoItemId: string, 
+  zohoGroupId: string | null
+): Promise<{ data: Buffer; contentType: string } | null> {
+  // Check for local image first
+  const localImage = getLocalImage(zohoItemId);
+  if (localImage) {
+    return localImage;
+  }
+  
+  // Try item-level image first (each variant can have its own image)
+  let imageData = await fetchZohoItemImageRaw(zohoItemId);
+  
+  // If no item image and product is in a group, try group image
+  if (!imageData && zohoGroupId) {
+    imageData = await fetchZohoGroupImageRaw(zohoGroupId);
+    if (imageData) {
+      console.log(`[Zoho Image] Using group image for item ${zohoItemId} from group ${zohoGroupId}`);
+    }
+  }
+  
+  if (imageData) {
+    saveLocalImage(zohoItemId, imageData);
+    return { data: imageData, contentType: "image/jpeg" };
+  }
+  
+  return null;
+}
+
 export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data: Buffer; contentType: string } | null> {
   // Check if item is known to have no image (in-memory cache only)
   if (noImageItems.has(zohoItemId)) {
@@ -1129,17 +1267,21 @@ export async function fetchZohoProductImage(zohoItemId: string): Promise<{ data:
 // Function to clear image cache (useful for admin)
 export function clearImageCache(): void {
   noImageItems.clear();
-  console.log("[Zoho Image] No-image tracking cleared");
+  noImageGroups.clear();
+  console.log("[Zoho Image] No-image tracking cleared (items and groups)");
 }
 
 // Function to refresh a single product image from Zoho
-export async function refreshProductImage(zohoItemId: string): Promise<boolean> {
+export async function refreshProductImage(zohoItemId: string, zohoGroupId?: string | null): Promise<boolean> {
   // Delete local image to force re-fetch
   deleteLocalImage(zohoItemId);
   noImageItems.delete(zohoItemId);
+  if (zohoGroupId) {
+    noImageGroups.delete(zohoGroupId);
+  }
   
-  // Fetch fresh image from Zoho
-  const result = await fetchZohoProductImage(zohoItemId);
+  // Fetch fresh image from Zoho using fallback logic
+  const result = await fetchProductImageWithFallback(zohoItemId, zohoGroupId || null);
   return result !== null;
 }
 
@@ -1191,14 +1333,17 @@ export async function syncAllProductImages(runInBackground = false): Promise<{ d
           if (!product.zohoItemId) continue;
           
           // Add delay to avoid rate limiting (Zoho allows ~60 requests/minute)
-          await new Promise(resolve => setTimeout(resolve, 1200));
+          // Use 1500ms for grouped products since we may make 2 API calls (item + group)
+          const delay = product.zohoGroupId ? 1500 : 1200;
+          await new Promise(resolve => setTimeout(resolve, delay));
           
-          const imageData = await fetchZohoProductImage(product.zohoItemId);
+          // Use new fallback logic: try item image first, then group image
+          const imageData = await fetchProductImageWithFallback(product.zohoItemId, product.zohoGroupId || null);
           imageSyncStatus.progress++;
           
           if (imageData) {
             imageSyncStatus.downloaded++;
-          } else if (noImageItems.has(product.zohoItemId)) {
+          } else if (noImageItems.has(product.zohoItemId) && (!product.zohoGroupId || noImageGroups.has(product.zohoGroupId))) {
             imageSyncStatus.noImage++;
           } else {
             imageSyncStatus.failed++;
@@ -1225,15 +1370,17 @@ export async function syncAllProductImages(runInBackground = false): Promise<{ d
       if (!product.zohoItemId) continue;
       
       // Add delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      const delay = product.zohoGroupId ? 1500 : 1200;
+      await new Promise(resolve => setTimeout(resolve, delay));
       
-      const imageData = await fetchZohoProductImage(product.zohoItemId);
+      // Use new fallback logic: try item image first, then group image
+      const imageData = await fetchProductImageWithFallback(product.zohoItemId, product.zohoGroupId || null);
       imageSyncStatus.progress++;
       
       if (imageData) {
         result.downloaded++;
         imageSyncStatus.downloaded++;
-      } else if (noImageItems.has(product.zohoItemId)) {
+      } else if (noImageItems.has(product.zohoItemId) && (!product.zohoGroupId || noImageGroups.has(product.zohoGroupId))) {
         result.noImage++;
         imageSyncStatus.noImage++;
       } else {

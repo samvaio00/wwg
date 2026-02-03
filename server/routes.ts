@@ -2113,6 +2113,54 @@ export async function registerRoutes(
     }
   });
 
+  // Refresh all images for a product group
+  app.post("/api/admin/groups/:groupId/refresh-images", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { groupId } = req.params;
+      const products = await storage.getProductsByGroupId(groupId);
+      
+      if (products.length === 0) {
+        return res.status(404).json({ success: false, message: "No products found in this group" });
+      }
+      
+      const results = { success: 0, failed: 0, noImage: 0, skipped: 0 };
+      
+      for (const product of products) {
+        if (!product.zohoItemId) {
+          results.skipped++;
+          continue;
+        }
+        
+        try {
+          const success = await refreshProductImage(product.zohoItemId);
+          if (success) {
+            results.success++;
+          } else {
+            results.noImage++;
+          }
+        } catch (err) {
+          results.failed++;
+        }
+        
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      res.json({
+        success: true,
+        message: `Group image sync complete: ${results.success} refreshed, ${results.noImage} no image, ${results.failed} failed, ${results.skipped} skipped`,
+        ...results,
+        totalProducts: products.length,
+      });
+    } catch (error) {
+      console.error("Group image refresh error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
   // ================================================================
   // ANALYTICS (Admin)
   // ================================================================

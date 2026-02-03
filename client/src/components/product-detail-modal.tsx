@@ -250,6 +250,32 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
     },
   });
 
+  const refreshGroupImagesMutation = useMutation({
+    mutationFn: async (groupId: string) => {
+      const res = await apiRequest("POST", `/api/admin/groups/${groupId}/refresh-images`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to refresh group images");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setImageKey(prev => prev + 1);
+      queryClient.invalidateQueries({ queryKey: ["/api/products/group", product?.zohoGroupId] });
+      toast({
+        title: "Group Images Synced",
+        description: data.message,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to sync group images",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!product) return null;
 
   const stockQty = product.stockQuantity || 0;
@@ -438,20 +464,34 @@ export function ProductDetailModal({ product, open, onOpenChange }: ProductDetai
                   ({groupVariants.length}{variantsInStockOnly ? ` of ${allGroupVariants.length}` : ''})
                 </span>
               </h3>
-              <div className="flex items-center gap-2">
-                <Checkbox 
-                  id="variants-in-stock-filter" 
-                  checked={variantsInStockOnly}
-                  onCheckedChange={(checked) => setVariantsInStockOnly(checked === true)}
-                  data-testid="checkbox-variants-in-stock"
-                />
-                <Label 
-                  htmlFor="variants-in-stock-filter" 
-                  className="text-sm cursor-pointer whitespace-nowrap"
-                  data-testid="label-variants-in-stock"
-                >
-                  In Stock Only
-                </Label>
+              <div className="flex items-center gap-3">
+                {isAdminOrStaff && product.zohoGroupId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refreshGroupImagesMutation.mutate(product.zohoGroupId!)}
+                    disabled={refreshGroupImagesMutation.isPending}
+                    data-testid="button-sync-group-images"
+                  >
+                    <RefreshCw className={`h-3 w-3 mr-1 ${refreshGroupImagesMutation.isPending ? "animate-spin" : ""}`} />
+                    {refreshGroupImagesMutation.isPending ? "Syncing..." : "Sync Images"}
+                  </Button>
+                )}
+                <div className="flex items-center gap-2">
+                  <Checkbox 
+                    id="variants-in-stock-filter" 
+                    checked={variantsInStockOnly}
+                    onCheckedChange={(checked) => setVariantsInStockOnly(checked === true)}
+                    data-testid="checkbox-variants-in-stock"
+                  />
+                  <Label 
+                    htmlFor="variants-in-stock-filter" 
+                    className="text-sm cursor-pointer whitespace-nowrap"
+                    data-testid="label-variants-in-stock"
+                  >
+                    In Stock Only
+                  </Label>
+                </div>
               </div>
             </div>
             {isLoadingGroup ? (

@@ -1136,42 +1136,110 @@ export async function refreshProductImage(zohoItemId: string): Promise<boolean> 
   return result !== null;
 }
 
-// Function to sync all product images from Zoho (bulk download)
-export async function syncAllProductImages(): Promise<{ downloaded: number; skipped: number; failed: number; noImage: number }> {
+// Track sync status for background sync
+let imageSyncStatus = { running: false, progress: 0, total: 0, downloaded: 0, skipped: 0, failed: 0, noImage: 0 };
+
+export function getImageSyncStatus() {
+  return { ...imageSyncStatus };
+}
+
+// Function to sync all product images from Zoho (bulk download - runs in background)
+export async function syncAllProductImages(runInBackground = false): Promise<{ downloaded: number; skipped: number; failed: number; noImage: number; message?: string }> {
+  if (imageSyncStatus.running) {
+    return { 
+      downloaded: imageSyncStatus.downloaded, 
+      skipped: imageSyncStatus.skipped, 
+      failed: imageSyncStatus.failed, 
+      noImage: imageSyncStatus.noImage,
+      message: `Sync already in progress: ${imageSyncStatus.progress}/${imageSyncStatus.total}`
+    };
+  }
+  
   const result = { downloaded: 0, skipped: 0, failed: 0, noImage: 0 };
   
   try {
     // Get all products with Zoho item IDs
-    const allProducts = await storage.getAllProducts();
+    const { products: allProducts } = await storage.getProducts({ includeOffline: true, limit: 10000 });
     const productsWithZoho = allProducts.filter(p => p.zohoItemId);
     
-    console.log(`[Image Sync] Starting sync for ${productsWithZoho.length} products with Zoho IDs`);
+    // Count how many need syncing
+    const needsSync = productsWithZoho.filter(p => p.zohoItemId && !hasLocalImage(p.zohoItemId));
+    result.skipped = productsWithZoho.length - needsSync.length;
     
-    for (const product of productsWithZoho) {
+    if (needsSync.length === 0) {
+      console.log(`[Image Sync] All ${productsWithZoho.length} products already have local images`);
+      return result;
+    }
+    
+    console.log(`[Image Sync] Starting sync: ${needsSync.length} to download, ${result.skipped} already cached`);
+    
+    // Update status
+    imageSyncStatus = { running: true, progress: 0, total: needsSync.length, downloaded: 0, skipped: result.skipped, failed: 0, noImage: 0 };
+    
+    // If running in background, return immediately
+    if (runInBackground) {
+      // Run sync in background
+      (async () => {
+        for (const product of needsSync) {
+          if (!product.zohoItemId) continue;
+          
+          // Add delay to avoid rate limiting (Zoho allows ~60 requests/minute)
+          await new Promise(resolve => setTimeout(resolve, 1200));
+          
+          const imageData = await fetchZohoProductImage(product.zohoItemId);
+          imageSyncStatus.progress++;
+          
+          if (imageData) {
+            imageSyncStatus.downloaded++;
+          } else if (noImageItems.has(product.zohoItemId)) {
+            imageSyncStatus.noImage++;
+          } else {
+            imageSyncStatus.failed++;
+          }
+          
+          // Log progress every 50 items
+          if (imageSyncStatus.progress % 50 === 0) {
+            console.log(`[Image Sync] Progress: ${imageSyncStatus.progress}/${imageSyncStatus.total} (${imageSyncStatus.downloaded} downloaded, ${imageSyncStatus.noImage} no image, ${imageSyncStatus.failed} failed)`);
+          }
+        }
+        
+        console.log(`[Image Sync] Complete: ${imageSyncStatus.downloaded} downloaded, ${imageSyncStatus.skipped} skipped, ${imageSyncStatus.noImage} no image, ${imageSyncStatus.failed} failed`);
+        imageSyncStatus.running = false;
+      })();
+      
+      return { 
+        ...result, 
+        message: `Sync started in background for ${needsSync.length} images. Check status at /api/admin/images/sync-status` 
+      };
+    }
+    
+    // Synchronous sync
+    for (const product of needsSync) {
       if (!product.zohoItemId) continue;
       
-      // Skip if already have local image
-      if (hasLocalImage(product.zohoItemId)) {
-        result.skipped++;
-        continue;
-      }
-      
-      // Add small delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Add delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 1200));
       
       const imageData = await fetchZohoProductImage(product.zohoItemId);
+      imageSyncStatus.progress++;
+      
       if (imageData) {
         result.downloaded++;
+        imageSyncStatus.downloaded++;
       } else if (noImageItems.has(product.zohoItemId)) {
         result.noImage++;
+        imageSyncStatus.noImage++;
       } else {
         result.failed++;
+        imageSyncStatus.failed++;
       }
     }
     
     console.log(`[Image Sync] Complete: ${result.downloaded} downloaded, ${result.skipped} skipped, ${result.noImage} no image, ${result.failed} failed`);
+    imageSyncStatus.running = false;
   } catch (error) {
     console.error("[Image Sync] Error during sync:", error);
+    imageSyncStatus.running = false;
   }
   
   return result;

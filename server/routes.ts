@@ -21,7 +21,7 @@ import { db } from "./db";
 import { users, products, orders } from "@shared/schema";
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
-import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, syncItemGroupsFromZoho, clearImageCache, syncAllProductImages, refreshProductImage } from "./zoho-service";
+import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, syncItemGroupsFromZoho, clearImageCache, syncAllProductImages, refreshProductImage, getImageSyncStatus } from "./zoho-service";
 import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, createZohoCustomer, syncTopSellersFromZoho, type ZohoLineItem } from "./zoho-books-service";
 import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
@@ -2053,18 +2053,34 @@ export async function registerRoutes(
     }
   });
 
-  // Sync all product images from Zoho (bulk download to local storage)
+  // Sync all product images from Zoho (bulk download to local storage - runs in background)
   app.post("/api/admin/images/sync", requireAdmin, async (_req, res) => {
     try {
-      console.log("[Admin] Starting product image sync...");
-      const result = await syncAllProductImages();
+      console.log("[Admin] Starting product image sync in background...");
+      const result = await syncAllProductImages(true); // Run in background
       res.json({
         success: true,
-        message: `Image sync complete: ${result.downloaded} downloaded, ${result.skipped} already cached, ${result.noImage} have no image, ${result.failed} failed`,
+        message: result.message || `Image sync complete: ${result.downloaded} downloaded, ${result.skipped} already cached, ${result.noImage} have no image, ${result.failed} failed`,
         ...result,
       });
     } catch (error) {
       console.error("Image sync error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Get image sync status
+  app.get("/api/admin/images/sync-status", requireAdmin, async (_req, res) => {
+    try {
+      const status = getImageSyncStatus();
+      res.json({
+        success: true,
+        ...status,
+      });
+    } catch (error) {
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : "Unknown error",

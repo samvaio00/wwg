@@ -951,13 +951,29 @@ export async function syncItemGroupsFromZoho(): Promise<{ synced: number; update
 
       for (const group of itemGroups) {
         try {
-          // List response already includes items array
-          if (!group.items || group.items.length === 0) {
+          // List response may not include items array - fetch details if needed
+          let items = group.items;
+          
+          if (!items || items.length === 0) {
+            // Fetch group details to get items
+            try {
+              const detailResponse = await fetchZohoItemGroupDetail(group.group_id);
+              items = detailResponse.item_group?.items || [];
+              
+              // Rate limit between detail API calls
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } catch (detailErr) {
+              console.warn(`[Zoho Item Groups Sync] Could not fetch details for group ${group.group_name}: ${detailErr instanceof Error ? detailErr.message : 'Unknown error'}`);
+              continue;
+            }
+          }
+          
+          if (!items || items.length === 0) {
             continue;
           }
 
           // Update all products that belong to this group
-          for (const item of group.items) {
+          for (const item of items) {
             const updateResult = await db
               .update(products)
               .set({
@@ -973,6 +989,11 @@ export async function syncItemGroupsFromZoho(): Promise<{ synced: number; update
           }
 
           result.synced++;
+          
+          // Log progress every 50 groups
+          if (result.synced % 50 === 0) {
+            console.log(`[Zoho Item Groups Sync] Progress: ${result.synced} groups synced, ${result.updated} products updated`);
+          }
         } catch (err) {
           const errorMsg = `Failed to sync group ${group.group_name}: ${err instanceof Error ? err.message : 'Unknown error'}`;
           console.error(`[Zoho Item Groups Sync] ${errorMsg}`);

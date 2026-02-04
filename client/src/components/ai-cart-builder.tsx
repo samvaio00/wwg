@@ -123,7 +123,7 @@ export function AICartBuilder() {
           <DialogTrigger asChild>
             <Button 
               variant="ghost" 
-              className="text-foreground/80 hover:text-foreground hover:bg-transparent"
+              className="text-white hover:bg-gray-700"
               data-testid="button-ai-cart-builder"
             >
               <Sparkles className="h-4 w-4 mr-1.5" />

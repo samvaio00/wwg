@@ -70,7 +70,7 @@ function CartButton() {
 
   return (
     <Link href="/cart">
-      <Button variant="ghost" size="icon" className="relative" data-testid="button-header-cart">
+      <Button variant="ghost" size="icon" className="relative text-white hover:bg-gray-700" data-testid="button-header-cart">
         <ShoppingCart className="h-5 w-5" />
         {itemCount > 0 && (
           <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
@@ -110,9 +110,9 @@ function HeaderUserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" data-testid="button-user-menu">
+        <Button variant="ghost" size="icon" className="text-white hover:bg-gray-700" data-testid="button-user-menu">
           <Avatar className="h-7 w-7">
-            <AvatarFallback className="text-xs">
+            <AvatarFallback className="text-xs bg-gray-600 text-white">
               {getInitials()}
             </AvatarFallback>
           </Avatar>
@@ -200,16 +200,16 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
-          <header className="sticky top-0 z-50 flex h-12 items-center justify-between gap-4 glass-header px-4">
+          <header className="sticky top-0 z-50 flex h-12 items-center justify-between gap-4 bg-gray-800 text-white px-4">
             <div className="flex items-center gap-2">
-              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <SidebarTrigger className="text-white hover:bg-gray-700" data-testid="button-sidebar-toggle" />
               {/* Only show AI Cart Builder for customers (not admin or staff) */}
               {!isAdminOrStaff && <AICartBuilder />}
             </div>
             <div className="flex-1" />
             <div className="flex items-center gap-2">
               <HeaderUserMenu />
-              <ThemeToggle />
+              <ThemeToggle className="text-white hover:bg-gray-700" />
               {/* Only show cart for customers (not admin or staff) */}
               {!isAdminOrStaff && <CartButton />}
             </div>

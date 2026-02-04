@@ -696,7 +696,7 @@ export default function AdminZohoStatus() {
                   data-testid="button-open-image-upload"
                 >
                   <Upload className="h-4 w-4 mr-2" />
-                  Product Images
+                  Edit Item
                 </Button>
               </Link>
               <Link href="/admin/group-image-upload">
@@ -705,7 +705,7 @@ export default function AdminZohoStatus() {
                   data-testid="button-open-group-image-upload"
                 >
                   <Upload className="h-4 w-4 mr-2" />
-                  Group Images
+                  Edit Group
                 </Button>
               </Link>
             </div>

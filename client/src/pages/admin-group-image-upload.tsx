@@ -340,10 +340,10 @@ export default function AdminGroupImageUploadPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">
-            Group Image Upload
+            Edit Group
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Upload or replace images for product groups. Drag and drop images onto tiles or click upload.
+            Manage group images and visibility. Drag and drop images onto tiles, upload, or toggle online/offline.
           </p>
         </div>
         <div className="text-sm text-muted-foreground">

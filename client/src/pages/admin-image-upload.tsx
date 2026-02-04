@@ -334,10 +334,10 @@ export default function AdminImageUpload() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <ImageIcon className="h-6 w-6" />
-            Product Image Upload
+            Edit Item
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Upload or replace images for products. Drag and drop images onto tiles or click upload.
+            Manage product images and visibility. Drag and drop images onto tiles, upload, or toggle online/offline.
           </p>
         </div>
         <div className="text-sm text-muted-foreground">

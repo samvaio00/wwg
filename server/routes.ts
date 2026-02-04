@@ -2261,6 +2261,84 @@ export async function registerRoutes(
     }
   });
 
+  // Get all active products for image management (individual items, not grouped)
+  app.get("/api/admin/products/for-images", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const pageSize = parseInt(req.query.pageSize as string) || 15;
+      const search = (req.query.search as string || "").trim().toLowerCase();
+      const offset = (page - 1) * pageSize;
+
+      let countQuery;
+      let dataQuery;
+
+      if (search) {
+        countQuery = await db.execute(sql`
+          SELECT COUNT(*) as total FROM products 
+          WHERE is_active = true 
+            AND (
+              LOWER(name) LIKE ${`%${search}%`}
+              OR LOWER(sku) LIKE ${`%${search}%`}
+              OR LOWER(zoho_group_name) LIKE ${`%${search}%`}
+            )
+        `);
+        dataQuery = await db.execute(sql`
+          SELECT id, sku, name, zoho_item_id, zoho_group_id, zoho_group_name, category, image_url
+          FROM products 
+          WHERE is_active = true
+            AND (
+              LOWER(name) LIKE ${`%${search}%`}
+              OR LOWER(sku) LIKE ${`%${search}%`}
+              OR LOWER(zoho_group_name) LIKE ${`%${search}%`}
+            )
+          ORDER BY name
+          LIMIT ${pageSize} OFFSET ${offset}
+        `);
+      } else {
+        countQuery = await db.execute(sql`
+          SELECT COUNT(*) as total FROM products WHERE is_active = true
+        `);
+        dataQuery = await db.execute(sql`
+          SELECT id, sku, name, zoho_item_id, zoho_group_id, zoho_group_name, category, image_url
+          FROM products 
+          WHERE is_active = true
+          ORDER BY name
+          LIMIT ${pageSize} OFFSET ${offset}
+        `);
+      }
+
+      const totalCount = parseInt((countQuery.rows[0] as any)?.total || "0");
+      const totalPages = Math.ceil(totalCount / pageSize);
+
+      const products = dataQuery.rows.map((row: any) => ({
+        id: row.id,
+        sku: row.sku,
+        name: row.name,
+        zohoItemId: row.zoho_item_id,
+        zohoGroupId: row.zoho_group_id,
+        zohoGroupName: row.zoho_group_name,
+        category: row.category,
+        imageUrl: row.image_url,
+      }));
+
+      res.json({
+        products,
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+        },
+      });
+    } catch (error) {
+      console.error("Get products for images error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
   // Search for item groups by name
   app.get("/api/admin/groups/search", requireStaffOrAdmin, async (req, res) => {
     try {

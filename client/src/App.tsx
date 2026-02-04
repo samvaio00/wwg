@@ -44,6 +44,7 @@ import AdminSettingsPage from "@/pages/admin-settings";
 import AdminCartsPage from "@/pages/admin-carts";
 import AdminEmailTemplatesPage from "@/pages/admin-email-templates";
 import AdminZohoStatusPage from "@/pages/admin-zoho-status";
+import AdminImageUploadPage from "@/pages/admin-image-upload";
 import AdminHighlightedProductsPage from "@/pages/admin-highlighted-products";
 import AdminSpecialsPage from "@/pages/admin-specials";
 import PendingApprovalPage from "@/pages/pending-approval";
@@ -267,6 +268,7 @@ function AppRouter() {
         <Route path="/admin/settings" component={AdminSettingsPage} />
         <Route path="/admin/email-templates" component={AdminEmailTemplatesPage} />
         <Route path="/admin/zoho-status" component={AdminZohoStatusPage} />
+        <Route path="/admin/image-upload" component={AdminImageUploadPage} />
         <Route path="/admin/highlighted-products" component={AdminHighlightedProductsPage} />
         <Route path="/admin/specials" component={AdminSpecialsPage} />
         <Route path="/about" component={AboutPage} />

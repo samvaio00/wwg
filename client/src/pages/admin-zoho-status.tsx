@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,17 +14,6 @@ interface ItemGroup {
   zohoGroupId: string;
   groupName: string;
   productCount: number;
-}
-
-interface ProductSearchResult {
-  id: string;
-  sku: string;
-  name: string;
-  zohoItemId: string;
-  zohoGroupId: string | null;
-  zohoGroupName: string | null;
-  category: string | null;
-  hasImage: boolean;
 }
 
 interface ZohoStats {
@@ -138,11 +128,6 @@ export default function AdminZohoStatus() {
   const [groupSearchQuery, setGroupSearchQuery] = useState("");
   const [selectedGroup, setSelectedGroup] = useState<ItemGroup | null>(null);
   const debouncedGroupSearch = useDebounce(groupSearchQuery, 300);
-  const [productSearchQuery, setProductSearchQuery] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState<ProductSearchResult | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const debouncedProductSearch = useDebounce(productSearchQuery, 300);
 
   const { data: zohoStats, isLoading, refetch, isFetching } = useQuery<ZohoStats>({
     queryKey: ['/api/admin/analytics/zoho-api-stats'],
@@ -185,60 +170,6 @@ export default function AdminZohoStatus() {
       return res.json();
     },
     enabled: debouncedGroupSearch.length >= 2,
-  });
-
-  const { data: productSearchResults, isLoading: productSearchLoading } = useQuery<{ products: ProductSearchResult[] }>({
-    queryKey: ["/api/admin/products/search", debouncedProductSearch],
-    queryFn: async () => {
-      if (!debouncedProductSearch || debouncedProductSearch.length < 2) {
-        return { products: [] };
-      }
-      const res = await fetch(`/api/admin/products/search?q=${encodeURIComponent(debouncedProductSearch)}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Search failed");
-      return res.json();
-    },
-    enabled: debouncedProductSearch.length >= 2,
-  });
-
-  const imageUploadMutation = useMutation({
-    mutationFn: async ({ productId, zohoItemId, file }: { productId: string; zohoItemId: string; file: File }) => {
-      const formData = new FormData();
-      formData.append("productId", productId);
-      formData.append("zohoItemId", zohoItemId);
-      formData.append("image", file);
-      
-      const res = await fetch("/api/admin/products/upload-image", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Upload failed");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/products/search"] });
-      toast({
-        title: "Image Uploaded",
-        description: data.message || "Product image has been uploaded successfully",
-      });
-      setSelectedProduct(null);
-      setSelectedFile(null);
-      setImagePreview(null);
-      setProductSearchQuery("");
-    },
-    onError: (error) => {
-      toast({
-        title: "Upload Failed",
-        description: error instanceof Error ? error.message : "Failed to upload image",
-        variant: "destructive",
-      });
-    },
   });
 
   const bulkImageSyncMutation = useMutation({
@@ -756,181 +687,17 @@ export default function AdminZohoStatus() {
               Manual Image Upload
             </h4>
             <p className="text-xs text-muted-foreground">
-              Upload custom images for products that don't have images in Zoho
+              Upload custom images for products that don't have images in Zoho. Browse all products with drag-and-drop support.
             </p>
-            
-            <div className="space-y-3">
-              {/* Product Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search product by name, SKU, or group..."
-                  value={productSearchQuery}
-                  onChange={(e) => {
-                    setProductSearchQuery(e.target.value);
-                    setSelectedProduct(null);
-                    setSelectedFile(null);
-                    setImagePreview(null);
-                  }}
-                  className="pl-9 w-full max-w-md"
-                  data-testid="input-product-image-search"
-                />
-              </div>
-              
-              {/* Product Search Results */}
-              {productSearchQuery.length >= 2 && !selectedProduct && (
-                <div className="rounded-lg border bg-background max-w-md max-h-60 overflow-auto">
-                  {productSearchLoading ? (
-                    <div className="p-4 flex items-center gap-2 text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Searching...
-                    </div>
-                  ) : productSearchResults?.products && productSearchResults.products.length > 0 ? (
-                    <div className="divide-y">
-                      {productSearchResults.products.map((product) => (
-                        <button
-                          key={product.id}
-                          onClick={() => {
-                            setSelectedProduct(product);
-                            setProductSearchQuery(product.name);
-                          }}
-                          className="w-full p-3 text-left hover-elevate flex items-center justify-between gap-2"
-                          data-testid={`product-result-${product.id}`}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-sm truncate">{product.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              SKU: {product.sku}
-                              {product.zohoGroupName && ` | Group: ${product.zohoGroupName}`}
-                            </p>
-                          </div>
-                          {product.hasImage ? (
-                            <Badge variant="secondary" className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                              Has Image
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-xs">
-                              No Image
-                            </Badge>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-4 text-sm text-muted-foreground text-center">
-                      No products found matching "{productSearchQuery}"
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {/* Selected Product & Upload Form */}
-              {selectedProduct && (
-                <div className="p-4 rounded-lg border bg-muted/30 max-w-md space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm">{selectedProduct.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        SKU: {selectedProduct.sku}
-                        {selectedProduct.category && ` | Category: ${selectedProduct.category}`}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Zoho ID: {selectedProduct.zohoItemId}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedProduct(null);
-                        setSelectedFile(null);
-                        setImagePreview(null);
-                        setProductSearchQuery("");
-                      }}
-                      data-testid="button-clear-product-selection"
-                    >
-                      <XCircle className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  
-                  {/* File Input */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Select Image</label>
-                    <Input
-                      type="file"
-                      accept="image/jpeg,image/png,image/gif,image/webp"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0] || null;
-                        setSelectedFile(file);
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setImagePreview(reader.result as string);
-                          };
-                          reader.readAsDataURL(file);
-                        } else {
-                          setImagePreview(null);
-                        }
-                      }}
-                      className="cursor-pointer"
-                      data-testid="input-image-file"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Supported formats: JPEG, PNG, GIF, WebP (max 10MB)
-                    </p>
-                  </div>
-                  
-                  {/* Image Preview */}
-                  {imagePreview && (
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Preview</label>
-                      <div className="w-32 h-32 rounded-lg border bg-background overflow-hidden">
-                        <img 
-                          src={imagePreview} 
-                          alt="Preview" 
-                          className="w-full h-full object-contain"
-                        />
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Upload Button */}
-                  <Button
-                    onClick={() => {
-                      if (selectedProduct && selectedFile) {
-                        imageUploadMutation.mutate({
-                          productId: selectedProduct.id,
-                          zohoItemId: selectedProduct.zohoItemId,
-                          file: selectedFile,
-                        });
-                      }
-                    }}
-                    disabled={!selectedFile || imageUploadMutation.isPending}
-                    className="w-full"
-                    data-testid="button-upload-image"
-                  >
-                    {imageUploadMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload Image
-                      </>
-                    )}
-                  </Button>
-                  
-                  {selectedProduct.hasImage && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
-                      This product already has an image. Uploading will replace it.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+            <Link href="/admin/image-upload">
+              <Button
+                variant="outline"
+                data-testid="button-open-image-upload"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Open Image Upload Page
+              </Button>
+            </Link>
           </div>
         </CardContent>
       </Card>

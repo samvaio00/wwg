@@ -2306,21 +2306,21 @@ export async function registerRoutes(
       let countQuery;
       let dataQuery;
 
+      // Include ALL products (active and inactive in Zoho, online and offline) for admin management
+      // Admin needs to see all items to be able to toggle them back online if needed
       if (search) {
         countQuery = await db.execute(sql`
           SELECT COUNT(*) as total FROM products 
-          WHERE is_active = true 
-            AND (
+          WHERE (
               LOWER(name) LIKE ${`%${search}%`}
               OR LOWER(sku) LIKE ${`%${search}%`}
               OR LOWER(zoho_group_name) LIKE ${`%${search}%`}
             )
         `);
         dataQuery = await db.execute(sql`
-          SELECT id, sku, name, zoho_item_id, zoho_group_id, zoho_group_name, category, image_url
+          SELECT id, sku, name, zoho_item_id, zoho_group_id, zoho_group_name, category, image_url, is_online, is_active
           FROM products 
-          WHERE is_active = true
-            AND (
+          WHERE (
               LOWER(name) LIKE ${`%${search}%`}
               OR LOWER(sku) LIKE ${`%${search}%`}
               OR LOWER(zoho_group_name) LIKE ${`%${search}%`}
@@ -2330,12 +2330,11 @@ export async function registerRoutes(
         `);
       } else {
         countQuery = await db.execute(sql`
-          SELECT COUNT(*) as total FROM products WHERE is_active = true
+          SELECT COUNT(*) as total FROM products
         `);
         dataQuery = await db.execute(sql`
-          SELECT id, sku, name, zoho_item_id, zoho_group_id, zoho_group_name, category, image_url
+          SELECT id, sku, name, zoho_item_id, zoho_group_id, zoho_group_name, category, image_url, is_online, is_active
           FROM products 
-          WHERE is_active = true
           ORDER BY name
           LIMIT ${pageSize} OFFSET ${offset}
         `);
@@ -2353,6 +2352,8 @@ export async function registerRoutes(
         zohoGroupName: row.zoho_group_name,
         category: row.category,
         imageUrl: row.image_url,
+        isOnline: row.is_online ?? true,
+        isActive: row.is_active ?? true,
       }));
 
       res.json({
@@ -2472,12 +2473,13 @@ export async function registerRoutes(
       let countQuery;
       let dataQuery;
 
+      // Include ALL groups for admin management (even those with only inactive products)
+      // Admin needs to see all groups to be able to toggle them back online if needed
       if (search) {
         countQuery = await db.execute(sql`
           SELECT COUNT(DISTINCT zoho_group_id) as total 
           FROM products 
-          WHERE is_active = true 
-            AND zoho_group_id IS NOT NULL
+          WHERE zoho_group_id IS NOT NULL
             AND zoho_group_name IS NOT NULL
             AND (
               LOWER(zoho_group_name) LIKE ${`%${search}%`}
@@ -2485,35 +2487,40 @@ export async function registerRoutes(
             )
         `);
         dataQuery = await db.execute(sql`
-          SELECT zoho_group_id, zoho_group_name, COUNT(*) as product_count
-          FROM products 
-          WHERE is_active = true
-            AND zoho_group_id IS NOT NULL
-            AND zoho_group_name IS NOT NULL
+          SELECT p.zoho_group_id, p.zoho_group_name, 
+                 COUNT(*) as product_count,
+                 SUM(CASE WHEN p.is_active = true THEN 1 ELSE 0 END) as active_count,
+                 pg.is_online as group_is_online
+          FROM products p
+          LEFT JOIN product_groups pg ON p.zoho_group_id = pg.zoho_group_id
+          WHERE p.zoho_group_id IS NOT NULL
+            AND p.zoho_group_name IS NOT NULL
             AND (
-              LOWER(zoho_group_name) LIKE ${`%${search}%`}
-              OR LOWER(sku) LIKE ${`%${search}%`}
+              LOWER(p.zoho_group_name) LIKE ${`%${search}%`}
+              OR LOWER(p.sku) LIKE ${`%${search}%`}
             )
-          GROUP BY zoho_group_id, zoho_group_name
-          ORDER BY zoho_group_name
+          GROUP BY p.zoho_group_id, p.zoho_group_name, pg.is_online
+          ORDER BY p.zoho_group_name
           LIMIT ${pageSize} OFFSET ${offset}
         `);
       } else {
         countQuery = await db.execute(sql`
           SELECT COUNT(DISTINCT zoho_group_id) as total 
           FROM products 
-          WHERE is_active = true 
-            AND zoho_group_id IS NOT NULL
+          WHERE zoho_group_id IS NOT NULL
             AND zoho_group_name IS NOT NULL
         `);
         dataQuery = await db.execute(sql`
-          SELECT zoho_group_id, zoho_group_name, COUNT(*) as product_count
-          FROM products 
-          WHERE is_active = true
-            AND zoho_group_id IS NOT NULL
-            AND zoho_group_name IS NOT NULL
-          GROUP BY zoho_group_id, zoho_group_name
-          ORDER BY zoho_group_name
+          SELECT p.zoho_group_id, p.zoho_group_name, 
+                 COUNT(*) as product_count,
+                 SUM(CASE WHEN p.is_active = true THEN 1 ELSE 0 END) as active_count,
+                 pg.is_online as group_is_online
+          FROM products p
+          LEFT JOIN product_groups pg ON p.zoho_group_id = pg.zoho_group_id
+          WHERE p.zoho_group_id IS NOT NULL
+            AND p.zoho_group_name IS NOT NULL
+          GROUP BY p.zoho_group_id, p.zoho_group_name, pg.is_online
+          ORDER BY p.zoho_group_name
           LIMIT ${pageSize} OFFSET ${offset}
         `);
       }
@@ -2525,7 +2532,8 @@ export async function registerRoutes(
         zohoGroupId: row.zoho_group_id,
         zohoGroupName: row.zoho_group_name,
         productCount: Number(row.product_count),
-        hasActiveProducts: true, // All groups returned are filtered by is_active=true
+        hasActiveProducts: Number(row.active_count) > 0,
+        isOnline: row.group_is_online ?? true, // Default to online if no record exists
       }));
 
       res.json({

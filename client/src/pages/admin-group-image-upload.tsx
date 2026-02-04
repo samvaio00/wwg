@@ -27,6 +27,7 @@ interface Group {
   zohoGroupName: string;
   productCount: number;
   hasActiveProducts: boolean;
+  isOnline?: boolean;
 }
 
 interface GroupsResponse {
@@ -285,7 +286,6 @@ function GroupImageTile({ group, initialIsOnline, onUploadSuccess }: {
 export default function AdminGroupImageUploadPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
   const debouncedSearch = useDebounce(searchQuery, 300);
   const pageSize = 15;
 
@@ -311,25 +311,6 @@ export default function AdminGroupImageUploadPage() {
   const pagination = data?.pagination;
   const totalCount = pagination?.totalCount || 0;
   const totalPages = pagination?.totalPages || 1;
-
-  // Fetch online statuses when groups change
-  useQuery({
-    queryKey: ["/api/admin/groups/online-statuses", groups.map(g => g.zohoGroupId).join(",")],
-    queryFn: async () => {
-      if (groups.length === 0) return { statuses: {} };
-      const res = await fetch("/api/admin/groups/online-statuses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ zohoGroupIds: groups.map(g => g.zohoGroupId) })
-      });
-      if (!res.ok) throw new Error("Failed to fetch online statuses");
-      const data = await res.json();
-      setOnlineStatuses(data.statuses || {});
-      return data;
-    },
-    enabled: groups.length > 0,
-  });
 
   const handleUploadSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/admin/groups/for-images"] });
@@ -380,7 +361,7 @@ export default function AdminGroupImageUploadPage() {
               <GroupImageTile 
                 key={group.zohoGroupId} 
                 group={group}
-                initialIsOnline={onlineStatuses[group.zohoGroupId] ?? true}
+                initialIsOnline={group.isOnline ?? true}
                 onUploadSuccess={handleUploadSuccess}
               />
             ))}

@@ -148,9 +148,9 @@ function parseActionCommand(query: string): ParsedAction {
 }
 
 const AI_SEARCH_EXAMPLES = [
-  { icon: Search, label: "Search products", example: '"USB cables" or "charger"' },
+  { icon: Search, label: "Search products", example: '"USB cables" or "lightning charger"' },
   { icon: TrendingUp, label: "Find top sellers", example: '"top seller vapes" or "best selling cables"' },
-  { icon: ShoppingCart, label: "Add to cart", example: '"add 2 geek bar to cart"' },
+  { icon: Search, label: "Search by SKU", example: '"812934025840" or partial SKU' },
   { icon: Layers, label: "Bulk add variants", example: '"add 1 each of geek bar pulse flavors to cart"' },
   { icon: TrendingUp, label: "Add top sellers", example: '"add 5 top sellers chargers to cart"' },
 ];
@@ -460,7 +460,7 @@ export function AISearchBox({
       )}
       <Popover open={showExamples && aiEnabled} onOpenChange={setShowExamples}>
         <PopoverTrigger asChild>
-          <div className="relative w-72 lg:w-80">
+          <div className="relative w-96 lg:w-[26rem]">
             <Input
               ref={inputRef}
               type="search"
@@ -518,7 +518,7 @@ export function AISearchBox({
         <PopoverContent 
           side="bottom" 
           align="start" 
-          className="w-80 p-0"
+          className="w-96 p-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <div className="p-3 border-b bg-muted/30">

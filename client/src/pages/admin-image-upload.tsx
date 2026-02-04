@@ -39,11 +39,13 @@ function ProductImageTile({ product, onUploadSuccess }: {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [cacheKey, setCacheKey] = useState(Date.now());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   
+  // Add cache key to bust browser cache after upload
   const imageUrl = product.zohoItemId 
-    ? `/api/products/${product.id}/image`
+    ? `/api/products/${product.id}/image?t=${cacheKey}`
     : product.imageUrl;
 
   const handleUpload = async (file: File) => {
@@ -80,6 +82,8 @@ function ProductImageTile({ product, onUploadSuccess }: {
       setTimeout(() => setUploadSuccess(false), 3000);
       setImageError(false);
       setImageLoaded(false);
+      // Update cache key to force browser to fetch the new image
+      setCacheKey(Date.now());
       onUploadSuccess();
       
       toast({

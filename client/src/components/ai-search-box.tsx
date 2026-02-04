@@ -1,17 +1,17 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Loader2, ShoppingCart, TrendingUp, Sparkles, Layers } from "lucide-react";
+import { Loader2, ShoppingCart, TrendingUp, Sparkles, Layers, Search, Lightbulb } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface AISearchBoxProps {
   value: string;
@@ -147,6 +147,14 @@ function parseActionCommand(query: string): ParsedAction {
   return { isAction: false };
 }
 
+const AI_SEARCH_EXAMPLES = [
+  { icon: Search, label: "Search products", example: '"USB cables" or "charger"' },
+  { icon: TrendingUp, label: "Find top sellers", example: '"top seller vapes" or "best selling cables"' },
+  { icon: ShoppingCart, label: "Add to cart", example: '"add 2 geek bar to cart"' },
+  { icon: Layers, label: "Bulk add variants", example: '"add 1 each of geek bar pulse flavors to cart"' },
+  { icon: TrendingUp, label: "Add top sellers", example: '"add 5 top sellers chargers to cart"' },
+];
+
 export function AISearchBox({
   value,
   onChange,
@@ -160,6 +168,8 @@ export function AISearchBox({
   showAIToggle = true,
 }: AISearchBoxProps) {
   const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [showExamples, setShowExamples] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -448,15 +458,18 @@ export function AISearchBox({
           </Label>
         </div>
       )}
-      <Tooltip>
-        <TooltipTrigger asChild>
+      <Popover open={showExamples && aiEnabled} onOpenChange={setShowExamples}>
+        <PopoverTrigger asChild>
           <div className="relative w-72 lg:w-80">
             <Input
+              ref={inputRef}
               type="search"
               placeholder={dynamicPlaceholder}
               value={value}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={handleKeyDown}
+              onFocus={() => aiEnabled && value.length === 0 && setShowExamples(true)}
+              onBlur={() => setTimeout(() => setShowExamples(false), 150)}
               className={`pr-20 h-9 focus-ring-animate transition-all ${
                 showActionIndicator ? "border-primary/50 bg-primary/5" : ""
               } ${showTopSellerSearchIndicator ? "border-amber-500/50 bg-amber-500/5" : ""}`}
@@ -501,15 +514,43 @@ export function AISearchBox({
               )}
             </div>
           </div>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="max-w-xs">
-          {aiEnabled ? (
-            <p className="text-sm">Try: "top seller cables", "best selling chargers", or "add 1 each of geek bar to cart"</p>
-          ) : (
-            <p className="text-sm">Search by product name, SKU, or keywords</p>
-          )}
-        </TooltipContent>
-      </Tooltip>
+        </PopoverTrigger>
+        <PopoverContent 
+          side="bottom" 
+          align="start" 
+          className="w-80 p-0"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <div className="p-3 border-b bg-muted/30">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Lightbulb className="h-4 w-4 text-amber-500" />
+              AI Search Examples
+            </div>
+          </div>
+          <div className="divide-y">
+            {AI_SEARCH_EXAMPLES.map((item, index) => (
+              <button
+                key={index}
+                className="w-full p-3 text-left hover-elevate flex items-start gap-3"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const exampleText = item.example.split('"')[1] || "";
+                  onChange(exampleText);
+                  setShowExamples(false);
+                  inputRef.current?.focus();
+                }}
+                data-testid={`ai-example-${index}`}
+              >
+                <item.icon className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{item.label}</p>
+                  <p className="text-xs text-muted-foreground truncate">{item.example}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

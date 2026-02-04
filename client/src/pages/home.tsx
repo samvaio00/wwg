@@ -239,7 +239,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
   );
 }
 
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = 15;
 
 function CustomerHomePage() {
   const { toast } = useToast();

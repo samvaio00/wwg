@@ -231,7 +231,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
   );
 }
 
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = 15;
 
 export default function WhatsNewPage() {
   const { toast } = useToast();

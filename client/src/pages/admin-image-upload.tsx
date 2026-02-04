@@ -5,7 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { 
   Package,
   Search,
@@ -16,7 +19,9 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Globe,
+  EyeOff
 } from "lucide-react";
 import type { Product } from "@shared/schema";
 
@@ -40,8 +45,42 @@ function ProductImageTile({ product, onUploadSuccess }: {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [cacheKey, setCacheKey] = useState(Date.now());
+  const [localIsOnline, setLocalIsOnline] = useState(product.isOnline ?? true);
+  const [isTogglingOnline, setIsTogglingOnline] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const toggleOnlineMutation = useMutation({
+    mutationFn: async (newIsOnline: boolean) => {
+      const response = await apiRequest("PATCH", `/api/admin/products/${product.id}/online-status`, { isOnline: newIsOnline });
+      return response.json();
+    },
+    onMutate: () => {
+      setIsTogglingOnline(true);
+    },
+    onSuccess: (data) => {
+      setLocalIsOnline(data.isOnline);
+      toast({
+        title: data.isOnline ? "Product Online" : "Product Offline",
+        description: `${product.sku} is now ${data.isOnline ? 'visible' : 'hidden'} on the storefront`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products/for-images"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update status",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setIsTogglingOnline(false);
+    }
+  });
+
+  const handleToggleOnline = () => {
+    toggleOnlineMutation.mutate(!localIsOnline);
+  };
   
   // Add cache key to bust browser cache after upload
   const imageUrl = product.zohoItemId 
@@ -188,6 +227,33 @@ function ProductImageTile({ product, onUploadSuccess }: {
             {product.name}
           </h3>
         </div>
+        
+        <div className="flex items-center justify-between gap-2 py-1 border-t border-b">
+          <div className="flex items-center gap-1.5">
+            {localIsOnline ? (
+              <Globe className="h-3.5 w-3.5 text-green-600" />
+            ) : (
+              <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+            <Label 
+              htmlFor={`online-toggle-${product.id}`}
+              className={`text-xs cursor-pointer ${localIsOnline ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}
+            >
+              {localIsOnline ? "Online" : "Offline"}
+            </Label>
+          </div>
+          <Switch
+            id={`online-toggle-${product.id}`}
+            checked={localIsOnline}
+            onCheckedChange={handleToggleOnline}
+            disabled={isTogglingOnline || !product.isActive}
+            className="scale-75"
+            data-testid={`switch-online-${product.id}`}
+          />
+        </div>
+        {!product.isActive && (
+          <p className="text-xs text-amber-600 -mt-1">Inactive in Zoho</p>
+        )}
         
         <input
           ref={fileInputRef}

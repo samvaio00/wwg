@@ -35,6 +35,7 @@ import {
   topSellersCache,
   emailCampaignTemplates,
   specials,
+  productGroups,
   EmailTemplateStatus,
   toSafeUser,
   UserRole,
@@ -395,12 +396,29 @@ export class DatabaseStorage implements IStorage {
       .from(products)
       .where(and(...conditions));
 
+    // Get all offline groups
+    const offlineGroups = await db.select()
+      .from(productGroups)
+      .where(eq(productGroups.isOnline, false));
+    
+    const offlineGroupIds = new Set(offlineGroups.map(g => g.zohoGroupId));
+    
+    // Filter out products from offline groups
+    const filteredProducts = allProducts.filter(product => {
+      // If product has a group, check if that group is offline
+      if (product.zohoGroupId) {
+        return !offlineGroupIds.has(product.zohoGroupId);
+      }
+      // Ungrouped products are fine if they pass the isOnline check (already applied above)
+      return true;
+    });
+
     // Consolidate: one entry per group, individual items stay as-is
     // Track group stock: if ALL variants have 0 stock, mark group as out of stock
     const groupMap = new Map<string, Product & { _allVariantsOutOfStock: boolean }>();
     const ungrouped: Product[] = [];
 
-    for (const product of allProducts) {
+    for (const product of filteredProducts) {
       if (product.zohoGroupId && product.zohoGroupName) {
         if (!groupMap.has(product.zohoGroupId)) {
           // Create representative with group name
@@ -515,6 +533,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductsByGroupId(groupId: string): Promise<Product[]> {
+    // Check if the group is offline
+    const groupRecord = await db.select()
+      .from(productGroups)
+      .where(eq(productGroups.zohoGroupId, groupId));
+    
+    // If group is explicitly offline, return empty
+    if (groupRecord.length > 0 && groupRecord[0].isOnline === false) {
+      return [];
+    }
+    
     const result = await db.select().from(products).where(
       and(
         eq(products.zohoGroupId, groupId),
@@ -944,10 +972,25 @@ export class DatabaseStorage implements IStorage {
 
   // Admin visibility queries
   async getHighlightedProducts(): Promise<Product[]> {
-    return db.select()
+    const highlighted = await db.select()
       .from(products)
       .where(and(eq(products.isHighlighted, true), eq(products.isOnline, true)))
       .orderBy(desc(products.updatedAt));
+    
+    // Get all offline groups
+    const offlineGroups = await db.select()
+      .from(productGroups)
+      .where(eq(productGroups.isOnline, false));
+    
+    const offlineGroupIds = new Set(offlineGroups.map(g => g.zohoGroupId));
+    
+    // Filter out products from offline groups
+    return highlighted.filter(product => {
+      if (product.zohoGroupId) {
+        return !offlineGroupIds.has(product.zohoGroupId);
+      }
+      return true;
+    });
   }
 
   async setProductHighlight(productId: string, isHighlighted: boolean): Promise<Product | undefined> {
@@ -959,6 +1002,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTopSellingProducts(limit: number = 24): Promise<Product[]> {
+    // Get all offline groups for filtering
+    const offlineGroups = await db.select()
+      .from(productGroups)
+      .where(eq(productGroups.isOnline, false));
+    
+    const offlineGroupIds = new Set(offlineGroups.map(g => g.zohoGroupId));
+    
     // First, check if we have cached top sellers from Zoho Books
     // Fetch all cache entries to ensure we can fill up to limit unique display items
     const cachedTopSellers = await db.select()
@@ -1008,9 +1058,18 @@ export class DatabaseStorage implements IStorage {
         
         const product = productMap.get(cached.productId);
         if (!product) continue;
+        
+        // Skip products from offline groups
+        if (product.zohoGroupId && offlineGroupIds.has(product.zohoGroupId)) {
+          continue;
+        }
 
         // If product is part of a group, show the group tile
         if (cached.zohoGroupId) {
+          // Skip offline groups
+          if (offlineGroupIds.has(cached.zohoGroupId)) {
+            continue;
+          }
           if (!seenGroupIds.has(cached.zohoGroupId)) {
             seenGroupIds.add(cached.zohoGroupId);
             const groupProduct = groupRepMap.get(cached.zohoGroupId);

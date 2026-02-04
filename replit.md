@@ -23,7 +23,8 @@ The platform utilizes a modern web stack:
 - **UI/UX**: Clean, modern, commercial-polished aesthetic with a practical, grid-based, and SKU-driven approach, featuring a subtle light blue/milk coffee gradient hero section. Pagination is implemented for improved navigation.
 - **Technical Implementations & Features**:
     - **User Management**: Supports 'admin', 'staff', 'customer', and 'pending' roles with a detailed status workflow.
-    - **Product Catalog**: Displays products with category filtering, search, sorting, and inventory-based buyability, including support for Zoho Inventory item groups (product variants). Products can be marked `isOnline` for storefront visibility.
+    - **Product Catalog**: Displays products with category filtering, search, sorting, and inventory-based buyability, including support for Zoho Inventory item groups (product variants). Products and groups can be marked `isOnline` for storefront visibility via admin toggle.
+    - **Online/Offline Toggle System**: Admin and staff can toggle products and groups online/offline via dedicated image upload pages. Zoho active/inactive status takes precedence (products must be active in Zoho before they can be set online). Offline items are hidden from storefront, search results, and top sellers. Group online status stored in `product_groups` table.
     - **Homepage Customization**: Admins can highlight featured products on the homepage.
     - **Shopping Cart & Order Management**: Full cart functionality, secure checkout, customer order history, and admin order approval workflow.
     - **Customer Self-Service**: "My Account" section with order history, profile editing (with admin approval), and contact pages. Includes a "Top Sellers" page based on recent order volume.

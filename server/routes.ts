@@ -18,7 +18,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { db } from "./db";
-import { users, products, orders } from "@shared/schema";
+import { users, products, orders, productGroups } from "@shared/schema";
 import { eq, and, gt, isNull, sql } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
 import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, fetchProductImageWithFallback, syncItemGroupsFromZoho, clearImageCache, syncAllProductImages, refreshProductImage, getImageSyncStatus } from "./zoho-service";
@@ -2525,6 +2525,7 @@ export async function registerRoutes(
         zohoGroupId: row.zoho_group_id,
         zohoGroupName: row.zoho_group_name,
         productCount: Number(row.product_count),
+        hasActiveProducts: true, // All groups returned are filtered by is_active=true
       }));
 
       res.json({
@@ -2558,15 +2559,18 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, message: "No image file uploaded" });
       }
       
-      // Verify the group exists
-      const products = await storage.getProductsByGroupId(zohoGroupId);
-      if (products.length === 0) {
+      // Verify the group exists (query directly to avoid online status filter)
+      const groupProducts = await db.select()
+        .from(products)
+        .where(eq(products.zohoGroupId, zohoGroupId));
+      
+      if (groupProducts.length === 0) {
         fs.unlinkSync(req.file.path);
         return res.status(404).json({ success: false, message: "Group not found" });
       }
       
       const imageUrl = `/product-images/${req.file.filename}`;
-      console.log(`[Admin] Uploaded group image for ${products[0].zohoGroupName} (${zohoGroupId}): ${imageUrl}`);
+      console.log(`[Admin] Uploaded group image for ${groupProducts[0].zohoGroupName} (${zohoGroupId}): ${imageUrl}`);
       
       res.json({
         success: true,
@@ -2576,6 +2580,175 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Upload group image error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Toggle product online/offline status
+  app.patch("/api/admin/products/:productId/online-status", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { productId } = req.params;
+      const { isOnline } = req.body;
+      
+      if (typeof isOnline !== "boolean") {
+        return res.status(400).json({ success: false, message: "isOnline must be a boolean" });
+      }
+      
+      // Fetch product to check Zoho active status
+      const product = await storage.getProductById(productId);
+      if (!product) {
+        return res.status(404).json({ success: false, message: "Product not found" });
+      }
+      
+      // Can only set isOnline=true if product is active in Zoho
+      if (isOnline && !product.isActive) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Cannot set online: product is inactive in Zoho. Product must be active in Zoho first." 
+        });
+      }
+      
+      await db
+        .update(products)
+        .set({ isOnline, updatedAt: new Date() })
+        .where(eq(products.id, productId));
+      
+      console.log(`[Admin] Product ${product.sku} (${productId}) set to ${isOnline ? 'online' : 'offline'}`);
+      
+      res.json({
+        success: true,
+        message: `Product set to ${isOnline ? 'online' : 'offline'}`,
+        isOnline,
+      });
+    } catch (error) {
+      console.error("Toggle product online status error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Toggle group online/offline status
+  app.patch("/api/admin/groups/:zohoGroupId/online-status", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { zohoGroupId } = req.params;
+      const { isOnline } = req.body;
+      
+      if (typeof isOnline !== "boolean") {
+        return res.status(400).json({ success: false, message: "isOnline must be a boolean" });
+      }
+      
+      // Query products directly (without group online filter) to check existence
+      const groupProducts = await db.select()
+        .from(products)
+        .where(eq(products.zohoGroupId, zohoGroupId));
+      
+      if (groupProducts.length === 0) {
+        return res.status(404).json({ success: false, message: "Group not found" });
+      }
+      
+      // Check if at least one product in the group is active in Zoho
+      const hasActiveProducts = groupProducts.some(p => p.isActive);
+      if (isOnline && !hasActiveProducts) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Cannot set online: no active products in this group in Zoho" 
+        });
+      }
+      
+      // Upsert group record
+      const groupName = groupProducts[0].zohoGroupName || zohoGroupId;
+      const existingGroup = await db
+        .select()
+        .from(productGroups)
+        .where(eq(productGroups.zohoGroupId, zohoGroupId));
+      
+      if (existingGroup.length > 0) {
+        await db
+          .update(productGroups)
+          .set({ isOnline, updatedAt: new Date() })
+          .where(eq(productGroups.zohoGroupId, zohoGroupId));
+      } else {
+        await db
+          .insert(productGroups)
+          .values({
+            zohoGroupId,
+            zohoGroupName: groupName,
+            isOnline,
+          });
+      }
+      
+      console.log(`[Admin] Group ${groupName} (${zohoGroupId}) set to ${isOnline ? 'online' : 'offline'}`);
+      
+      res.json({
+        success: true,
+        message: `Group set to ${isOnline ? 'online' : 'offline'}`,
+        isOnline,
+      });
+    } catch (error) {
+      console.error("Toggle group online status error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Get group online status
+  app.get("/api/admin/groups/:zohoGroupId/online-status", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { zohoGroupId } = req.params;
+      
+      const groupRecord = await db
+        .select()
+        .from(productGroups)
+        .where(eq(productGroups.zohoGroupId, zohoGroupId));
+      
+      // Default to online if no explicit record exists
+      const isOnline = groupRecord.length > 0 ? groupRecord[0].isOnline : true;
+      
+      res.json({ success: true, isOnline });
+    } catch (error) {
+      console.error("Get group online status error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Bulk get group online statuses
+  app.post("/api/admin/groups/online-statuses", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { zohoGroupIds } = req.body;
+      
+      if (!Array.isArray(zohoGroupIds)) {
+        return res.status(400).json({ success: false, message: "zohoGroupIds must be an array" });
+      }
+      
+      const groupRecords = await db
+        .select()
+        .from(productGroups);
+      
+      // Build map of groupId -> isOnline (default to true if no record)
+      const statusMap: Record<string, boolean> = {};
+      groupRecords.forEach(g => {
+        statusMap[g.zohoGroupId] = g.isOnline ?? true;
+      });
+      
+      // Return status for each requested group (default true if not in table)
+      const result: Record<string, boolean> = {};
+      zohoGroupIds.forEach(id => {
+        result[id] = statusMap[id] ?? true;
+      });
+      
+      res.json({ success: true, statuses: result });
+    } catch (error) {
+      console.error("Bulk get group online statuses error:", error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : "Unknown error",

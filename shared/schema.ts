@@ -263,6 +263,38 @@ export type InsertSpecial = z.infer<typeof insertSpecialSchema>;
 export type Special = typeof specials.$inferSelect;
 
 // ================================================================
+// PRODUCT GROUPS TABLE (Group-level settings for Zoho Item Groups)
+// ================================================================
+
+export const productGroups = pgTable("product_groups", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Zoho group identification
+  zohoGroupId: text("zoho_group_id").notNull().unique(),
+  zohoGroupName: text("zoho_group_name").notNull(),
+  
+  // Online visibility (can only be true if group has active products in Zoho)
+  // If all products in this group are inactive in Zoho, isOnline should be false
+  isOnline: boolean("is_online").default(true),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  groupIdIdx: index("product_groups_zoho_group_id_idx").on(table.zohoGroupId),
+  onlineIdx: index("product_groups_online_idx").on(table.isOnline),
+}));
+
+export const insertProductGroupSchema = createInsertSchema(productGroups).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertProductGroup = z.infer<typeof insertProductGroupSchema>;
+export type ProductGroup = typeof productGroups.$inferSelect;
+
+// ================================================================
 // CARTS TABLE
 // ================================================================
 

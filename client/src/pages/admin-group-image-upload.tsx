@@ -1,9 +1,11 @@
-import { useState, useCallback, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Search, 
@@ -14,7 +16,9 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  CheckCircle
+  CheckCircle,
+  Globe,
+  EyeOff
 } from "lucide-react";
 import { useDebounce } from "@/hooks/use-debounce";
 
@@ -22,6 +26,7 @@ interface Group {
   zohoGroupId: string;
   zohoGroupName: string;
   productCount: number;
+  hasActiveProducts: boolean;
 }
 
 interface GroupsResponse {
@@ -34,8 +39,9 @@ interface GroupsResponse {
   };
 }
 
-function GroupImageTile({ group, onUploadSuccess }: { 
+function GroupImageTile({ group, initialIsOnline, onUploadSuccess }: { 
   group: Group; 
+  initialIsOnline: boolean;
   onUploadSuccess: () => void;
 }) {
   const [imageError, setImageError] = useState(false);
@@ -44,8 +50,45 @@ function GroupImageTile({ group, onUploadSuccess }: {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [cacheKey, setCacheKey] = useState(Date.now());
+  const [localIsOnline, setLocalIsOnline] = useState(initialIsOnline);
+  const [isTogglingOnline, setIsTogglingOnline] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    setLocalIsOnline(initialIsOnline);
+  }, [initialIsOnline]);
+
+  const toggleOnlineMutation = useMutation({
+    mutationFn: async (newIsOnline: boolean) => {
+      const response = await apiRequest("PATCH", `/api/admin/groups/${group.zohoGroupId}/online-status`, { isOnline: newIsOnline });
+      return response.json();
+    },
+    onMutate: () => {
+      setIsTogglingOnline(true);
+    },
+    onSuccess: (data) => {
+      setLocalIsOnline(data.isOnline);
+      toast({
+        title: data.isOnline ? "Group Online" : "Group Offline",
+        description: `${group.zohoGroupName} is now ${data.isOnline ? 'visible' : 'hidden'} on the storefront`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update status",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setIsTogglingOnline(false);
+    }
+  });
+
+  const handleToggleOnline = () => {
+    toggleOnlineMutation.mutate(!localIsOnline);
+  };
   
   const imageUrl = `/product-images/group-${group.zohoGroupId}.jpg?t=${cacheKey}`;
 
@@ -179,11 +222,39 @@ function GroupImageTile({ group, onUploadSuccess }: {
           </>
         )}
       </div>
-      <CardContent className="p-3">
-        <p className="text-xs text-muted-foreground mb-1">{group.productCount} items</p>
+      <CardContent className="p-3 space-y-2">
+        <p className="text-xs text-muted-foreground">{group.productCount} items</p>
         <p className="text-sm font-medium line-clamp-2 min-h-[2.5rem]" title={group.zohoGroupName}>
           {group.zohoGroupName}
         </p>
+        
+        <div className="flex items-center justify-between gap-2 py-1 border-t border-b">
+          <div className="flex items-center gap-1.5">
+            {localIsOnline ? (
+              <Globe className="h-3.5 w-3.5 text-green-600" />
+            ) : (
+              <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+            <Label 
+              htmlFor={`online-toggle-group-${group.zohoGroupId}`}
+              className={`text-xs cursor-pointer ${localIsOnline ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}
+            >
+              {localIsOnline ? "Online" : "Offline"}
+            </Label>
+          </div>
+          <Switch
+            id={`online-toggle-group-${group.zohoGroupId}`}
+            checked={localIsOnline}
+            onCheckedChange={handleToggleOnline}
+            disabled={isTogglingOnline || !group.hasActiveProducts}
+            className="scale-75"
+            data-testid={`switch-online-group-${group.zohoGroupId}`}
+          />
+        </div>
+        {!group.hasActiveProducts && (
+          <p className="text-xs text-amber-600 -mt-1">No active products in Zoho</p>
+        )}
+        
         <input
           type="file"
           ref={fileInputRef}
@@ -194,7 +265,7 @@ function GroupImageTile({ group, onUploadSuccess }: {
         <Button 
           size="sm" 
           variant="outline" 
-          className="w-full mt-2"
+          className="w-full"
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading}
           data-testid={`button-upload-group-${group.zohoGroupId}`}
@@ -214,10 +285,11 @@ function GroupImageTile({ group, onUploadSuccess }: {
 export default function AdminGroupImageUploadPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
   const debouncedSearch = useDebounce(searchQuery, 300);
   const pageSize = 15;
 
-  const { data, isLoading, refetch } = useQuery<GroupsResponse>({
+  const { data, isLoading } = useQuery<GroupsResponse>({
     queryKey: ["/api/admin/groups/for-images", currentPage, debouncedSearch],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -239,6 +311,25 @@ export default function AdminGroupImageUploadPage() {
   const pagination = data?.pagination;
   const totalCount = pagination?.totalCount || 0;
   const totalPages = pagination?.totalPages || 1;
+
+  // Fetch online statuses when groups change
+  useQuery({
+    queryKey: ["/api/admin/groups/online-statuses", groups.map(g => g.zohoGroupId).join(",")],
+    queryFn: async () => {
+      if (groups.length === 0) return { statuses: {} };
+      const res = await fetch("/api/admin/groups/online-statuses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ zohoGroupIds: groups.map(g => g.zohoGroupId) })
+      });
+      if (!res.ok) throw new Error("Failed to fetch online statuses");
+      const data = await res.json();
+      setOnlineStatuses(data.statuses || {});
+      return data;
+    },
+    enabled: groups.length > 0,
+  });
 
   const handleUploadSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/admin/groups/for-images"] });
@@ -288,7 +379,8 @@ export default function AdminGroupImageUploadPage() {
             {groups.map((group) => (
               <GroupImageTile 
                 key={group.zohoGroupId} 
-                group={group} 
+                group={group}
+                initialIsOnline={onlineStatuses[group.zohoGroupId] ?? true}
                 onUploadSuccess={handleUploadSuccess}
               />
             ))}

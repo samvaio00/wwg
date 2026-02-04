@@ -62,6 +62,47 @@ const certificateUpload = multer({
   },
 });
 
+// Configure multer for product image uploads
+const productImageStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const uploadDir = path.join(process.cwd(), "public", "product-images");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // Use zohoItemId from request body as filename with correct extension
+    const zohoItemId = req.body.zohoItemId;
+    if (!zohoItemId) {
+      cb(new Error("zohoItemId is required"), "");
+    } else {
+      // Map mimetype to extension
+      const mimeToExt: Record<string, string> = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+      };
+      const ext = mimeToExt[file.mimetype] || ".jpg";
+      cb(null, `${zohoItemId}${ext}`);
+    }
+  },
+});
+
+const productImageUpload = multer({
+  storage: productImageStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (_req, file, cb) => {
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed."));
+    }
+  },
+});
+
 // Middleware to check if user is authenticated
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
@@ -2107,6 +2148,112 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Refresh image error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Upload product image
+  app.post("/api/admin/products/upload-image", requireStaffOrAdmin, productImageUpload.single("image"), async (req, res) => {
+    try {
+      const { productId, zohoItemId } = req.body;
+      
+      if (!productId) {
+        return res.status(400).json({ success: false, message: "productId is required" });
+      }
+      
+      if (!zohoItemId) {
+        return res.status(400).json({ success: false, message: "zohoItemId is required" });
+      }
+      
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "No image file uploaded" });
+      }
+      
+      // Verify the product exists
+      const product = await storage.getProductInternal(productId);
+      if (!product) {
+        // Clean up uploaded file
+        fs.unlinkSync(req.file.path);
+        return res.status(404).json({ success: false, message: "Product not found" });
+      }
+      
+      // Update the product with the image URL
+      const imageUrl = `/product-images/${req.file.filename}`;
+      await db.update(products).set({ imageUrl }).where(eq(products.id, productId));
+      
+      console.log(`[Admin] Uploaded image for product ${product.sku} (${zohoItemId}): ${imageUrl}`);
+      
+      res.json({
+        success: true,
+        message: "Image uploaded successfully",
+        filename: req.file.filename,
+        path: imageUrl,
+      });
+    } catch (error) {
+      console.error("Upload image error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Search products for image upload
+  app.get("/api/admin/products/search", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const { q } = req.query;
+      if (!q || typeof q !== 'string' || q.trim().length < 2) {
+        return res.json({ products: [] });
+      }
+      
+      const searchTerm = q.trim().toLowerCase();
+      
+      // Search products by name, SKU, or group name
+      const result = await db.execute(sql`
+        SELECT id, sku, name, zoho_item_id, zoho_group_id, zoho_group_name, category
+        FROM products 
+        WHERE (
+          LOWER(name) LIKE ${`%${searchTerm}%`}
+          OR LOWER(sku) LIKE ${`%${searchTerm}%`}
+          OR LOWER(zoho_group_name) LIKE ${`%${searchTerm}%`}
+        )
+        ORDER BY name
+        LIMIT 20
+      `);
+      
+      // Check which products have images (check all supported extensions)
+      const imageExtensions = [".jpg", ".png", ".gif", ".webp"];
+      const productsWithImageStatus = await Promise.all(
+        result.rows.map(async (row: any) => {
+          let hasImage = false;
+          if (row.zoho_item_id) {
+            for (const ext of imageExtensions) {
+              const imagePath = path.join(process.cwd(), "public", "product-images", `${row.zoho_item_id}${ext}`);
+              if (fs.existsSync(imagePath)) {
+                hasImage = true;
+                break;
+              }
+            }
+          }
+          return {
+            id: row.id,
+            sku: row.sku,
+            name: row.name,
+            zohoItemId: row.zoho_item_id,
+            zohoGroupId: row.zoho_group_id,
+            zohoGroupName: row.zoho_group_name,
+            category: row.category,
+            hasImage,
+          };
+        })
+      );
+      
+      res.json({ products: productsWithImageStatus });
+    } catch (error) {
+      console.error("Search products error:", error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : "Unknown error",

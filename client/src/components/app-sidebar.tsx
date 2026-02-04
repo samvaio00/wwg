@@ -121,6 +121,11 @@ const staffNavItems = [
     icon: Percent,
   },
   {
+    title: "Image Management",
+    url: "/admin/zoho-status",
+    icon: RefreshCw,
+  },
+  {
     title: "Settings",
     url: "/admin/settings",
     icon: Settings,

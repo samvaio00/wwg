@@ -2096,7 +2096,7 @@ export async function registerRoutes(
   });
 
   // Sync all product images from Zoho (bulk download to local storage - runs in background)
-  app.post("/api/admin/images/sync", requireAdmin, async (_req, res) => {
+  app.post("/api/admin/images/sync", requireStaffOrAdmin, async (_req, res) => {
     try {
       console.log("[Admin] Starting product image sync in background...");
       const result = await syncAllProductImages(true); // Run in background
@@ -2115,7 +2115,7 @@ export async function registerRoutes(
   });
 
   // Get image sync status
-  app.get("/api/admin/images/sync-status", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/images/sync-status", requireStaffOrAdmin, async (_req, res) => {
     try {
       const status = getImageSyncStatus();
       res.json({
@@ -2131,7 +2131,7 @@ export async function registerRoutes(
   });
 
   // Refresh a single product image from Zoho
-  app.post("/api/admin/products/:id/refresh-image", requireAdmin, async (req, res) => {
+  app.post("/api/admin/products/:id/refresh-image", requireStaffOrAdmin, async (req, res) => {
     try {
       const product = await storage.getProductInternal(req.params.id);
       if (!product) {

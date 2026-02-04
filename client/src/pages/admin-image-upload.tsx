@@ -61,6 +61,7 @@ function ProductImageTile({ product, onUploadSuccess }: {
       const formData = new FormData();
       formData.append("image", file);
       formData.append("productId", product.id);
+      formData.append("zohoItemId", product.zohoItemId || "");
 
       const response = await fetch("/api/admin/products/upload-image", {
         method: "POST",

@@ -687,17 +687,28 @@ export default function AdminZohoStatus() {
               Manual Image Upload
             </h4>
             <p className="text-xs text-muted-foreground">
-              Upload custom images for products that don't have images in Zoho. Browse all products with drag-and-drop support.
+              Upload custom images for products or groups. Browse all items with drag-and-drop support.
             </p>
-            <Link href="/admin/image-upload">
-              <Button
-                variant="outline"
-                data-testid="button-open-image-upload"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Open Image Upload Page
-              </Button>
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/admin/image-upload">
+                <Button
+                  variant="outline"
+                  data-testid="button-open-image-upload"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Product Images
+                </Button>
+              </Link>
+              <Link href="/admin/group-image-upload">
+                <Button
+                  variant="outline"
+                  data-testid="button-open-group-image-upload"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Group Images
+                </Button>
+              </Link>
+            </div>
           </div>
         </CardContent>
       </Card>

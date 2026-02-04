@@ -103,6 +103,40 @@ const productImageUpload = multer({
   },
 });
 
+// Configure multer for group image uploads (stored with zohoGroupId as filename)
+const groupImageStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const uploadDir = path.join(process.cwd(), "public", "product-images");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // Use zohoGroupId from request body as filename, always save as .jpg for consistent URL
+    const zohoGroupId = req.body.zohoGroupId;
+    if (!zohoGroupId) {
+      cb(new Error("zohoGroupId is required"), "");
+    } else {
+      // Always use .jpg extension for predictable frontend URLs
+      cb(null, `group-${zohoGroupId}.jpg`);
+    }
+  },
+});
+
+const groupImageUpload = multer({
+  storage: groupImageStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (_req, file, cb) => {
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed."));
+    }
+  },
+});
+
 // Middleware to check if user is authenticated
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
@@ -2420,6 +2454,128 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Group image refresh error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Get all active groups for image upload page
+  app.get("/api/admin/groups/for-images", requireStaffOrAdmin, async (req, res) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const pageSize = parseInt(req.query.pageSize as string) || 15;
+      const search = (req.query.search as string || "").trim().toLowerCase();
+      const offset = (page - 1) * pageSize;
+
+      let countQuery;
+      let dataQuery;
+
+      if (search) {
+        countQuery = await db.execute(sql`
+          SELECT COUNT(DISTINCT zoho_group_id) as total 
+          FROM products 
+          WHERE is_active = true 
+            AND zoho_group_id IS NOT NULL
+            AND zoho_group_name IS NOT NULL
+            AND (
+              LOWER(zoho_group_name) LIKE ${`%${search}%`}
+              OR LOWER(sku) LIKE ${`%${search}%`}
+            )
+        `);
+        dataQuery = await db.execute(sql`
+          SELECT zoho_group_id, zoho_group_name, COUNT(*) as product_count
+          FROM products 
+          WHERE is_active = true
+            AND zoho_group_id IS NOT NULL
+            AND zoho_group_name IS NOT NULL
+            AND (
+              LOWER(zoho_group_name) LIKE ${`%${search}%`}
+              OR LOWER(sku) LIKE ${`%${search}%`}
+            )
+          GROUP BY zoho_group_id, zoho_group_name
+          ORDER BY zoho_group_name
+          LIMIT ${pageSize} OFFSET ${offset}
+        `);
+      } else {
+        countQuery = await db.execute(sql`
+          SELECT COUNT(DISTINCT zoho_group_id) as total 
+          FROM products 
+          WHERE is_active = true 
+            AND zoho_group_id IS NOT NULL
+            AND zoho_group_name IS NOT NULL
+        `);
+        dataQuery = await db.execute(sql`
+          SELECT zoho_group_id, zoho_group_name, COUNT(*) as product_count
+          FROM products 
+          WHERE is_active = true
+            AND zoho_group_id IS NOT NULL
+            AND zoho_group_name IS NOT NULL
+          GROUP BY zoho_group_id, zoho_group_name
+          ORDER BY zoho_group_name
+          LIMIT ${pageSize} OFFSET ${offset}
+        `);
+      }
+
+      const totalCount = parseInt((countQuery.rows[0] as any)?.total || "0");
+      const totalPages = Math.ceil(totalCount / pageSize);
+
+      const groups = dataQuery.rows.map((row: any) => ({
+        zohoGroupId: row.zoho_group_id,
+        zohoGroupName: row.zoho_group_name,
+        productCount: Number(row.product_count),
+      }));
+
+      res.json({
+        groups,
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+        },
+      });
+    } catch (error) {
+      console.error("Get groups for images error:", error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Upload image for a group
+  app.post("/api/admin/groups/upload-image", requireStaffOrAdmin, groupImageUpload.single("image"), async (req, res) => {
+    try {
+      const { zohoGroupId } = req.body;
+      
+      if (!zohoGroupId) {
+        return res.status(400).json({ success: false, message: "zohoGroupId is required" });
+      }
+      
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "No image file uploaded" });
+      }
+      
+      // Verify the group exists
+      const products = await storage.getProductsByGroupId(zohoGroupId);
+      if (products.length === 0) {
+        fs.unlinkSync(req.file.path);
+        return res.status(404).json({ success: false, message: "Group not found" });
+      }
+      
+      const imageUrl = `/product-images/${req.file.filename}`;
+      console.log(`[Admin] Uploaded group image for ${products[0].zohoGroupName} (${zohoGroupId}): ${imageUrl}`);
+      
+      res.json({
+        success: true,
+        message: "Group image uploaded successfully",
+        filename: req.file.filename,
+        path: imageUrl,
+      });
+    } catch (error) {
+      console.error("Upload group image error:", error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : "Unknown error",

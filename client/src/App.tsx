@@ -112,7 +112,7 @@ function HeaderUserMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="text-white hover:bg-gray-700 gap-2" data-testid="button-user-menu">
           <User className="h-4 w-4" />
-          <span className="text-sm font-medium max-w-[150px] truncate">
+          <span className="text-sm font-medium max-w-[250px] truncate">
             {user?.businessName || user?.contactName || user?.email}
           </span>
         </Button>

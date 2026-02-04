@@ -431,8 +431,8 @@ export default function TopSellersPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 12 }).map((_, i) => (
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {Array.from({ length: 15 }).map((_, i) => (
             <Card key={i} className="overflow-hidden">
               <Skeleton className="h-32 w-full" />
               <CardContent className="p-3 space-y-2">
@@ -444,7 +444,7 @@ export default function TopSellersPage() {
           ))}
         </div>
       ) : filteredProducts.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {filteredProducts.map((product) => (
             <ProductCard
               key={product.id}

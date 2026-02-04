@@ -867,8 +867,8 @@ export async function registerRoutes(
     try {
       const { category, search, sortBy, sortOrder, limit, page, inStock } = req.query;
       
-      // Default to 12 products per page for storefront display
-      const pageSize = limit ? parseInt(limit as string, 10) : 12;
+      // Default to 15 products per page for storefront display (5 tiles x 3 rows)
+      const pageSize = limit ? parseInt(limit as string, 10) : 15;
       const pageNum = page ? parseInt(page as string, 10) : 1;
       const offset = (pageNum - 1) * pageSize;
       

@@ -288,13 +288,13 @@ function CustomerHomePage() {
     (c) => c.name.toLowerCase() === "warner" || c.slug === "warner"
   );
 
-  // Check if we have at least 12 highlighted products (minimum required)
+  // Check if we have at least 15 highlighted products (minimum required for 5x3 grid)
   const highlightedProducts = highlightedData?.products || [];
-  const hasEnoughHighlighted = highlightedProducts.length >= 12;
+  const hasEnoughHighlighted = highlightedProducts.length >= 15;
 
-  // Fetch Warner products if we don't have at least 12 highlighted products
+  // Fetch Warner products if we don't have at least 15 highlighted products
   const shouldFetchWarner = !highlightedLoading && !hasEnoughHighlighted && warnerCategory;
-  const warnerQueryUrl = warnerCategory ? `/api/products?category=${warnerCategory.slug}&limit=24` : null;
+  const warnerQueryUrl = warnerCategory ? `/api/products?category=${warnerCategory.slug}&limit=15` : null;
   const { data: warnerData, isLoading: warnerLoading } = useQuery<{ products: Product[] }>({
     queryKey: [warnerQueryUrl],
     enabled: !!shouldFetchWarner && !!warnerQueryUrl,

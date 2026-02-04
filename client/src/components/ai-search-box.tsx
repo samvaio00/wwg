@@ -7,11 +7,6 @@ import { Loader2, ShoppingCart, TrendingUp, Sparkles, Layers, Search, Lightbulb 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 
 interface AISearchBoxProps {
   value: string;
@@ -458,99 +453,97 @@ export function AISearchBox({
           </Label>
         </div>
       )}
-      <Popover open={showExamples && aiEnabled} onOpenChange={setShowExamples}>
-        <PopoverTrigger asChild>
-          <div className="relative w-96 lg:w-[26rem]">
-            <Input
-              ref={inputRef}
-              type="search"
-              placeholder={dynamicPlaceholder}
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => aiEnabled && value.length === 0 && setShowExamples(true)}
-              onBlur={() => setTimeout(() => setShowExamples(false), 150)}
-              className={`pr-20 h-9 focus-ring-animate transition-all ${
-                showActionIndicator ? "border-primary/50 bg-primary/5" : ""
-              } ${showTopSellerSearchIndicator ? "border-amber-500/50 bg-amber-500/5" : ""}`}
-              data-testid={testId}
-              disabled={isProcessingAction}
-            />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              {isProcessingAction && (
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              )}
-              {showActionIndicator && !isProcessingAction && (
-                <Badge variant="default" className="text-xs gap-1 badge-pop">
-                  {isTopSellersAction ? (
-                    <>
-                      <TrendingUp className="h-3 w-3" />
-                      Top Sellers
-                    </>
-                  ) : isAddEachAction ? (
-                    <>
-                      <Layers className="h-3 w-3" />
-                      Bulk Add
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart className="h-3 w-3" />
-                      Action
-                    </>
-                  )}
-                </Badge>
-              )}
-              {showTopSellerSearchIndicator && !isProcessingAction && !showActionIndicator && (
-                <Badge variant="secondary" className="text-xs gap-1 badge-pop">
+      <div className="relative w-96 lg:w-[26rem]">
+        <Input
+          ref={inputRef}
+          type="search"
+          placeholder={dynamicPlaceholder}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            if (e.target.value.length > 0) setShowExamples(false);
+          }}
+          onKeyDown={handleKeyDown}
+          onFocus={() => aiEnabled && value.length === 0 && setShowExamples(true)}
+          onBlur={() => setTimeout(() => setShowExamples(false), 150)}
+          className={`pr-20 h-9 focus-ring-animate transition-all ${
+            showActionIndicator ? "border-primary/50 bg-primary/5" : ""
+          } ${showTopSellerSearchIndicator ? "border-amber-500/50 bg-amber-500/5" : ""}`}
+          data-testid={testId}
+          disabled={isProcessingAction}
+        />
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          {isProcessingAction && (
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          )}
+          {showActionIndicator && !isProcessingAction && (
+            <Badge variant="default" className="text-xs gap-1 badge-pop">
+              {isTopSellersAction ? (
+                <>
                   <TrendingUp className="h-3 w-3" />
-                  Top Seller
-                </Badge>
+                  Top Sellers
+                </>
+              ) : isAddEachAction ? (
+                <>
+                  <Layers className="h-3 w-3" />
+                  Bulk Add
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="h-3 w-3" />
+                  Action
+                </>
               )}
-              {isSearching && !isProcessingAction && !showActionIndicator && (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              )}
-              {!isSearching && !showActionIndicator && !isProcessingAction && value.length === 0 && (
-                <span className="text-xs text-muted-foreground">Enter</span>
-              )}
+            </Badge>
+          )}
+          {showTopSellerSearchIndicator && !isProcessingAction && !showActionIndicator && (
+            <Badge variant="secondary" className="text-xs gap-1 badge-pop">
+              <TrendingUp className="h-3 w-3" />
+              Top Seller
+            </Badge>
+          )}
+          {isSearching && !isProcessingAction && !showActionIndicator && (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+          {!isSearching && !showActionIndicator && !isProcessingAction && value.length === 0 && (
+            <span className="text-xs text-muted-foreground">Enter</span>
+          )}
+        </div>
+        
+        {/* Examples dropdown */}
+        {showExamples && aiEnabled && (
+          <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-lg border bg-popover shadow-lg">
+            <div className="p-3 border-b bg-muted/30 rounded-t-lg">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Lightbulb className="h-4 w-4 text-amber-500" />
+                AI Search Examples
+              </div>
+            </div>
+            <div className="divide-y">
+              {AI_SEARCH_EXAMPLES.map((item, index) => (
+                <button
+                  key={index}
+                  className="w-full p-3 text-left hover:bg-accent/50 flex items-start gap-3 transition-colors"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    const exampleText = item.example.split('"')[1] || "";
+                    onChange(exampleText);
+                    setShowExamples(false);
+                    inputRef.current?.focus();
+                  }}
+                  data-testid={`ai-example-${index}`}
+                >
+                  <item.icon className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{item.label}</p>
+                    <p className="text-xs text-muted-foreground truncate">{item.example}</p>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
-        </PopoverTrigger>
-        <PopoverContent 
-          side="bottom" 
-          align="start" 
-          className="w-96 p-0"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-        >
-          <div className="p-3 border-b bg-muted/30">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Lightbulb className="h-4 w-4 text-amber-500" />
-              AI Search Examples
-            </div>
-          </div>
-          <div className="divide-y">
-            {AI_SEARCH_EXAMPLES.map((item, index) => (
-              <button
-                key={index}
-                className="w-full p-3 text-left hover-elevate flex items-start gap-3"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  const exampleText = item.example.split('"')[1] || "";
-                  onChange(exampleText);
-                  setShowExamples(false);
-                  inputRef.current?.focus();
-                }}
-                data-testid={`ai-example-${index}`}
-              >
-                <item.icon className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-muted-foreground truncate">{item.example}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </PopoverContent>
-      </Popover>
+        )}
+      </div>
     </div>
   );
 }

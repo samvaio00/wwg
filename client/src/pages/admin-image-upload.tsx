@@ -59,9 +59,11 @@ function ProductImageTile({ product, onUploadSuccess }: {
     setIsUploading(true);
     try {
       const formData = new FormData();
-      formData.append("image", file);
+      // Important: text fields must be appended BEFORE the file
+      // so multer has access to zohoItemId when processing the filename
       formData.append("productId", product.id);
       formData.append("zohoItemId", product.zohoItemId || "");
+      formData.append("image", file);
 
       const response = await fetch("/api/admin/products/upload-image", {
         method: "POST",

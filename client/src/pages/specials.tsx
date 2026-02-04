@@ -62,7 +62,7 @@ function ProductCard({
           </Badge>
         )}
       </div>
-      <CardContent className="p-4 space-y-2">
+      <CardContent className="p-5 space-y-2">
         <p className="text-xs text-muted-foreground font-mono">{product.sku}</p>
         <h3 className="font-medium text-sm line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
         

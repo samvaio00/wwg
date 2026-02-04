@@ -134,8 +134,8 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
           </Badge>
         )}
       </div>
-      <CardContent className="p-3 space-y-2">
-        <div className="h-12">
+      <CardContent className="p-4 space-y-2">
+        <div className="h-14">
           <p className="text-xs text-muted-foreground font-mono truncate">{product.sku}</p>
           <h3 className="font-semibold text-sm line-clamp-2 leading-tight" data-testid={`text-product-name-${product.id}`}>
             {product.name}

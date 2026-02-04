@@ -137,8 +137,8 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
           </Badge>
         )}
       </div>
-      <CardContent className="p-3 space-y-2">
-        <div className="h-12">
+      <CardContent className="p-4 space-y-2">
+        <div className="h-14">
           <p className="text-xs text-muted-foreground font-mono truncate">{product.sku}</p>
           <h3 className="font-semibold text-sm line-clamp-2 leading-tight" data-testid={`text-product-name-${product.id}`}>
             {product.name}
@@ -369,7 +369,7 @@ export default function ProductsPage() {
     queryParams.set("inStock", "true");
   }
   queryParams.set("page", page.toString());
-  queryParams.set("limit", "12");
+  queryParams.set("limit", "15");
 
   // Fetch products from regular API (used when AI search is disabled or no search term)
   const { data, isLoading: isRegularLoading, error } = useQuery<{ products: Product[]; pagination: PaginationInfo }>({
@@ -391,11 +391,11 @@ export default function ProductsPage() {
     : safeAIResults;
   
   const displayProducts = (isAISearchActive && !aiSearchError)
-    ? filteredAIResults.slice((page - 1) * 12, page * 12)
+    ? filteredAIResults.slice((page - 1) * 15, page * 15)
     : data?.products || [];
 
   const totalPages = (isAISearchActive && !aiSearchError)
-    ? Math.ceil(filteredAIResults.length / 12) || 1
+    ? Math.ceil(filteredAIResults.length / 15) || 1
     : data?.pagination?.totalPages || 1;
 
   const isLoading = isAISearchActive ? isAISearching : isRegularLoading;

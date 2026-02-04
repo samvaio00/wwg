@@ -110,12 +110,11 @@ function HeaderUserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="text-white hover:bg-gray-700" data-testid="button-user-menu">
-          <Avatar className="h-7 w-7">
-            <AvatarFallback className="text-xs bg-gray-600 text-white">
-              {getInitials()}
-            </AvatarFallback>
-          </Avatar>
+        <Button variant="ghost" className="text-white hover:bg-gray-700 gap-2" data-testid="button-user-menu">
+          <User className="h-4 w-4" />
+          <span className="text-sm font-medium max-w-[150px] truncate">
+            {user?.businessName || user?.contactName || user?.email}
+          </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

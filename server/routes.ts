@@ -2346,6 +2346,23 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, message: "Product has no Zoho item ID" });
       }
       
+      const { force } = req.body || {};
+      
+      // If force=true, clear the uploaded flag first so refresh will proceed
+      if (force === true) {
+        await db.update(products)
+          .set({ imageSource: null })
+          .where(eq(products.id, req.params.id));
+        
+        // Also clear group-level imageSource if this product is in a group
+        if (product.zohoGroupId) {
+          await db.update(productGroups)
+            .set({ imageSource: null })
+            .where(eq(productGroups.zohoGroupId, product.zohoGroupId));
+        }
+        console.log(`[Admin] Force refresh requested for product ${product.sku} - cleared uploaded flag`);
+      }
+      
       const success = await refreshProductImage(product.zohoItemId, product.zohoGroupId);
       res.json({
         success,

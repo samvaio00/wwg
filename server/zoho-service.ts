@@ -1368,6 +1368,20 @@ export async function fetchProductImageWithFallback(
   
   if (imageData) {
     saveLocalImage(zohoItemId, imageData);
+    
+    // Mark the product's image source as 'zoho' (if not already 'uploaded')
+    try {
+      await db.update(products)
+        .set({ imageSource: 'zoho' })
+        .where(and(
+          eq(products.zohoItemId, zohoItemId),
+          sql`${products.imageSource} IS NULL OR ${products.imageSource} != 'uploaded'`
+        ));
+    } catch (err) {
+      // Silent fail - image is still saved locally
+      console.error(`[Image Storage] Failed to update imageSource for ${zohoItemId}:`, err);
+    }
+    
     return { data: imageData, contentType: "image/jpeg" };
   }
   

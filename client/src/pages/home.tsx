@@ -44,40 +44,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import type { Product, Category } from "@shared/schema";
 
-function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {
-  const [imageError, setImageError] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  
-  const imageUrl = product.zohoItemId 
-    ? `/api/products/${product.id}/image`
-    : product.imageUrl;
-  
-  if (!imageUrl || imageError) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Package className="h-12 w-12 text-muted-foreground" />
-      </div>
-    );
-  }
-  
-  return (
-    <>
-      {!imageLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Package className="h-12 w-12 text-muted-foreground animate-pulse" />
-        </div>
-      )}
-      <img 
-        src={imageUrl} 
-        alt={product.name}
-        className={`object-contain w-full h-full ${isOutOfStock ? "grayscale" : ""} ${imageLoaded ? "" : "opacity-0"}`}
-        loading="lazy"
-        onError={() => setImageError(true)}
-        onLoad={() => setImageLoaded(true)}
-      />
-    </>
-  );
-}
+import { LazyProductImage } from "@/components/lazy-product-image";
 
 function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: { 
   product: Product; 
@@ -123,7 +90,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
       onClick={() => !isGroupOutOfStock && onProductClick(product)}
     >
       <div className="h-32 relative bg-muted overflow-hidden">
-        <ProductImage product={product} isOutOfStock={isOutOfStock} />
+        <LazyProductImage product={product} isOutOfStock={isOutOfStock} iconSize="md" />
         {isOutOfStock ? (
           <Badge className="absolute top-2 right-2" variant="destructive" data-testid={`badge-out-of-stock-${product.id}`}>
             Out of Stock

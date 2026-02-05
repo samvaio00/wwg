@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,6 +39,7 @@ function ProductImageTile({ product, onUploadSuccess }: {
   product: Product; 
   onUploadSuccess: () => void;
 }) {
+  const [isInView, setIsInView] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -48,7 +49,28 @@ function ProductImageTile({ product, onUploadSuccess }: {
   const [localIsOnline, setLocalIsOnline] = useState(product.isOnline ?? true);
   const [isTogglingOnline, setIsTogglingOnline] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setIsInView(true);
+            observer.unobserve(element);
+          }
+        });
+      },
+      { rootMargin: "100px", threshold: 0.01 }
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const toggleOnlineMutation = useMutation({
     mutationFn: async (newIsOnline: boolean) => {
@@ -177,6 +199,7 @@ function ProductImageTile({ product, onUploadSuccess }: {
 
   return (
     <Card 
+      ref={containerRef}
       className={`overflow-hidden transition-all ${isDragging ? "ring-2 ring-primary border-primary" : ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -197,7 +220,7 @@ function ProductImageTile({ product, onUploadSuccess }: {
             <Upload className="h-10 w-10 text-primary" />
             <span className="text-xs text-primary mt-1">Drop image here</span>
           </div>
-        ) : hasImage ? (
+        ) : hasImage && isInView ? (
           <>
             {!imageLoaded && (
               <div className="absolute inset-0 flex items-center justify-center">
@@ -208,11 +231,14 @@ function ProductImageTile({ product, onUploadSuccess }: {
               src={imageUrl} 
               alt={product.name}
               className={`object-contain w-full h-full ${imageLoaded ? "" : "opacity-0"}`}
-              loading="lazy"
               onError={() => setImageError(true)}
               onLoad={() => setImageLoaded(true)}
             />
           </>
+        ) : hasImage ? (
+          <div className="flex items-center justify-center h-full">
+            <Package className="h-12 w-12 text-muted-foreground" />
+          </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <Package className="h-12 w-12" />

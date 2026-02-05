@@ -46,41 +46,7 @@ const sortOptions = [
   { value: "name-desc", label: "Name: Z to A" },
 ];
 
-function ProductImage({ product, isOutOfStock }: { product: Product; isOutOfStock: boolean }) {
-  const [imageError, setImageError] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  
-  // Use Zoho proxy endpoint if product has zohoItemId, otherwise fall back to stored imageUrl
-  const imageUrl = product.zohoItemId 
-    ? `/api/products/${product.id}/image`
-    : product.imageUrl;
-  
-  if (!imageUrl || imageError) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Package className="h-16 w-16 text-muted-foreground" />
-      </div>
-    );
-  }
-  
-  return (
-    <>
-      {!imageLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Package className="h-16 w-16 text-muted-foreground animate-pulse" />
-        </div>
-      )}
-      <img 
-        src={imageUrl} 
-        alt={product.name}
-        className={`object-contain w-full h-full ${isOutOfStock ? "grayscale" : ""} ${imageLoaded ? "" : "opacity-0"}`}
-        loading="lazy"
-        onError={() => setImageError(true)}
-        onLoad={() => setImageLoaded(true)}
-      />
-    </>
-  );
-}
+import { LazyProductImage } from "@/components/lazy-product-image";
 
 function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: { 
   product: Product; 
@@ -125,9 +91,10 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
       onClick={() => !isGroupOutOfStock && onProductClick(product)}
     >
       <div className="h-32 relative bg-muted overflow-hidden">
-        <ProductImage 
+        <LazyProductImage 
           product={product} 
           isOutOfStock={isOutOfStock}
+          iconSize="lg"
         />
         {isOutOfStock ? (
           <Badge className="absolute top-2 right-2" variant="destructive" data-testid={`badge-out-of-stock-${product.id}`}>

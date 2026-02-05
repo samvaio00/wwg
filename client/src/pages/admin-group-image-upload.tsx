@@ -45,6 +45,7 @@ function GroupImageTile({ group, initialIsOnline, onUploadSuccess }: {
   initialIsOnline: boolean;
   onUploadSuccess: () => void;
 }) {
+  const [isInView, setIsInView] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -54,11 +55,32 @@ function GroupImageTile({ group, initialIsOnline, onUploadSuccess }: {
   const [localIsOnline, setLocalIsOnline] = useState(initialIsOnline);
   const [isTogglingOnline, setIsTogglingOnline] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     setLocalIsOnline(initialIsOnline);
   }, [initialIsOnline]);
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setIsInView(true);
+            observer.unobserve(element);
+          }
+        });
+      },
+      { rootMargin: "100px", threshold: 0.01 }
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const toggleOnlineMutation = useMutation({
     mutationFn: async (newIsOnline: boolean) => {
@@ -177,6 +199,7 @@ function GroupImageTile({ group, initialIsOnline, onUploadSuccess }: {
 
   return (
     <Card 
+      ref={containerRef}
       className={`overflow-hidden transition-all ${isDragging ? 'ring-2 ring-primary' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -197,8 +220,8 @@ function GroupImageTile({ group, initialIsOnline, onUploadSuccess }: {
             <Upload className="h-10 w-10 text-primary" />
             <span className="text-xs text-primary mt-1">Drop image here</span>
           </div>
-        ) : hasImage ? (
-          <>
+        ) : isInView ? (
+          hasImage ? (
             <img
               src={imageUrl}
               alt={group.zohoGroupName}
@@ -206,21 +229,25 @@ function GroupImageTile({ group, initialIsOnline, onUploadSuccess }: {
               onLoad={() => setImageLoaded(true)}
               onError={() => setImageError(true)}
             />
-          </>
+          ) : (
+            <>
+              <img
+                src={imageUrl}
+                alt={group.zohoGroupName}
+                className="hidden"
+                onLoad={() => setImageLoaded(true)}
+                onError={() => setImageError(true)}
+              />
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <ImageIcon className="h-10 w-10 mb-2" />
+                <span className="text-xs">No group image</span>
+              </div>
+            </>
+          )
         ) : (
-          <>
-            <img
-              src={imageUrl}
-              alt={group.zohoGroupName}
-              className="hidden"
-              onLoad={() => setImageLoaded(true)}
-              onError={() => setImageError(true)}
-            />
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-              <ImageIcon className="h-10 w-10 mb-2" />
-              <span className="text-xs">No group image</span>
-            </div>
-          </>
+          <div className="flex items-center justify-center h-full text-muted-foreground">
+            <ImageIcon className="h-10 w-10" />
+          </div>
         )}
       </div>
       <CardContent className="p-3 space-y-2">

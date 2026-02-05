@@ -104,6 +104,7 @@ export interface IStorage {
   getOrder(id: string): Promise<Order | undefined>;
   getOrderWithItems(id: string): Promise<{ order: Order; items: (OrderItem & { product: Product })[] } | undefined>;
   getUserOrders(userId: string): Promise<Order[]>;
+  getUserOrdersWithCounts(userId: string): Promise<(Order & { itemCount: number })[]>;
   getAllOrders(): Promise<(Order & { user: SafeUser })[]>;
   updateOrderStatus(id: string, status: OrderStatusType, adminId?: string, reason?: string): Promise<Order | undefined>;
   updateOrderZohoInfo(id: string, zohoSalesOrderId: string): Promise<Order | undefined>;
@@ -955,6 +956,37 @@ export class DatabaseStorage implements IStorage {
       .from(orders)
       .where(eq(orders.userId, userId))
       .orderBy(desc(orders.createdAt));
+  }
+
+  async getUserOrdersWithCounts(userId: string): Promise<(Order & { itemCount: number })[]> {
+    // Use a subquery to get item counts efficiently in one query
+    const orderList = await db.select()
+      .from(orders)
+      .where(eq(orders.userId, userId))
+      .orderBy(desc(orders.createdAt));
+    
+    if (orderList.length === 0) return [];
+    
+    // Get item counts for all orders in one query
+    const orderIds = orderList.map(o => o.id);
+    const itemCounts = await db.select({
+      orderId: orderItems.orderId,
+      count: sql<number>`count(*)::int`.as('count')
+    })
+      .from(orderItems)
+      .where(and(
+        sql`${orderItems.orderId} = ANY(${orderIds})`,
+        eq(orderItems.isDeleted, false)
+      ))
+      .groupBy(orderItems.orderId);
+    
+    // Create a map for quick lookup
+    const countMap = new Map(itemCounts.map(ic => [ic.orderId, ic.count]));
+    
+    return orderList.map(order => ({
+      ...order,
+      itemCount: countMap.get(order.id) || 0
+    }));
   }
 
   async getAllOrders(): Promise<(Order & { user: SafeUser })[]> {

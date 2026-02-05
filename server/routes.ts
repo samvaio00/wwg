@@ -1462,8 +1462,8 @@ export async function registerRoutes(
   // Get user's orders
   app.get("/api/orders", requireAuth, async (req, res) => {
     try {
-      const orderList = await storage.getUserOrders(req.session.userId!);
-      res.json({ orders: orderList });
+      const ordersWithCounts = await storage.getUserOrdersWithCounts(req.session.userId!);
+      res.json({ orders: ordersWithCounts });
     } catch (error) {
       console.error("Error fetching orders:", error);
       res.status(500).json({ message: "Failed to fetch orders" });
@@ -1486,6 +1486,74 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching order:", error);
       res.status(500).json({ message: "Failed to fetch order" });
+    }
+  });
+
+  // Duplicate order - add items from a previous order to cart
+  app.post("/api/orders/:id/duplicate", requireAuth, async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const userId = req.session.userId!;
+      
+      // Get the order with items
+      const orderData = await storage.getOrderWithItems(orderId);
+      if (!orderData) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      
+      // Ensure user owns this order
+      if (orderData.order.userId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      // Validate order status - don't allow duplicating cancelled or rejected orders
+      if (orderData.order.status === "cancelled" || orderData.order.status === "rejected") {
+        return res.status(400).json({ message: "Cannot duplicate a cancelled or rejected order" });
+      }
+      
+      // Get or create user's cart
+      let cart = await storage.getCart(userId);
+      if (!cart) {
+        cart = await storage.createCart(userId);
+      }
+      
+      // Add items from the order to the cart
+      let itemsAdded = 0;
+      let itemsSkipped = 0;
+      const skippedItems: string[] = [];
+      
+      for (const item of orderData.items) {
+        // Skip deleted items
+        if (item.isDeleted) continue;
+        
+        // Check if product is still available (has stock)
+        const product = await storage.getProductById(item.productId);
+        if (!product || !product.isActive || (product.stockQuantity !== null && product.stockQuantity <= 0)) {
+          itemsSkipped++;
+          skippedItems.push(item.product?.name || `Product #${item.productId}`);
+          continue;
+        }
+        
+        // Determine quantity to add (limited by stock)
+        const qtyToAdd = product.stockQuantity !== null 
+          ? Math.min(item.quantity, product.stockQuantity) 
+          : item.quantity;
+        
+        if (qtyToAdd > 0) {
+          await storage.addToCart(cart.id, item.productId, qtyToAdd);
+          itemsAdded++;
+        }
+      }
+      
+      res.json({ 
+        message: `Added ${itemsAdded} item(s) to cart`,
+        itemsAdded,
+        itemsSkipped,
+        skippedItems: skippedItems.length > 0 ? skippedItems : undefined
+      });
+    } catch (error) {
+      console.error("Error duplicating order:", error);
+      res.status(500).json({ message: "Failed to duplicate order" });
     }
   });
 

@@ -1,7 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
 import { 
   ClipboardList, 
   Package, 
@@ -11,9 +23,22 @@ import {
   CheckCircle,
   Clock,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  ShoppingCart,
+  ChevronRight
 } from "lucide-react";
-import type { Order } from "@shared/schema";
+import type { Order, OrderItem, Product } from "@shared/schema";
+import { useLocation } from "wouter";
+
+interface OrderWithCount extends Order {
+  itemCount: number;
+}
+
+interface OrderWithItems {
+  order: Order;
+  items: (OrderItem & { product: Product })[];
+}
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof Clock }> = {
   pending_approval: { label: "Pending Approval", variant: "secondary", icon: Clock },
@@ -25,12 +50,16 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   cancelled: { label: "Cancelled", variant: "destructive", icon: XCircle },
 };
 
-function OrderCard({ order }: { order: Order }) {
+function OrderCard({ order, onClick }: { order: OrderWithCount; onClick: () => void }) {
   const config = statusConfig[order.status] || { label: order.status, variant: "outline" as const, icon: AlertCircle };
   const StatusIcon = config.icon;
   
   return (
-    <Card className="hover-elevate" data-testid={`card-order-${order.id}`}>
+    <Card 
+      className="hover-elevate cursor-pointer transition-all" 
+      onClick={onClick}
+      data-testid={`card-order-${order.id}`}
+    >
       <CardContent className="p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex-1">
@@ -58,20 +87,219 @@ function OrderCard({ order }: { order: Order }) {
               </div>
             </div>
           </div>
-          {order.trackingNumber && (
-            <div className="text-sm">
-              <span className="text-muted-foreground">Tracking:</span>{" "}
-              <span className="font-mono">{order.trackingNumber}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {order.trackingNumber && (
+              <div className="text-sm">
+                <span className="text-muted-foreground">Tracking:</span>{" "}
+                <span className="font-mono">{order.trackingNumber}</span>
+              </div>
+            )}
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </div>
         </div>
       </CardContent>
     </Card>
   );
 }
 
+function OrderDetailDialog({ 
+  orderId, 
+  isOpen, 
+  onClose 
+}: { 
+  orderId: string | null; 
+  isOpen: boolean; 
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  
+  const { data: orderData, isLoading } = useQuery<OrderWithItems>({
+    queryKey: ["/api/orders", orderId],
+    enabled: !!orderId && isOpen,
+  });
+  
+  const duplicateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/orders/${orderId}/duplicate`);
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to duplicate order");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      
+      let message = data.message;
+      if (data.itemsSkipped > 0 && data.skippedItems) {
+        message += `. ${data.itemsSkipped} item(s) skipped (unavailable): ${data.skippedItems.join(", ")}`;
+      }
+      
+      toast({
+        title: "Order Duplicated",
+        description: message,
+      });
+      
+      onClose();
+      setLocation("/cart");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const order = orderData?.order;
+  const items = orderData?.items || [];
+  const config = order ? (statusConfig[order.status] || { label: order.status, variant: "outline" as const, icon: AlertCircle }) : null;
+  
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ClipboardList className="h-5 w-5" />
+            Order Details
+          </DialogTitle>
+          <DialogDescription>
+            View order information and items
+          </DialogDescription>
+        </DialogHeader>
+        
+        {isLoading ? (
+          <div className="space-y-4 py-4">
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-4 w-48" />
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          </div>
+        ) : order ? (
+          <div className="flex flex-col gap-4 overflow-hidden">
+            <div className="flex flex-wrap items-center gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Order Number</p>
+                <p className="font-semibold text-lg" data-testid="text-order-detail-number">{order.orderNumber}</p>
+              </div>
+              {config && (
+                <Badge variant={config.variant} className="flex items-center gap-1">
+                  <config.icon className="h-3 w-3" />
+                  {config.label}
+                </Badge>
+              )}
+              <div className="ml-auto text-right">
+                <p className="text-sm text-muted-foreground">Total</p>
+                <p className="font-semibold text-lg">${order.totalAmount}</p>
+              </div>
+            </div>
+            
+            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <Calendar className="h-4 w-4" />
+                Ordered: {new Date(order.createdAt).toLocaleDateString()}
+              </div>
+              {order.trackingNumber && (
+                <div className="flex items-center gap-1">
+                  <Truck className="h-4 w-4" />
+                  Tracking: {order.carrier ? `${order.carrier} - ` : ""}{order.trackingNumber}
+                </div>
+              )}
+            </div>
+            
+            {order.shippingAddress && (
+              <div className="text-sm">
+                <p className="text-muted-foreground mb-1">Shipping Address:</p>
+                <p>{order.shippingAddress}</p>
+                <p>{order.shippingCity}, {order.shippingState} {order.shippingZipCode}</p>
+              </div>
+            )}
+            
+            <div className="border-t pt-4">
+              <p className="font-medium mb-3">Items ({items.length})</p>
+              <ScrollArea className="max-h-[300px] pr-4">
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <div 
+                      key={item.id} 
+                      className={`flex items-center gap-3 p-3 rounded-lg border ${
+                        item.isDeleted ? "bg-destructive/10 border-destructive/20 opacity-60" : "bg-muted/30"
+                      }`}
+                      data-testid={`order-detail-item-${item.id}`}
+                    >
+                      <div className="w-12 h-12 rounded bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {item.product?.imageUrl ? (
+                          <img 
+                            src={item.product.imageUrl} 
+                            alt={item.product?.name || "Product"}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Package className="h-6 w-6 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-medium truncate ${item.isDeleted ? "line-through text-muted-foreground" : ""}`}>
+                          {item.product?.name || `Product #${item.productId}`}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          SKU: {item.product?.sku || "N/A"} | Qty: {item.quantity} @ ${item.unitPrice}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className={`font-medium ${item.isDeleted ? "line-through text-muted-foreground" : ""}`}>
+                          ${(parseFloat(item.unitPrice) * item.quantity).toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+            
+            {order.status !== "cancelled" && order.status !== "rejected" && (
+              <div className="border-t pt-4 flex flex-wrap gap-2">
+                <Button
+                  onClick={() => duplicateMutation.mutate()}
+                  disabled={duplicateMutation.isPending}
+                  data-testid="button-duplicate-order"
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  {duplicateMutation.isPending ? "Adding to Cart..." : "Duplicate Order"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    onClose();
+                    setLocation("/cart");
+                  }}
+                  data-testid="button-view-cart"
+                >
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  View Cart
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="py-8 text-center text-muted-foreground">
+            Order not found
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function OrderHistoryPage() {
-  const { data: ordersData, isLoading } = useQuery<{ orders: Order[] }>({
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  
+  const { data: ordersData, isLoading } = useQuery<{ orders: OrderWithCount[] }>({
     queryKey: ["/api/orders"],
   });
 
@@ -104,7 +332,11 @@ export default function OrderHistoryPage() {
       ) : orders.length > 0 ? (
         <div className="space-y-4">
           {orders.map((order) => (
-            <OrderCard key={order.id} order={order} />
+            <OrderCard 
+              key={order.id} 
+              order={order} 
+              onClick={() => setSelectedOrderId(order.id)}
+            />
           ))}
         </div>
       ) : (
@@ -118,6 +350,12 @@ export default function OrderHistoryPage() {
           </CardContent>
         </Card>
       )}
+      
+      <OrderDetailDialog 
+        orderId={selectedOrderId}
+        isOpen={!!selectedOrderId}
+        onClose={() => setSelectedOrderId(null)}
+      />
     </div>
   );
 }

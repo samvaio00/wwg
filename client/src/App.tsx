@@ -35,7 +35,6 @@ import ContactPage from "@/pages/contact";
 import ProductsPage from "@/pages/products";
 import CartPage from "@/pages/cart";
 import CheckoutPage from "@/pages/checkout";
-import OrdersPage from "@/pages/orders";
 import OrderDetailPage from "@/pages/order-detail";
 import AdminUsersPage from "@/pages/admin-users";
 import AdminOrdersPage from "@/pages/admin-orders";
@@ -153,14 +152,8 @@ function HeaderUserMenu() {
           <>
             <DropdownMenuItem asChild>
               <Link href="/orders" className="cursor-pointer" data-testid="menu-item-orders">
-                <ShoppingCart className="mr-2 h-4 w-4" />
-                My Orders
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/order-history" className="cursor-pointer" data-testid="menu-item-order-history">
                 <ClipboardList className="mr-2 h-4 w-4" />
-                Order History
+                My Orders
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
@@ -258,13 +251,12 @@ function AppRouter() {
         <Route path="/whats-new" component={WhatsNewPage} />
         <Route path="/top-sellers" component={TopSellersPage} />
         <Route path="/specials" component={SpecialsPage} />
-        <Route path="/order-history" component={OrderHistoryPage} />
         <Route path="/profile" component={ProfilePage} />
         <Route path="/contact" component={ContactPage} />
         <Route path="/products" component={ProductsPage} />
         <Route path="/cart" component={CartPage} />
         <Route path="/checkout" component={CheckoutPage} />
-        <Route path="/orders" component={OrdersPage} />
+        <Route path="/orders" component={OrderHistoryPage} />
         <Route path="/orders/:id" component={OrderDetailPage} />
         <Route path="/admin/users" component={AdminUsersPage} />
         <Route path="/admin/orders" component={AdminOrdersPage} />

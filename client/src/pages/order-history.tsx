@@ -309,8 +309,8 @@ export default function OrderHistoryPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <ClipboardList className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-black tracking-tight" data-testid="heading-order-history" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
-          Order History
+        <h1 className="text-2xl font-black tracking-tight" data-testid="heading-my-orders" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
+          My Orders
         </h1>
       </div>
 

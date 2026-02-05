@@ -152,12 +152,15 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <Link href="/" className="flex items-center justify-center text-sidebar-foreground">
+        <Link href="/" className="flex flex-col items-center justify-center text-sidebar-foreground">
           <img 
             src={wwgLogo} 
             alt="Warner Wireless Gears" 
             className="w-full max-w-[14rem] h-auto rounded-lg object-contain shadow-lg transition-transform hover:scale-105" 
           />
+          <p className="mt-2 text-center text-sm italic font-semibold tracking-wide text-muted-foreground/80" style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}>
+            "Our business is to increase your business."
+          </p>
         </Link>
       </SidebarHeader>
 

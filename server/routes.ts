@@ -26,7 +26,7 @@ import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, 
 import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
 import { sendShipmentNotification, sendDeliveryNotification, sendNewUserNotification, sendNewOrderNotification } from "./email-service";
-import { sendOrderModificationEmail } from "./email-campaign-service";
+import { sendOrderModificationEmail, sendOrderDeletionEmail } from "./email-campaign-service";
 import { processJobQueue } from "./job-worker";
 import { handleItemWebhook, handleCustomerWebhook, handleInvoiceWebhook, handleBillWebhook, verifyWebhookSecret } from "./zoho-webhooks";
 import { getWebhookStats } from "./webhook-stats";
@@ -1824,10 +1824,25 @@ export async function registerRoutes(
       if (!validStatuses.includes(status)) {
         return res.status(400).json({ message: "Invalid status" });
       }
+      
+      // Get order details before status change for notification
+      const orderDataBefore = await storage.getOrderWithItems(req.params.id as string);
+      
       const order = await storage.updateOrderStatus(req.params.id as string, status, req.session.userId!);
       if (!order) {
         return res.status(404).json({ message: "Order not found" });
       }
+      
+      // Send cancellation email if order is cancelled or rejected
+      if ((status === "cancelled" || status === "rejected") && orderDataBefore) {
+        const customer = await storage.getUser(order.userId);
+        if (customer) {
+          sendOrderDeletionEmail(customer, orderDataBefore.order, orderDataBefore.items).catch(err => {
+            console.error("Failed to send order cancellation email:", err);
+          });
+        }
+      }
+      
       res.json({ order, message: "Order status updated" });
     } catch (error) {
       console.error("Error updating order status:", error);

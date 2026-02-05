@@ -14,6 +14,7 @@ import {
 } from "@shared/schema";
 import { eq, and, lt, gt, isNull, inArray, desc } from "drizzle-orm";
 import crypto from "crypto";
+import PDFDocument from "pdfkit";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -70,29 +71,50 @@ interface SendEmailResult {
   error?: string;
 }
 
-async function sendEmail(
-  to: string,
-  subject: string,
-  htmlContent: string,
-  textContent?: string
-): Promise<SendEmailResult> {
+interface EmailAttachment {
+  filename: string;
+  content: string; // Base64 encoded
+  contentType: string;
+}
+
+interface SendEmailOptions {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  attachments?: EmailAttachment[];
+}
+
+async function sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
   const config = getEmailConfig();
+  const { to, subject, html, text, attachments } = options;
 
   if (config.provider === "resend" && config.apiKey) {
     try {
+      const emailPayload: any = {
+        from: `${config.fromName} <${config.fromEmail}>`,
+        to: [to],
+        subject,
+        html,
+        text,
+      };
+
+      // Add attachments for Resend
+      if (attachments && attachments.length > 0) {
+        emailPayload.attachments = attachments.map(att => ({
+          filename: att.filename,
+          content: att.content,
+          type: att.contentType,
+        }));
+      }
+
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${config.apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          from: `${config.fromName} <${config.fromEmail}>`,
-          to: [to],
-          subject,
-          html: htmlContent,
-          text: textContent,
-        }),
+        body: JSON.stringify(emailPayload),
       });
 
       if (!response.ok) {
@@ -111,21 +133,33 @@ async function sendEmail(
 
   if (config.provider === "sendgrid" && config.apiKey) {
     try {
+      const emailPayload: any = {
+        personalizations: [{ to: [{ email: to }] }],
+        from: { email: config.fromEmail, name: config.fromName },
+        subject,
+        content: [
+          { type: "text/html", value: html },
+          ...(text ? [{ type: "text/plain", value: text }] : []),
+        ],
+      };
+
+      // Add attachments for SendGrid
+      if (attachments && attachments.length > 0) {
+        emailPayload.attachments = attachments.map(att => ({
+          filename: att.filename,
+          content: att.content,
+          type: att.contentType,
+          disposition: "attachment",
+        }));
+      }
+
       const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${config.apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email: to }] }],
-          from: { email: config.fromEmail, name: config.fromName },
-          subject,
-          content: [
-            { type: "text/html", value: htmlContent },
-            ...(textContent ? [{ type: "text/plain", value: textContent }] : []),
-          ],
-        }),
+        body: JSON.stringify(emailPayload),
       });
 
       if (!response.ok) {
@@ -145,7 +179,10 @@ async function sendEmail(
   console.log("[Email Campaign] No email provider configured. Would send:");
   console.log(`  To: ${to}`);
   console.log(`  Subject: ${subject}`);
-  console.log(`  Content preview: ${htmlContent.substring(0, 200)}...`);
+  console.log(`  Content preview: ${html.substring(0, 200)}...`);
+  if (attachments && attachments.length > 0) {
+    console.log(`  Attachments: ${attachments.map(a => a.filename).join(', ')}`);
+  }
   return { success: true, messageId: "console-" + Date.now() };
 }
 
@@ -520,7 +557,7 @@ export async function sendNewHighlightedItemsEmail(): Promise<{ sent: number; er
         actionUrl
       );
 
-      const result = await sendEmail(customer.email, emailContent.subject, htmlContent);
+      const result = await sendEmail({ to: customer.email, subject: emailContent.subject, html: htmlContent });
 
       await logCampaignEmail(
         EmailCampaignType.NEW_HIGHLIGHTED_ITEMS,
@@ -627,7 +664,7 @@ export async function sendNewSkusEmail(): Promise<{ sent: number; errors: number
         actionUrl
       );
 
-      const result = await sendEmail(customer.email, emailContent.subject, htmlContent);
+      const result = await sendEmail({ to: customer.email, subject: emailContent.subject, html: htmlContent });
 
       await logCampaignEmail(
         EmailCampaignType.NEW_SKUS,
@@ -765,7 +802,7 @@ export async function sendCartAbandonmentEmails(): Promise<{ sent: number; error
         actionUrl
       );
 
-      const result = await sendEmail(user.email, emailContent.subject, htmlContent);
+      const result = await sendEmail({ to: user.email, subject: emailContent.subject, html: htmlContent });
 
       await logCampaignEmail(
         EmailCampaignType.CART_ABANDONMENT,
@@ -1075,7 +1112,7 @@ export async function sendBackInStockNotifications(): Promise<{ emailsSent: numb
 </html>`;
 
         // Send the email
-        const result = await sendEmail(data.userEmail, emailContent.subject, htmlContent);
+        const result = await sendEmail({ to: data.userEmail, subject: emailContent.subject, html: htmlContent });
         
         if (result.success) {
           emailsSent++;
@@ -1123,6 +1160,161 @@ export async function sendBackInStockNotifications(): Promise<{ emailsSent: numb
 }
 
 /**
+ * Generate a PDF showing order changes with red font and strikethrough for modifications
+ */
+async function generateOrderChangesPdf(
+  customerName: string,
+  order: { id: string; orderNumber: string; totalAmount: string },
+  items: Array<{
+    sku: string;
+    productName: string;
+    quantity: number;
+    unitPrice: string;
+    lineTotal: string;
+    originalQuantity: number | null;
+    isModified: boolean | null;
+    isDeleted: boolean | null;
+  }>,
+  changeType: 'modified' | 'deleted'
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 50, size: 'A4' });
+      const chunks: Buffer[] = [];
+
+      doc.on('data', (chunk) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      // Header
+      doc.fontSize(20).fillColor('#1e40af').text('Warner Wireless Gears', { align: 'center' });
+      doc.moveDown(0.5);
+      doc.fontSize(16).fillColor('#333333').text(
+        changeType === 'deleted' ? 'Order Cancellation Notice' : 'Order Modification Notice', 
+        { align: 'center' }
+      );
+      doc.moveDown(1);
+
+      // Order info
+      doc.fontSize(12).fillColor('#333333');
+      doc.text(`Order Number: #${order.orderNumber}`);
+      doc.text(`Customer: ${customerName}`);
+      doc.text(`Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`);
+      doc.moveDown(1);
+
+      // Legend
+      doc.fontSize(10).fillColor('#92400e');
+      doc.text('Note: Items in red indicate changes. Items with strikethrough have been removed.');
+      doc.moveDown(1);
+
+      // Table header
+      const tableTop = doc.y;
+      const colWidths = [70, 180, 60, 70, 70];
+      const headers = ['SKU', 'Product', 'Qty', 'Price', 'Total'];
+
+      doc.fillColor('#f3f4f6').rect(50, tableTop, 450, 25).fill();
+      doc.fillColor('#333333').fontSize(10).font('Helvetica-Bold');
+
+      let xPos = 55;
+      headers.forEach((header, i) => {
+        doc.text(header, xPos, tableTop + 7, { width: colWidths[i], align: i >= 2 ? 'right' : 'left' });
+        xPos += colWidths[i];
+      });
+
+      doc.moveDown(1.5);
+      doc.font('Helvetica');
+
+      // Table rows
+      let yPos = tableTop + 30;
+      items.forEach(item => {
+        const isDeleted = item.isDeleted === true;
+        const isModified = item.isModified === true && !isDeleted;
+        const originalQty = item.originalQuantity ?? item.quantity;
+        const hasQtyChange = originalQty !== item.quantity;
+
+        // Set color based on modification status
+        if (isDeleted || isModified) {
+          doc.fillColor('#dc2626'); // Red for modifications
+        } else {
+          doc.fillColor('#333333'); // Normal black
+        }
+
+        xPos = 55;
+        
+        // SKU
+        if (isDeleted) {
+          doc.text(item.sku, xPos, yPos, { width: colWidths[0], strike: true });
+        } else {
+          doc.text(item.sku, xPos, yPos, { width: colWidths[0] });
+        }
+        xPos += colWidths[0];
+
+        // Product name (truncate if too long)
+        const displayName = item.productName.length > 30 ? item.productName.substring(0, 27) + '...' : item.productName;
+        if (isDeleted) {
+          doc.text(displayName, xPos, yPos, { width: colWidths[1], strike: true });
+        } else {
+          doc.text(displayName, xPos, yPos, { width: colWidths[1] });
+        }
+        xPos += colWidths[1];
+
+        // Quantity - show change if modified
+        let qtyText = `${item.quantity}`;
+        if (isDeleted) {
+          qtyText = `${originalQty} → 0`;
+        } else if (isModified && hasQtyChange) {
+          qtyText = `${originalQty} → ${item.quantity}`;
+        }
+        doc.text(qtyText, xPos, yPos, { width: colWidths[2], align: 'right' });
+        xPos += colWidths[2];
+
+        // Unit price
+        if (isDeleted) {
+          doc.text(`$${item.unitPrice}`, xPos, yPos, { width: colWidths[3], align: 'right', strike: true });
+        } else {
+          doc.text(`$${item.unitPrice}`, xPos, yPos, { width: colWidths[3], align: 'right' });
+        }
+        xPos += colWidths[3];
+
+        // Line total
+        const lineTotal = isDeleted ? '$0.00' : `$${item.lineTotal}`;
+        if (isDeleted) {
+          doc.text(lineTotal, xPos, yPos, { width: colWidths[4], align: 'right', strike: true });
+        } else {
+          doc.text(lineTotal, xPos, yPos, { width: colWidths[4], align: 'right' });
+        }
+
+        yPos += 20;
+
+        // Add new page if needed
+        if (yPos > doc.page.height - 100) {
+          doc.addPage();
+          yPos = 50;
+        }
+      });
+
+      // Total row
+      doc.moveDown(1);
+      doc.fillColor('#f3f4f6').rect(50, yPos + 5, 450, 25).fill();
+      doc.fillColor('#333333').font('Helvetica-Bold');
+      doc.text('New Order Total:', 55, yPos + 12, { width: 380, align: 'right' });
+      doc.text(`$${order.totalAmount}`, 435, yPos + 12, { width: 70, align: 'right' });
+
+      // Footer
+      doc.moveDown(3);
+      doc.font('Helvetica').fontSize(9).fillColor('#6b7280');
+      doc.text('If you have any questions about these changes, please contact our support team.', { align: 'center' });
+      doc.moveDown(1);
+      doc.text(`Generated on ${new Date().toISOString()}`, { align: 'center' });
+
+      doc.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
  * Send order modification email to customer when staff/admin edits their order
  */
 export async function sendOrderModificationEmail(
@@ -1149,6 +1341,21 @@ export async function sendOrderModificationEmail(
   
   const baseUrl = getBaseUrl();
   const customerName = customer.businessName || customer.email.split('@')[0];
+  
+  // Generate PDF attachment with order changes
+  let pdfAttachment: EmailAttachment | undefined;
+  try {
+    const pdfBuffer = await generateOrderChangesPdf(customerName, order, items, 'modified');
+    pdfAttachment = {
+      filename: `Order_${order.orderNumber}_Changes.pdf`,
+      content: pdfBuffer.toString('base64'),
+      contentType: 'application/pdf',
+    };
+    console.log(`[Order Modification] Generated PDF for order #${order.orderNumber}`);
+  } catch (error) {
+    console.error("[Order Modification] Failed to generate PDF:", error);
+    // Continue without attachment if PDF generation fails
+  }
   
   // Build item rows with modification styling
   const itemRowsHtml = items.map(item => {
@@ -1225,6 +1432,10 @@ export async function sendOrderModificationEmail(
           </tfoot>
         </table>
         
+        <p style="margin: 20px 0; padding: 15px; background: #dbeafe; border-radius: 4px; text-align: center;">
+          <strong>A PDF copy of these changes is attached to this email for your records.</strong>
+        </p>
+        
         <p>If you have any questions about these changes, please contact our support team.</p>
         
         <div style="text-align: center; margin-top: 30px;">
@@ -1244,12 +1455,156 @@ export async function sendOrderModificationEmail(
     to: customer.email,
     subject,
     html: htmlContent,
+    attachments: pdfAttachment ? [pdfAttachment] : undefined,
   });
   
   if (result.success) {
-    console.log(`[Order Modification] Email sent to ${customer.email} for order #${order.orderNumber}`);
+    console.log(`[Order Modification] Email sent to ${customer.email} for order #${order.orderNumber} with PDF attachment`);
   } else {
     console.error(`[Order Modification] Failed to send email to ${customer.email}:`, result.error);
+  }
+  
+  return result;
+}
+
+/**
+ * Send order deletion email to customer when staff/admin deletes their pending order
+ */
+export async function sendOrderDeletionEmail(
+  customer: { id: string; email: string; businessName: string | null },
+  order: { id: string; orderNumber: string; totalAmount: string },
+  items: Array<{
+    id: string;
+    sku: string;
+    productName: string;
+    quantity: number;
+    unitPrice: string;
+    lineTotal: string;
+    originalQuantity: number | null;
+    product: { name: string; imageUrl: string | null };
+  }>
+): Promise<{ success: boolean; error?: string }> {
+  const config = getEmailConfig();
+  
+  if (!config.provider) {
+    console.log("[Order Deletion] No email provider configured, logging to console");
+  }
+  
+  const baseUrl = getBaseUrl();
+  const customerName = customer.businessName || customer.email.split('@')[0];
+  
+  // Mark all items as deleted for PDF generation
+  const deletedItems = items.map(item => ({
+    ...item,
+    isModified: false,
+    isDeleted: true,
+  }));
+  
+  // Generate PDF attachment
+  let pdfAttachment: EmailAttachment | undefined;
+  try {
+    const pdfBuffer = await generateOrderChangesPdf(customerName, order, deletedItems, 'deleted');
+    pdfAttachment = {
+      filename: `Order_${order.orderNumber}_Cancelled.pdf`,
+      content: pdfBuffer.toString('base64'),
+      contentType: 'application/pdf',
+    };
+    console.log(`[Order Deletion] Generated PDF for cancelled order #${order.orderNumber}`);
+  } catch (error) {
+    console.error("[Order Deletion] Failed to generate PDF:", error);
+  }
+  
+  // Build item rows showing all items as cancelled (red with strikethrough)
+  const itemRowsHtml = items.map(item => {
+    return `
+      <tr style="color: #dc2626; text-decoration: line-through;">
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${item.sku}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${item.productName}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">${item.quantity}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${item.unitPrice}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${item.lineTotal}</td>
+      </tr>
+    `;
+  }).join('');
+  
+  const subject = `Order #${order.orderNumber} Has Been Cancelled`;
+  
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">Order Cancelled</h1>
+      </div>
+      
+      <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px;">
+        <p>Hello ${customerName},</p>
+        
+        <p>We're writing to inform you that your order <strong>#${order.orderNumber}</strong> has been cancelled by our team.</p>
+        
+        <div style="margin: 20px 0; padding: 15px; background: #fee2e2; border-left: 4px solid #dc2626; border-radius: 4px;">
+          <p style="margin: 0; color: #991b1b;">
+            <strong>Order Status:</strong> This order has been completely cancelled. No items will be processed or shipped.
+          </p>
+        </div>
+        
+        <h3 style="margin-top: 25px; color: #333;">Cancelled Items:</h3>
+        
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          <thead>
+            <tr style="background: #f3f4f6;">
+              <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">SKU</th>
+              <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">Product</th>
+              <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">Qty</th>
+              <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e5e7eb;">Price</th>
+              <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e5e7eb;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemRowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #f3f4f6; font-weight: bold;">
+              <td colspan="4" style="padding: 12px; text-align: right; text-decoration: line-through; color: #dc2626;">Previous Order Total:</td>
+              <td style="padding: 12px; text-align: right; text-decoration: line-through; color: #dc2626;">$${order.totalAmount}</td>
+            </tr>
+          </tfoot>
+        </table>
+        
+        <p style="margin: 20px 0; padding: 15px; background: #dbeafe; border-radius: 4px; text-align: center;">
+          <strong>A PDF copy of this cancellation notice is attached to this email for your records.</strong>
+        </p>
+        
+        <p>If you have any questions about this cancellation or would like to place a new order, please contact our support team.</p>
+        
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="${baseUrl}/products" style="display: inline-block; background: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Browse Products</a>
+        </div>
+        
+        <p style="margin-top: 30px; font-size: 12px; color: #6b7280; text-align: center;">
+          This is an automated notification from Warner Wireless Gears.<br>
+          If you did not expect this email, please contact us immediately.
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+  
+  const result = await sendEmail({
+    to: customer.email,
+    subject,
+    html: htmlContent,
+    attachments: pdfAttachment ? [pdfAttachment] : undefined,
+  });
+  
+  if (result.success) {
+    console.log(`[Order Deletion] Email sent to ${customer.email} for cancelled order #${order.orderNumber} with PDF attachment`);
+  } else {
+    console.error(`[Order Deletion] Failed to send email to ${customer.email}:`, result.error);
   }
   
   return result;

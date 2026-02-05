@@ -57,7 +57,6 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
   
   const stockQty = product.stockQuantity || 0;
   const isOutOfStock = stockQty <= 0;
-  const isLowStock = stockQty > 0 && stockQty <= (product.lowStockThreshold || 10);
   const isGroupedProduct = !!product.zohoGroupId;
 
   const handleAddToCart = (e: React.MouseEvent) => {
@@ -91,13 +90,9 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
     >
       <div className="h-32 relative bg-muted overflow-hidden">
         <LazyProductImage product={product} isOutOfStock={isOutOfStock} iconSize="md" />
-        {isOutOfStock ? (
+        {isOutOfStock && (
           <Badge className="absolute top-2 right-2" variant="destructive" data-testid={`badge-out-of-stock-${product.id}`}>
             Out of Stock
-          </Badge>
-        ) : isLowStock && (
-          <Badge className="absolute bottom-2 left-2" variant="destructive">
-            Low Stock
           </Badge>
         )}
       </div>

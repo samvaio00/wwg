@@ -207,7 +207,11 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               {/* Only show AI Cart Builder for customers (not admin or staff) */}
               {!isAdminOrStaff && <AICartBuilder />}
             </div>
-            <div className="flex-1" />
+            <div className="flex-1 flex items-center justify-center">
+              <p className="hidden md:block text-center text-sm italic font-medium tracking-wide text-gray-300" style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}>
+                "Our business is to increase your business."
+              </p>
+            </div>
             <div className="flex items-center gap-2">
               <HeaderUserMenu />
               <ThemeToggle className="text-white hover:bg-gray-700" />

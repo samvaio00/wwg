@@ -71,6 +71,8 @@ interface CartBuilderResult {
   }>;
   summary: string;
   totalEstimate: string;
+  needsClarification?: boolean;
+  clarificationQuestion?: string | null;
 }
 
 interface SearchResult {
@@ -186,14 +188,23 @@ export async function aiCartBuilder(
     eq(products.isActive, true),
     eq(products.isOnline, true),
     gt(products.stockQuantity, 0)
-  ));
+  ))
+  .orderBy(sql`${products.stockQuantity} DESC`)
+  .limit(300);
 
   const productCatalog = allProducts.map(p => 
-    `- ${p.sku}: ${p.name} (${p.category}${p.brand ? `, ${p.brand}` : ''}) - $${p.basePrice} wholesale - ${p.stockQuantity} in stock`
+    `- ${p.sku}: ${p.name} (${p.category}) - $${p.basePrice}`
   ).join('\n');
 
   const systemPrompt = `You are an AI assistant for WholesaleHub, a B2B wholesale platform for retailers.
 Your job is to help retailers build their shopping cart based on their needs.
+
+IMPORTANT RULES:
+1. Be FAST - respond quickly with concise recommendations
+2. For SIMPLE requests (e.g., "10 cases of vape products", "phone chargers", "sunglasses for summer"), provide product suggestions immediately
+3. For UNCLEAR or UNUSUAL requests, ask ONE clear clarifying question instead of guessing
+4. NEVER get stuck in a loop - if you can't find matching products, say so directly
+5. If the request doesn't match any products, explain what categories ARE available
 
 Available product categories:
 - sunglasses: Sunglasses and eyewear
@@ -201,12 +212,12 @@ Available product categories:
 - caps: Headwear, baseball caps, beanies
 - perfumes: Fragrances, body mists, colognes
 - novelty: Impulse items, keychains, air fresheners for gas stations
+- vape: Vape products and accessories
+- cbd: CBD products
+- other-items: Miscellaneous wholesale items
 
-Current product catalog:
+Current product catalog (sample - ${allProducts.length} total products):
 ${productCatalog}
-
-Based on the retailer's request, suggest appropriate products with quantities.
-Consider their business type (gas station, convenience store, etc.) and recommend products that sell well in that environment.
 
 Respond with JSON only in this exact format:
 {
@@ -218,7 +229,20 @@ Respond with JSON only in this exact format:
     }
   ],
   "summary": "A brief summary of your recommendations",
-  "totalEstimate": "$XXX.XX"
+  "totalEstimate": "$XXX.XX",
+  "needsClarification": false,
+  "clarificationQuestion": null
+}
+
+If you need clarification, set needsClarification to true and provide a clear question in clarificationQuestion. In this case, suggestions should be an empty array.
+
+Example clarification response:
+{
+  "suggestions": [],
+  "summary": "I need a bit more information to help you.",
+  "totalEstimate": "$0.00",
+  "needsClarification": true,
+  "clarificationQuestion": "Could you tell me what type of store you're stocking? For example: gas station, convenience store, or smoke shop?"
 }`;
 
   try {
@@ -255,6 +279,8 @@ Respond with JSON only in this exact format:
       suggestions: suggestions.filter((s): s is NonNullable<typeof s> => s !== null),
       summary: parsed.summary || "Here are my recommendations based on your request.",
       totalEstimate: parsed.totalEstimate || "$0.00",
+      needsClarification: parsed.needsClarification || false,
+      clarificationQuestion: parsed.clarificationQuestion || null,
     };
 
     await setCachedResponse(cacheKey, "cart_builder", result, 30);

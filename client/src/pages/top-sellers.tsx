@@ -35,6 +35,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import type { Product, Category } from "@shared/schema";
 import { LazyProductImage } from "@/components/lazy-product-image";
+import { NotifyMeButton } from "@/components/notify-me-button";
 
 function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: { 
   product: Product; 
@@ -138,6 +139,18 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
               </>
             )}
           </Button>
+        ) : isOutOfStock ? (
+          <div className="flex items-center gap-2">
+            <Badge variant="destructive" className="h-7 px-2">
+              <Package className="h-3 w-3 mr-1" />
+              Out of Stock
+            </Badge>
+            <NotifyMeButton 
+              productId={product.id} 
+              className="h-7 flex-1"
+              size="sm"
+            />
+          </div>
         ) : (
           <div className="flex items-center gap-2">
             <div className="flex items-center border rounded h-7">
@@ -146,7 +159,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
                 size="icon"
                 className="h-7 w-7 rounded-r-none"
                 onClick={decrementQuantity}
-                disabled={isOutOfStock || quantity <= (product.minOrderQuantity || 1)}
+                disabled={quantity <= (product.minOrderQuantity || 1)}
                 data-testid={`button-decrease-qty-${product.id}`}
               >
                 <Minus className="h-3 w-3" />
@@ -159,7 +172,7 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
                 size="icon"
                 className="h-7 w-7 rounded-l-none"
                 onClick={incrementQuantity}
-                disabled={isOutOfStock || quantity >= stockQty}
+                disabled={quantity >= stockQty}
                 data-testid={`button-increase-qty-${product.id}`}
               >
                 <Plus className="h-3 w-3" />
@@ -169,16 +182,10 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
               className="h-7 flex-1"
               size="sm"
               onClick={handleAddToCart}
-              disabled={isAddingToCart || isOutOfStock}
-              variant={isOutOfStock ? "destructive" : "default"}
+              disabled={isAddingToCart}
               data-testid={`button-add-to-cart-${product.id}`}
             >
-              {isOutOfStock ? (
-                <>
-                  <Package className="h-3 w-3 mr-1" />
-                  Out of Stock
-                </>
-              ) : justAdded ? (
+              {justAdded ? (
                 <Check className="h-3 w-3" />
               ) : (
                 <>

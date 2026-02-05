@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Percent, Clock, ShoppingCart, Sparkles } from "lucide-react";
 import type { Product, Special } from "@shared/schema";
 import { ProductDetailModal } from "@/components/product-detail-modal";
+import { NotifyMeButton } from "@/components/notify-me-button";
 import { formatDistanceToNow } from "date-fns";
 
 interface SpecialWithProducts extends Special {
@@ -76,14 +77,26 @@ function ProductCard({
           </p>
         </div>
 
-        <Button 
-          className="w-full mt-2" 
-          size="sm"
-          disabled={isOutOfStock}
-          data-testid={`button-view-special-${product.id}`}
-        >
-          {isOutOfStock ? "Out of Stock" : "View Deal"}
-        </Button>
+        {isOutOfStock ? (
+          <div className="flex items-center gap-2 mt-2">
+            <Badge variant="destructive" className="h-7 px-2">
+              Out of Stock
+            </Badge>
+            <NotifyMeButton 
+              productId={product.id} 
+              className="h-7 flex-1"
+              size="sm"
+            />
+          </div>
+        ) : (
+          <Button 
+            className="w-full mt-2" 
+            size="sm"
+            data-testid={`button-view-special-${product.id}`}
+          >
+            View Deal
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

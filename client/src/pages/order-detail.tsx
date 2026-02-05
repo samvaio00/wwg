@@ -190,45 +190,103 @@ function TrackingInfo({ order }: { order: Order }) {
 }
 
 function OrderItems({ items }: { items: (OrderItem & { product: Product })[] }) {
+  // Check if any items have modifications
+  const hasModifications = items.some(item => item.isModified || item.isDeleted);
+  
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">Order Items</CardTitle>
+        {hasModifications && (
+          <CardDescription className="text-amber-600 dark:text-amber-400">
+            This order has been modified. Items in red have been changed or removed.
+          </CardDescription>
+        )}
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {items.map((item) => (
-            <div key={item.id} className="flex gap-4" data-testid={`order-item-${item.id}`}>
-              <div className="h-16 w-16 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                {item.product.imageUrl ? (
-                  <img 
-                    src={item.product.imageUrl} 
-                    alt={item.product.name}
-                    className="h-full w-full object-cover rounded-lg"
-                  />
-                ) : (
-                  <Package className="h-8 w-8 text-muted-foreground" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{item.product.name}</p>
-                <p className="text-sm text-muted-foreground">SKU: {item.product.sku}</p>
-                <div className="flex justify-between items-center mt-1">
-                  <span className="text-sm text-muted-foreground">
-                    Qty: {item.quantity} × ${item.unitPrice}
-                  </span>
-                  <span className="font-medium">${item.lineTotal}</span>
+          {items.map((item) => {
+            const isDeleted = item.isDeleted === true;
+            const isModified = item.isModified === true && !isDeleted;
+            const originalQty = item.originalQuantity ?? item.quantity;
+            
+            return (
+              <div 
+                key={item.id} 
+                className={`flex gap-4 p-3 rounded-lg ${
+                  isDeleted 
+                    ? "bg-destructive/10 border border-destructive/20" 
+                    : isModified 
+                      ? "bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800" 
+                      : ""
+                }`}
+                data-testid={`order-item-${item.id}`}
+              >
+                <div className="h-16 w-16 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                  {item.product.imageUrl ? (
+                    <img 
+                      src={item.product.imageUrl} 
+                      alt={item.product.name}
+                      className={`h-full w-full object-cover rounded-lg ${isDeleted ? "opacity-50" : ""}`}
+                    />
+                  ) : (
+                    <Package className={`h-8 w-8 ${isDeleted ? "text-destructive/50" : "text-muted-foreground"}`} />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`font-medium truncate ${
+                    isDeleted 
+                      ? "line-through text-destructive" 
+                      : isModified 
+                        ? "text-destructive" 
+                        : ""
+                  }`}>
+                    {item.product.name}
+                  </p>
+                  <p className={`text-sm ${isDeleted ? "text-destructive/70 line-through" : "text-muted-foreground"}`}>
+                    SKU: {item.product.sku}
+                  </p>
+                  <div className="flex justify-between items-center mt-1">
+                    <span className={`text-sm ${
+                      isDeleted || isModified ? "text-destructive" : "text-muted-foreground"
+                    }`}>
+                      {isDeleted ? (
+                        <>
+                          Qty: <span className="line-through">{originalQty}</span>
+                          <span className="mx-1">→</span>
+                          <span>0 (Removed)</span>
+                        </>
+                      ) : isModified && originalQty !== item.quantity ? (
+                        <>
+                          Qty: <span className="line-through">{originalQty}</span>
+                          <span className="mx-1">→</span>
+                          <span>{item.quantity}</span> × ${item.unitPrice}
+                        </>
+                      ) : (
+                        <>Qty: {item.quantity} × ${item.unitPrice}</>
+                      )}
+                    </span>
+                    <span className={`font-medium ${
+                      isDeleted 
+                        ? "line-through text-destructive" 
+                        : isModified 
+                          ? "text-destructive" 
+                          : ""
+                    }`}>
+                      ${item.lineTotal}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           
           <Separator className="my-4" />
           
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
-              <span>${items.reduce((sum, item) => sum + parseFloat(item.lineTotal), 0).toFixed(2)}</span>
+              <span>${items.filter(item => !item.isDeleted).reduce((sum, item) => sum + parseFloat(item.lineTotal), 0).toFixed(2)}</span>
             </div>
           </div>
         </div>

@@ -1112,3 +1112,136 @@ export async function sendBackInStockNotifications(): Promise<{ emailsSent: numb
     return { emailsSent, notificationsProcessed };
   }
 }
+
+/**
+ * Send order modification email to customer when staff/admin edits their order
+ */
+export async function sendOrderModificationEmail(
+  customer: { id: string; email: string; businessName: string | null },
+  order: { id: string; orderNumber: string; totalAmount: string },
+  items: Array<{
+    id: string;
+    sku: string;
+    productName: string;
+    quantity: number;
+    unitPrice: string;
+    lineTotal: string;
+    originalQuantity: number | null;
+    isModified: boolean | null;
+    isDeleted: boolean | null;
+    product: { name: string; imageUrl: string | null };
+  }>
+): Promise<{ success: boolean; error?: string }> {
+  const config = getEmailConfig();
+  
+  if (!config.provider) {
+    console.log("[Order Modification] No email provider configured, logging to console");
+  }
+  
+  const baseUrl = getBaseUrl();
+  const customerName = customer.businessName || customer.email.split('@')[0];
+  
+  // Build item rows with modification styling
+  const itemRowsHtml = items.map(item => {
+    const isDeleted = item.isDeleted === true;
+    const isModified = item.isModified === true && !isDeleted;
+    const originalQty = item.originalQuantity ?? item.quantity;
+    
+    let rowStyle = '';
+    let qtyDisplay = `${item.quantity}`;
+    
+    if (isDeleted) {
+      rowStyle = 'color: #dc2626; text-decoration: line-through;';
+      qtyDisplay = `<span style="text-decoration: line-through;">${originalQty}</span> → 0 (Removed)`;
+    } else if (isModified && originalQty !== item.quantity) {
+      rowStyle = 'color: #dc2626;';
+      qtyDisplay = `<span style="text-decoration: line-through;">${originalQty}</span> → ${item.quantity}`;
+    }
+    
+    return `
+      <tr style="${rowStyle}">
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${item.sku}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${item.productName}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">${qtyDisplay}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">$${item.unitPrice}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${isDeleted ? '$0.00' : `$${item.lineTotal}`}</td>
+      </tr>
+    `;
+  }).join('');
+  
+  const subject = `Order #${order.orderNumber} Has Been Updated`;
+  
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">Order Updated</h1>
+      </div>
+      
+      <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px;">
+        <p>Hello ${customerName},</p>
+        
+        <p>Your order <strong>#${order.orderNumber}</strong> has been updated by our team. Please review the changes below:</p>
+        
+        <div style="margin: 20px 0; padding: 15px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;">
+          <p style="margin: 0; color: #92400e;">
+            <strong>Note:</strong> Items shown in <span style="color: #dc2626;">red</span> have been modified. 
+            Items with <span style="color: #dc2626; text-decoration: line-through;">strikethrough</span> have been removed from the order.
+          </p>
+        </div>
+        
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          <thead>
+            <tr style="background: #f3f4f6;">
+              <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">SKU</th>
+              <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">Product</th>
+              <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">Qty</th>
+              <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e5e7eb;">Price</th>
+              <th style="padding: 12px; text-align: right; border-bottom: 2px solid #e5e7eb;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemRowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background: #f3f4f6; font-weight: bold;">
+              <td colspan="4" style="padding: 12px; text-align: right;">New Order Total:</td>
+              <td style="padding: 12px; text-align: right;">$${order.totalAmount}</td>
+            </tr>
+          </tfoot>
+        </table>
+        
+        <p>If you have any questions about these changes, please contact our support team.</p>
+        
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="${baseUrl}/orders" style="display: inline-block; background: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">View Your Orders</a>
+        </div>
+        
+        <p style="margin-top: 30px; font-size: 12px; color: #6b7280; text-align: center;">
+          This is an automated notification from Warner Wireless Gears.<br>
+          If you did not expect this email, please contact us immediately.
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+  
+  const result = await sendEmail({
+    to: customer.email,
+    subject,
+    html: htmlContent,
+  });
+  
+  if (result.success) {
+    console.log(`[Order Modification] Email sent to ${customer.email} for order #${order.orderNumber}`);
+  } else {
+    console.error(`[Order Modification] Failed to send email to ${customer.email}:`, result.error);
+  }
+  
+  return result;
+}

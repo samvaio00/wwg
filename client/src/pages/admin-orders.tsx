@@ -114,7 +114,7 @@ function OrderEditModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh]">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
@@ -133,17 +133,25 @@ function OrderEditModal({
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
         ) : orderData ? (
-          <ScrollArea className="max-h-[50vh]">
+          <ScrollArea className="max-h-[45vh]">
             <div className="space-y-3 pr-4">
               {orderData.items.map((item) => {
                 const currentQty = editedItems[item.id] ?? item.quantity;
-                const isDeleted = currentQty === 0;
+                const originalQty = item.originalQuantity ?? item.quantity;
+                const isDeleted = currentQty === 0 || item.isDeleted;
+                const isModified = (item.isModified && !isDeleted) || (currentQty !== originalQty && !isDeleted);
                 const stockQty = item.product.stockQuantity ?? 0;
                 
                 return (
                   <div 
                     key={item.id}
-                    className={`flex items-center gap-4 p-3 rounded-lg border ${isDeleted ? "bg-destructive/10 border-destructive/20" : "bg-muted/30"}`}
+                    className={`flex items-center gap-4 p-3 rounded-lg border ${
+                      isDeleted 
+                        ? "bg-destructive/10 border-destructive/20" 
+                        : isModified 
+                          ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" 
+                          : "bg-muted/30"
+                    }`}
                     data-testid={`order-item-${item.id}`}
                   >
                     <div className="w-12 h-12 rounded bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -159,7 +167,13 @@ function OrderEditModal({
                     </div>
                     
                     <div className="flex-1 min-w-0">
-                      <p className={`font-medium truncate ${isDeleted ? "line-through text-muted-foreground" : ""}`}>
+                      <p className={`font-medium truncate ${
+                        isDeleted 
+                          ? "line-through text-destructive" 
+                          : isModified 
+                            ? "text-destructive" 
+                            : ""
+                      }`}>
                         {item.product.name}
                       </p>
                       <p className="text-sm text-muted-foreground">
@@ -190,9 +204,23 @@ function OrderEditModal({
                       >
                         {currentQty === 1 ? <Trash2 className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
                       </Button>
-                      <span className={`w-12 text-center font-medium ${isDeleted ? "text-destructive" : ""}`}>
-                        {isDeleted ? "DEL" : currentQty}
-                      </span>
+                      <div className={`w-16 text-center font-medium ${isDeleted || isModified ? "text-destructive" : ""}`}>
+                        {isDeleted ? (
+                          <span className="text-xs">
+                            <span className="line-through">{originalQty}</span>
+                            <span className="mx-1">→</span>
+                            <span>0</span>
+                          </span>
+                        ) : isModified && currentQty !== originalQty ? (
+                          <span className="text-xs">
+                            <span className="line-through">{originalQty}</span>
+                            <span className="mx-1">→</span>
+                            <span>{currentQty}</span>
+                          </span>
+                        ) : (
+                          currentQty
+                        )}
+                      </div>
                       <Button
                         size="icon"
                         variant="outline"
@@ -204,7 +232,7 @@ function OrderEditModal({
                       </Button>
                     </div>
                     
-                    <div className="w-20 text-right font-medium">
+                    <div className={`w-20 text-right font-medium ${isDeleted ? "line-through text-destructive" : isModified ? "text-destructive" : ""}`}>
                       ${(parseFloat(item.unitPrice) * currentQty).toFixed(2)}
                     </div>
                   </div>

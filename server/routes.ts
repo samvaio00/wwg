@@ -26,6 +26,7 @@ import { checkZohoCustomerByEmail, checkZohoCustomerById, createZohoSalesOrder, 
 import { JobType } from "@shared/schema";
 import { getSchedulerStatus, triggerManualSync, updateSchedulerConfig } from "./scheduler";
 import { sendShipmentNotification, sendDeliveryNotification, sendNewUserNotification, sendNewOrderNotification } from "./email-service";
+import { sendOrderModificationEmail } from "./email-campaign-service";
 import { processJobQueue } from "./job-worker";
 import { handleItemWebhook, handleCustomerWebhook, handleInvoiceWebhook, handleBillWebhook, verifyWebhookSecret } from "./zoho-webhooks";
 import { getWebhookStats } from "./webhook-stats";
@@ -1720,10 +1721,26 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Items must be an array" });
       }
       
-      const orderData = await storage.updateOrderItems(req.params.id as string, items);
+      const modifiedBy = req.session.userId!;
+      const orderData = await storage.updateOrderItems(req.params.id as string, items, modifiedBy);
       if (!orderData) {
         return res.status(404).json({ message: "Order not found" });
       }
+      
+      // Check if any items were modified and send notification email
+      const hasModifications = orderData.items.some(item => item.isModified || item.isDeleted);
+      if (hasModifications) {
+        // Get customer info and send order update email
+        const order = orderData.order;
+        const customer = await storage.getUser(order.userId);
+        if (customer) {
+          // Send email notification about order changes (async, don't wait)
+          sendOrderModificationEmail(customer, orderData.order, orderData.items).catch(err => {
+            console.error("Failed to send order modification email:", err);
+          });
+        }
+      }
+      
       res.json(orderData);
     } catch (error: any) {
       console.error("Error updating order items:", error);

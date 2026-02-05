@@ -107,7 +107,7 @@ export interface IStorage {
   getAllOrders(): Promise<(Order & { user: SafeUser })[]>;
   updateOrderStatus(id: string, status: OrderStatusType, adminId?: string, reason?: string): Promise<Order | undefined>;
   updateOrderZohoInfo(id: string, zohoSalesOrderId: string): Promise<Order | undefined>;
-  updateOrderItems(orderId: string, items: { id: string; quantity: number }[]): Promise<{ order: Order; items: (OrderItem & { product: Product })[] } | undefined>;
+  updateOrderItems(orderId: string, items: { id: string; quantity: number }[], modifiedBy: string): Promise<{ order: Order; items: (OrderItem & { product: Product })[] } | undefined>;
   
   // Admin visibility operations
   getHighlightedProducts(): Promise<Product[]>;
@@ -869,7 +869,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async updateOrderItems(orderId: string, items: { id: string; quantity: number }[]): Promise<{ order: Order; items: (OrderItem & { product: Product })[] } | undefined> {
+  async updateOrderItems(orderId: string, items: { id: string; quantity: number }[], modifiedBy: string): Promise<{ order: Order; items: (OrderItem & { product: Product })[] } | undefined> {
     const order = await this.getOrder(orderId);
     if (!order) return undefined;
     
@@ -878,37 +878,72 @@ export class DatabaseStorage implements IStorage {
       throw new Error('Can only edit pending orders');
     }
     
-    // Update each item's quantity and line total
+    const now = new Date();
+    
+    // Update each item's quantity and track modifications
     for (const itemUpdate of items) {
+      // Get current item to check for changes
+      const [currentItem] = await db.select().from(orderItems).where(eq(orderItems.id, itemUpdate.id));
+      if (!currentItem) continue;
+      
+      // Store original quantity if not already set (first modification)
+      const originalQty = currentItem.originalQuantity ?? currentItem.quantity;
+      
       if (itemUpdate.quantity <= 0) {
-        // Delete item if quantity is 0 or less
-        await db.delete(orderItems).where(eq(orderItems.id, itemUpdate.id));
+        // Mark item as deleted instead of actually deleting
+        await db.update(orderItems)
+          .set({ 
+            quantity: 0,
+            lineTotal: '0.00',
+            originalQuantity: originalQty,
+            isModified: true,
+            isDeleted: true,
+            modifiedAt: now,
+            modifiedBy: modifiedBy
+          })
+          .where(eq(orderItems.id, itemUpdate.id));
+      } else if (itemUpdate.quantity !== originalQty) {
+        // Quantity changed - mark as modified
+        const newLineTotal = (parseFloat(currentItem.unitPrice) * itemUpdate.quantity).toFixed(2);
+        await db.update(orderItems)
+          .set({ 
+            quantity: itemUpdate.quantity, 
+            lineTotal: newLineTotal,
+            originalQuantity: originalQty,
+            isModified: true,
+            isDeleted: false,
+            modifiedAt: now,
+            modifiedBy: modifiedBy
+          })
+          .where(eq(orderItems.id, itemUpdate.id));
       } else {
-        // Get current item to calculate new line total
-        const [currentItem] = await db.select().from(orderItems).where(eq(orderItems.id, itemUpdate.id));
-        if (currentItem) {
-          const newLineTotal = (parseFloat(currentItem.unitPrice) * itemUpdate.quantity).toFixed(2);
-          await db.update(orderItems)
-            .set({ 
-              quantity: itemUpdate.quantity, 
-              lineTotal: newLineTotal 
-            })
-            .where(eq(orderItems.id, itemUpdate.id));
-        }
+        // Quantity restored to original - clear modification flags
+        const newLineTotal = (parseFloat(currentItem.unitPrice) * itemUpdate.quantity).toFixed(2);
+        await db.update(orderItems)
+          .set({ 
+            quantity: itemUpdate.quantity, 
+            lineTotal: newLineTotal,
+            isModified: false,
+            isDeleted: false,
+            modifiedAt: null,
+            modifiedBy: null
+          })
+          .where(eq(orderItems.id, itemUpdate.id));
       }
     }
     
-    // Recalculate order totals
+    // Recalculate order totals (excluding deleted items from total)
     const updatedItems = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
-    const newSubtotal = updatedItems.reduce((sum, item) => sum + parseFloat(item.lineTotal), 0);
+    const activeItems = updatedItems.filter(item => !item.isDeleted);
+    const newSubtotal = activeItems.reduce((sum, item) => sum + parseFloat(item.lineTotal), 0);
     const newTotal = newSubtotal; // Add shipping/tax if applicable
     
     await db.update(orders)
       .set({ 
         subtotal: newSubtotal.toFixed(2),
         totalAmount: newTotal.toFixed(2),
-        itemCount: updatedItems.reduce((sum, item) => sum + item.quantity, 0),
-        updatedAt: new Date()
+        itemCount: activeItems.reduce((sum, item) => sum + item.quantity, 0),
+        updatedAt: now
       })
       .where(eq(orders.id, orderId));
     

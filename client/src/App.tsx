@@ -208,8 +208,8 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
               {!isAdminOrStaff && <AICartBuilder />}
             </div>
             <div className="flex-1 flex items-center justify-center">
-              <p className="hidden md:block text-center text-sm italic font-medium tracking-wide text-gray-300" style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}>
-                "Our business is to increase your business."
+              <p className="hidden md:block text-center text-lg italic font-medium tracking-wide text-gray-300" style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}>
+                Our business is to increase your business.
               </p>
             </div>
             <div className="flex items-center gap-2">

@@ -221,29 +221,26 @@ function GroupImageTile({ group, initialIsOnline, onUploadSuccess }: {
             <span className="text-xs text-primary mt-1">Drop image here</span>
           </div>
         ) : isInView ? (
-          hasImage ? (
-            <img
-              src={imageUrl}
-              alt={group.zohoGroupName}
-              className="w-full h-full object-contain"
-              onLoad={() => setImageLoaded(true)}
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <>
-              <img
-                src={imageUrl}
-                alt={group.zohoGroupName}
-                className="hidden"
-                onLoad={() => setImageLoaded(true)}
-                onError={() => setImageError(true)}
-              />
+          <>
+            {!imageLoaded && !imageError && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <ImageIcon className="h-10 w-10 text-muted-foreground animate-pulse" />
+              </div>
+            )}
+            {imageError && (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <ImageIcon className="h-10 w-10 mb-2" />
                 <span className="text-xs">No group image</span>
               </div>
-            </>
-          )
+            )}
+            <img
+              src={imageUrl}
+              alt={group.zohoGroupName}
+              className={`w-full h-full object-contain ${imageLoaded ? "" : "opacity-0 absolute"}`}
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageError(true)}
+            />
+          </>
         ) : (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <ImageIcon className="h-10 w-10" />

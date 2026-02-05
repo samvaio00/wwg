@@ -107,7 +107,7 @@ function ProductImageTile({ product, onUploadSuccess }: {
   // Add cache key to bust browser cache after upload
   const imageUrl = product.zohoItemId 
     ? `/api/products/${product.id}/image?t=${cacheKey}`
-    : product.imageUrl;
+    : (product.imageUrl || undefined);
 
   const handleUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -195,7 +195,7 @@ function ProductImageTile({ product, onUploadSuccess }: {
     }
   };
 
-  const hasImage = imageUrl && !imageError;
+  const hasImage = imageLoaded && !imageError;
 
   return (
     <Card 
@@ -220,29 +220,30 @@ function ProductImageTile({ product, onUploadSuccess }: {
             <Upload className="h-10 w-10 text-primary" />
             <span className="text-xs text-primary mt-1">Drop image here</span>
           </div>
-        ) : hasImage && isInView ? (
+        ) : isInView ? (
           <>
-            {!imageLoaded && (
+            {!imageLoaded && !imageError && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <Package className="h-12 w-12 text-muted-foreground animate-pulse" />
+              </div>
+            )}
+            {imageError && (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <Package className="h-12 w-12" />
+                <span className="text-xs mt-1">No image</span>
               </div>
             )}
             <img 
               src={imageUrl} 
               alt={product.name}
-              className={`object-contain w-full h-full ${imageLoaded ? "" : "opacity-0"}`}
+              className={`object-contain w-full h-full ${imageLoaded ? "" : "opacity-0 absolute"}`}
               onError={() => setImageError(true)}
               onLoad={() => setImageLoaded(true)}
             />
           </>
-        ) : hasImage ? (
-          <div className="flex items-center justify-center h-full">
-            <Package className="h-12 w-12 text-muted-foreground" />
-          </div>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+          <div className="flex items-center justify-center h-full text-muted-foreground">
             <Package className="h-12 w-12" />
-            <span className="text-xs mt-1">No image</span>
           </div>
         )}
       </div>

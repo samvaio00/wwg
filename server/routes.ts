@@ -1527,7 +1527,7 @@ export async function registerRoutes(
         if (item.isDeleted) continue;
         
         // Check if product is still available (has stock)
-        const product = await storage.getProductById(item.productId);
+        const product = await storage.getProduct(item.productId);
         if (!product || !product.isActive || (product.stockQuantity !== null && product.stockQuantity <= 0)) {
           itemsSkipped++;
           skippedItems.push(item.product?.name || `Product #${item.productId}`);

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { products, syncRuns, SyncType, priceLists, customerPrices, categories, zohoApiLogs } from "@shared/schema";
+import { products, syncRuns, SyncType, priceLists, customerPrices, categories, zohoApiLogs, productGroups } from "@shared/schema";
 import { eq, isNotNull, desc, and, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import * as fs from "fs";
@@ -1454,8 +1454,42 @@ export function clearImageCache(): void {
   console.log("[Zoho Image] No-image tracking cleared (items and groups)");
 }
 
+// Function to check if a product's image was manually uploaded (protected from deletion)
+export async function isImageManuallyUploaded(zohoItemId: string, zohoGroupId?: string | null): Promise<boolean> {
+  // Check product-level imageSource
+  const product = await db.select({ imageSource: products.imageSource })
+    .from(products)
+    .where(eq(products.zohoItemId, zohoItemId))
+    .limit(1);
+  
+  if (product.length > 0 && product[0].imageSource === 'uploaded') {
+    return true;
+  }
+  
+  // Check group-level imageSource
+  if (zohoGroupId) {
+    const group = await db.select({ imageSource: productGroups.imageSource })
+      .from(productGroups)
+      .where(eq(productGroups.zohoGroupId, zohoGroupId))
+      .limit(1);
+    
+    if (group.length > 0 && group[0].imageSource === 'uploaded') {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 // Function to refresh a single product image from Zoho
 export async function refreshProductImage(zohoItemId: string, zohoGroupId?: string | null): Promise<boolean> {
+  // Check if the image was manually uploaded - if so, protect it from deletion
+  const isUploaded = await isImageManuallyUploaded(zohoItemId, zohoGroupId);
+  if (isUploaded) {
+    console.log(`[Image Refresh] Skipping refresh for ${zohoItemId} - image was manually uploaded`);
+    return true; // Return true since the product has an image
+  }
+  
   // Delete local image to force re-fetch
   deleteLocalImage(zohoItemId);
   noImageItems.delete(zohoItemId);

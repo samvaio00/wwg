@@ -161,6 +161,7 @@ export const products = pgTable("products", {
   // Media
   imageUrl: text("image_url"),
   imageUrls: text("image_urls").array(), // Multiple images
+  imageSource: text("image_source"), // 'uploaded' for manually uploaded, 'zoho' for synced from Zoho
   
   // Zoho Integration
   zohoItemId: text("zoho_item_id"),
@@ -276,6 +277,9 @@ export const productGroups = pgTable("product_groups", {
   // Online visibility (can only be true if group has active products in Zoho)
   // If all products in this group are inactive in Zoho, isOnline should be false
   isOnline: boolean("is_online").default(true),
+  
+  // Image source tracking
+  imageSource: text("image_source"), // 'uploaded' for manually uploaded, 'zoho' for synced from Zoho
   
   // Timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -2385,11 +2385,11 @@ export async function registerRoutes(
         return res.status(404).json({ success: false, message: "Product not found" });
       }
       
-      // Update the product with the image URL
+      // Update the product with the image URL and mark as manually uploaded
       const imageUrl = `/product-images/${req.file.filename}`;
-      await db.update(products).set({ imageUrl }).where(eq(products.id, productId));
+      await db.update(products).set({ imageUrl, imageSource: 'uploaded' }).where(eq(products.id, productId));
       
-      console.log(`[Admin] Uploaded image for product ${product.sku} (${zohoItemId}): ${imageUrl}`);
+      console.log(`[Admin] Uploaded image for product ${product.sku} (${zohoItemId}): ${imageUrl} [source: uploaded]`);
       
       res.json({
         success: true,
@@ -2749,7 +2749,27 @@ export async function registerRoutes(
       }
       
       const imageUrl = `/product-images/${req.file.filename}`;
-      console.log(`[Admin] Uploaded group image for ${groupProducts[0].zohoGroupName} (${zohoGroupId}): ${imageUrl}`);
+      
+      // Mark all products in this group as having an uploaded image
+      // Also update or create the product_groups record
+      await db.update(products)
+        .set({ imageSource: 'uploaded' })
+        .where(eq(products.zohoGroupId, zohoGroupId));
+      
+      // Update or insert the product_groups record to track uploaded image
+      await db.insert(productGroups)
+        .values({
+          zohoGroupId,
+          zohoGroupName: groupProducts[0].zohoGroupName || 'Unknown',
+          isOnline: true,
+          imageSource: 'uploaded',
+        })
+        .onConflictDoUpdate({
+          target: productGroups.zohoGroupId,
+          set: { imageSource: 'uploaded', updatedAt: new Date() },
+        });
+      
+      console.log(`[Admin] Uploaded group image for ${groupProducts[0].zohoGroupName} (${zohoGroupId}): ${imageUrl} [source: uploaded]`);
       
       res.json({
         success: true,

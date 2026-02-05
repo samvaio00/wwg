@@ -53,6 +53,11 @@ function ProductImageTile({ product, onUploadSuccess }: {
   const { toast } = useToast();
 
   useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+  }, [product.id]);
+
+  useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
 

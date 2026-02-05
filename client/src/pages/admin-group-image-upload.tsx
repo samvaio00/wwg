@@ -63,6 +63,11 @@ function GroupImageTile({ group, initialIsOnline, onUploadSuccess }: {
   }, [initialIsOnline]);
 
   useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+  }, [group.zohoGroupId]);
+
+  useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
 

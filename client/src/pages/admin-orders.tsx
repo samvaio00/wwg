@@ -114,7 +114,7 @@ function OrderEditModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
@@ -145,7 +145,7 @@ function OrderEditModal({
                 return (
                   <div 
                     key={item.id}
-                    className={`flex items-center gap-4 p-3 rounded-lg border ${
+                    className={`flex flex-wrap items-center gap-3 p-3 rounded-lg border ${
                       isDeleted 
                         ? "bg-destructive/10 border-destructive/20" 
                         : isModified 
@@ -194,17 +194,18 @@ function OrderEditModal({
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <Button
                         size="icon"
                         variant="outline"
+                        className="h-8 w-8"
                         onClick={() => handleQuantityChange(item.id, item.quantity, -1)}
                         disabled={updateItemsMutation.isPending}
                         data-testid={`button-decrease-${item.id}`}
                       >
                         {currentQty === 1 ? <Trash2 className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
                       </Button>
-                      <div className={`w-16 text-center font-medium ${isDeleted || isModified ? "text-destructive" : ""}`}>
+                      <div className={`w-12 text-center font-medium ${isDeleted || isModified ? "text-destructive" : ""}`}>
                         {isDeleted ? (
                           <span className="text-xs">
                             <span className="line-through">{originalQty}</span>
@@ -224,6 +225,7 @@ function OrderEditModal({
                       <Button
                         size="icon"
                         variant="outline"
+                        className="h-8 w-8"
                         onClick={() => handleQuantityChange(item.id, item.quantity, 1)}
                         disabled={updateItemsMutation.isPending}
                         data-testid={`button-increase-${item.id}`}
@@ -232,7 +234,7 @@ function OrderEditModal({
                       </Button>
                     </div>
                     
-                    <div className={`w-20 text-right font-medium ${isDeleted ? "line-through text-destructive" : isModified ? "text-destructive" : ""}`}>
+                    <div className={`w-16 text-right font-medium flex-shrink-0 ${isDeleted ? "line-through text-destructive" : isModified ? "text-destructive" : ""}`}>
                       ${(parseFloat(item.unitPrice) * currentQty).toFixed(2)}
                     </div>
                   </div>

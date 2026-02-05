@@ -139,15 +139,16 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
             )}
           </Button>
         ) : isOutOfStock ? (
-          <div className="flex items-center gap-2">
-            <Badge variant="destructive" className="h-7 px-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="destructive" className="h-7 px-2 flex-shrink-0">
               <Package className="h-3 w-3 mr-1" />
               Out of Stock
             </Badge>
             <NotifyMeButton 
               productId={product.id} 
-              className="h-7 flex-1"
+              className="h-7"
               size="sm"
+              showLabel={false}
             />
           </div>
         ) : (

@@ -943,7 +943,6 @@ export class DatabaseStorage implements IStorage {
       .set({ 
         subtotal: newSubtotal.toFixed(2),
         totalAmount: newTotal.toFixed(2),
-        itemCount: activeItems.reduce((sum, item) => sum + item.quantity, 0),
         updatedAt: now
       })
       .where(eq(orders.id, orderId));
@@ -967,7 +966,7 @@ export class DatabaseStorage implements IStorage {
     
     if (orderList.length === 0) return [];
     
-    // Get item counts for all orders in one query
+    // Get item counts for all orders in one query using inArray
     const orderIds = orderList.map(o => o.id);
     const itemCounts = await db.select({
       orderId: orderItems.orderId,
@@ -975,7 +974,7 @@ export class DatabaseStorage implements IStorage {
     })
       .from(orderItems)
       .where(and(
-        sql`${orderItems.orderId} = ANY(${orderIds})`,
+        inArray(orderItems.orderId, orderIds),
         eq(orderItems.isDeleted, false)
       ))
       .groupBy(orderItems.orderId);

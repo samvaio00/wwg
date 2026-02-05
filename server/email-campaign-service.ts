@@ -241,34 +241,40 @@ function getPromptForCampaign(
 
   switch (campaignType) {
     case EmailCampaignType.NEW_HIGHLIGHTED_ITEMS:
-      return `Generate a promotional email for ${customerName || "our valued customer"} about newly featured products in our wholesale catalog. Products include: ${productList}${moreCount}. 
+      return `Generate a promotional email about newly featured products in our wholesale catalog. Products include: ${productList}${moreCount}. 
       
       Return JSON with these fields:
       - subject: Email subject line (max 60 chars, engaging, mentions featured products)
       - headline: Main headline for the email (max 80 chars)
-      - introduction: Brief intro paragraph (2-3 sentences) explaining these are our hand-picked featured items
-      - callToAction: Button text for viewing the products (max 25 chars)`;
+      - introduction: Brief intro paragraph (2-3 sentences) explaining these are our hand-picked featured items. Start with "Hi {customer_name}," as a greeting.
+      - callToAction: Button text for viewing the products (max 25 chars)
+      
+      IMPORTANT: Use {customer_name} as the placeholder for the customer greeting. Do not use generic terms like "valued customer".`;
 
     case EmailCampaignType.NEW_SKUS:
-      return `Generate a promotional email for ${customerName || "our valued customer"} about new products just added to our wholesale inventory. New products include: ${productList}${moreCount}.
+      return `Generate a promotional email about new products just added to our wholesale inventory. New products include: ${productList}${moreCount}.
       
       Return JSON with these fields:
       - subject: Email subject line (max 60 chars, creates excitement about new arrivals)
       - headline: Main headline for the email (max 80 chars)
-      - introduction: Brief intro paragraph (2-3 sentences) about fresh inventory
-      - callToAction: Button text for browsing new products (max 25 chars)`;
+      - introduction: Brief intro paragraph (2-3 sentences) about fresh inventory. Start with "Hi {customer_name}," as a greeting.
+      - callToAction: Button text for browsing new products (max 25 chars)
+      
+      IMPORTANT: Use {customer_name} as the placeholder for the customer greeting. Do not use generic terms like "valued customer".`;
 
     case EmailCampaignType.CART_ABANDONMENT:
-      return `Generate a reminder email for ${customerName || "our valued customer"} who has items in their shopping cart but hasn't checked out. Cart contains: ${productList}${moreCount}.
+      return `Generate a reminder email for someone who has items in their shopping cart but hasn't checked out. Cart contains: ${productList}${moreCount}.
       
       Return JSON with these fields:
       - subject: Email subject line (max 60 chars, friendly reminder tone)
       - headline: Main headline for the email (max 80 chars)
-      - introduction: Brief intro paragraph (2-3 sentences) reminding about items waiting in cart
-      - callToAction: Button text for completing the order (max 25 chars)`;
+      - introduction: Brief intro paragraph (2-3 sentences) reminding about items waiting in cart. Start with "Hi {customer_name}," as a greeting.
+      - callToAction: Button text for completing the order (max 25 chars)
+      
+      IMPORTANT: Use {customer_name} as the placeholder for the customer greeting. Do not use generic terms like "valued customer".`;
 
     default:
-      return `Generate a general promotional email for ${customerName || "our valued customer"} about wholesale products. Return JSON with subject, headline, introduction, and callToAction fields.`;
+      return `Generate a general promotional email about wholesale products. Return JSON with subject, headline, introduction, and callToAction fields. Start the introduction with "Hi {customer_name}," as a greeting. Do not use generic terms like "valued customer".`;
   }
 }
 
@@ -277,7 +283,8 @@ function getDefaultEmailContent(
   productNames: string[],
   customerName: string
 ): AIGeneratedEmail {
-  const name = customerName || "Valued Customer";
+  // Use placeholder for templates, actual name when sending
+  const name = customerName || "{customer_name}";
 
   switch (campaignType) {
     case EmailCampaignType.NEW_HIGHLIGHTED_ITEMS:
@@ -435,7 +442,9 @@ async function getEmailContentFromApprovedTemplate(
   const personalized: AIGeneratedEmail = {
     subject: approvedTemplate.subject,
     headline: approvedTemplate.headline,
-    introduction: approvedTemplate.introduction.replace(/Valued Customer/g, customerName),
+    introduction: approvedTemplate.introduction
+      .replace(/\{customer_name\}/g, customerName)
+      .replace(/Valued Customer/gi, customerName),
     callToAction: approvedTemplate.callToAction,
   };
   

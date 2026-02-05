@@ -318,7 +318,7 @@ export default function AdminEmailTemplatesPage() {
               {templates.map((template) => (
                 <div
                   key={template.id}
-                  className="flex items-start justify-between gap-4 rounded-lg border p-4"
+                  className="flex items-start justify-between gap-4 rounded-lg border p-4 hover-elevate cursor-pointer transition-all"
                   data-testid={`template-card-${template.id}`}
                 >
                   <div className="flex-1 min-w-0">
@@ -350,7 +350,8 @@ export default function AdminEmailTemplatesPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setSelectedTemplate(template);
                         setPreviewOpen(true);
                       }}
@@ -361,9 +362,24 @@ export default function AdminEmailTemplatesPage() {
                       Preview
                     </Button>
                     <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        regenerateMutation.mutate({ id: template.id });
+                      }}
+                      disabled={regenerateMutation.isPending}
+                      className="gap-1"
+                      data-testid={`button-refresh-${template.id}`}
+                    >
+                      <RefreshCw className={`h-3 w-3 ${regenerateMutation.isPending ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                    <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setTemplateToDelete(template.id);
                         setDeleteOpen(true);
                       }}

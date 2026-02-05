@@ -413,6 +413,13 @@ export const orderItems = pgTable("order_items", {
   unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
   lineTotal: decimal("line_total", { precision: 10, scale: 2 }).notNull(),
   
+  // Modification tracking (for admin/staff edits)
+  originalQuantity: integer("original_quantity"), // Quantity when order was placed
+  isModified: boolean("is_modified").default(false), // True if quantity was changed by staff/admin
+  isDeleted: boolean("is_deleted").default(false), // True if item was removed (qty set to 0)
+  modifiedAt: timestamp("modified_at"), // When the modification was made
+  modifiedBy: varchar("modified_by", { length: 36 }), // User ID who made the modification
+  
   // Timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({

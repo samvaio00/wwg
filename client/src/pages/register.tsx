@@ -527,12 +527,13 @@ export default function RegisterPage() {
                       <FormItem>
                         <FormLabel className="flex items-center gap-2">
                           <Phone className="h-4 w-4 text-muted-foreground" />
-                          Phone (Optional)
+                          Phone
                         </FormLabel>
                         <FormControl>
                           <Input
                             type="tel"
                             placeholder="(555) 123-4567"
+                            autoComplete="off"
                             data-testid="input-phone"
                             {...field}
                           />
@@ -607,6 +608,7 @@ export default function RegisterPage() {
                           <FormControl>
                             <Input
                               placeholder="90210"
+                              autoComplete="off"
                               data-testid="input-zip"
                               {...field}
                             />
@@ -706,6 +708,7 @@ export default function RegisterPage() {
                           <Input
                             type="password"
                             placeholder="Minimum 8 characters"
+                            autoComplete="new-password"
                             data-testid="input-password"
                             {...field}
                           />
@@ -728,6 +731,7 @@ export default function RegisterPage() {
                           <Input
                             type="password"
                             placeholder="Confirm your password"
+                            autoComplete="new-password"
                             data-testid="input-confirm-password"
                             {...field}
                           />

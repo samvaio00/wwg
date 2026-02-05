@@ -13,7 +13,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { Package, Plus, Minus, Check, ShoppingCart, Layers, RefreshCw } from "lucide-react";
+import { Package, Plus, Minus, Check, ShoppingCart, Layers, RefreshCw, Bell } from "lucide-react";
+import { NotifyMeButton } from "@/components/notify-me-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import type { Product } from "@shared/schema";
@@ -160,7 +161,15 @@ function VariantCard({
                 </Button>
               </div>
             ) : (
-              <Badge variant="destructive" className="text-xs">Out of Stock</Badge>
+              <div className="flex items-center gap-1">
+                <Badge variant="destructive" className="text-xs">Out of Stock</Badge>
+                <NotifyMeButton 
+                  productId={variant.id} 
+                  size="sm"
+                  className="h-6"
+                  showLabel={false}
+                />
+              </div>
             )}
           </div>
         </div>

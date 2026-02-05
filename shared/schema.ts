@@ -731,6 +731,32 @@ export const emailUnsubscribeTokens = pgTable("email_unsubscribe_tokens", {
 export type EmailUnsubscribeToken = typeof emailUnsubscribeTokens.$inferSelect;
 
 // ================================================================
+// STOCK NOTIFICATIONS TABLE (notify customers when items back in stock)
+// ================================================================
+
+export const stockNotifications = pgTable("stock_notifications", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  
+  // References
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  productId: varchar("product_id", { length: 36 }).notNull().references(() => products.id, { onDelete: "cascade" }),
+  
+  // Status tracking
+  notifiedAt: timestamp("notified_at"), // When the notification was sent (null = not yet sent)
+  stockQuantityWhenRequested: integer("stock_quantity_when_requested").default(0), // Stock level when customer requested notification
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index("stock_notifications_user_idx").on(table.userId),
+  productIdx: index("stock_notifications_product_idx").on(table.productId),
+  uniqueUserProduct: index("stock_notifications_unique_idx").on(table.userId, table.productId),
+}));
+
+export type StockNotification = typeof stockNotifications.$inferSelect;
+export type InsertStockNotification = typeof stockNotifications.$inferInsert;
+
+// ================================================================
 // EMAIL CAMPAIGN LOGS TABLE (track sent promotional emails)
 // ================================================================
 

@@ -1,7 +1,7 @@
 import { syncProductsFromZoho, syncCategoriesFromZoho, syncItemGroupsFromZoho } from "./zoho-service";
 import { syncCustomerStatusFromZoho, syncTopSellersFromZoho } from "./zoho-books-service";
 import { generateProductEmbeddings } from "./ai-service";
-import { sendNewHighlightedItemsEmail, sendNewSkusEmail, sendCartAbandonmentEmails } from "./email-campaign-service";
+import { sendNewHighlightedItemsEmail, sendNewSkusEmail, sendCartAbandonmentEmails, sendBackInStockNotifications } from "./email-campaign-service";
 import { storage } from "./storage";
 
 interface SchedulerConfig {
@@ -57,7 +57,9 @@ let emailCampaignInterval: NodeJS.Timeout | null = null;
 let weeklyZohoBackupInterval: NodeJS.Timeout | null = null;
 let dailyZohoSyncInterval: NodeJS.Timeout | null = null;
 let specialsExpirationInterval: NodeJS.Timeout | null = null;
+let backInStockInterval: NodeJS.Timeout | null = null;
 let lastZohoSync: Date | null = null;
+let lastBackInStockCheck: Date | null = null;
 let lastCustomerSync: Date | null = null;
 let lastEmbeddingsUpdate: Date | null = null;
 let lastTopSellersSync: Date | null = null;
@@ -376,6 +378,54 @@ function scheduleNextZohoSync() {
   }, interval * 60 * 1000);
 }
 
+// Back in stock notification scheduling (runs at 10 PM every night)
+function getNext10PM(): Date {
+  const now = new Date();
+  const next10PM = new Date(now);
+  next10PM.setHours(22, 0, 0, 0); // 10 PM
+  
+  // If it's already past 10 PM, schedule for tomorrow
+  if (now >= next10PM) {
+    next10PM.setDate(next10PM.getDate() + 1);
+  }
+  
+  return next10PM;
+}
+
+function getMsUntil10PM(): number {
+  const next10PM = getNext10PM();
+  return next10PM.getTime() - Date.now();
+}
+
+async function runBackInStockNotifications() {
+  console.log("[Scheduler] Starting nightly back-in-stock notification check...");
+  try {
+    const result = await sendBackInStockNotifications();
+    lastBackInStockCheck = new Date();
+    console.log(`[Scheduler] Back-in-stock notifications complete: ${result.emailsSent} emails sent, ${result.notificationsProcessed} notifications processed`);
+    return result;
+  } catch (error) {
+    console.error("[Scheduler] Back-in-stock notification error:", error);
+    throw error;
+  }
+}
+
+function scheduleNextBackInStockCheck() {
+  const msUntil10PM = getMsUntil10PM();
+  const hoursUntil = Math.round(msUntil10PM / (1000 * 60 * 60));
+  console.log(`[Scheduler] Next back-in-stock check scheduled in ${hoursUntil} hours (10 PM)`);
+  
+  backInStockInterval = setTimeout(async () => {
+    try {
+      await runBackInStockNotifications();
+    } catch (error) {
+      console.error("[Scheduler] Back-in-stock check failed, will retry tomorrow:", error);
+    } finally {
+      scheduleNextBackInStockCheck();
+    }
+  }, msUntil10PM);
+}
+
 async function runWeeklyZohoBackup() {
   console.log("[Scheduler] Starting weekly Zoho inventory backup sync (full sync)...");
   try {
@@ -511,6 +561,9 @@ export function startScheduler(newConfig?: Partial<SchedulerConfig>) {
   // Schedule email campaigns on Wednesday and Saturday at 9 AM
   scheduleNextEmailCampaign();
 
+  // Schedule back-in-stock notifications (every night at 10 PM)
+  scheduleNextBackInStockCheck();
+
   // Schedule specials expiration check (every hour)
   console.log(`[Scheduler]   Specials expiration: every 60 minutes`);
   specialsExpirationInterval = setInterval(runSpecialsExpiration, 60 * 60 * 1000);
@@ -569,6 +622,11 @@ export function stopScheduler() {
     clearTimeout(emailCampaignInterval);
     emailCampaignInterval = null;
     console.log("[Scheduler] Email campaigns stopped");
+  }
+  if (backInStockInterval) {
+    clearTimeout(backInStockInterval);
+    backInStockInterval = null;
+    console.log("[Scheduler] Back-in-stock notifications stopped");
   }
 }
 

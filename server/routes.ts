@@ -18,7 +18,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { db } from "./db";
-import { users, products, orders, productGroups } from "@shared/schema";
+import { users, products, orders, productGroups, stockNotifications } from "@shared/schema";
 import { eq, and, gt, isNull, sql } from "drizzle-orm";
 import { aiCartBuilder, aiEnhancedSearch, generateProductEmbeddings } from "./ai-service";
 import { syncProductsFromZoho, testZohoConnection, fetchZohoProductImage, fetchProductImageWithFallback, syncItemGroupsFromZoho, clearImageCache, syncAllProductImages, refreshProductImage, getImageSyncStatus } from "./zoho-service";
@@ -1268,6 +1268,160 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Bulk import error:", error);
       res.status(500).json({ message: "Failed to import items" });
+    }
+  });
+
+  // ================================================================
+  // STOCK NOTIFICATION ROUTES
+  // ================================================================
+
+  // Subscribe to stock notification for a product
+  app.post("/api/stock-notifications/:productId", requireAuth, async (req, res) => {
+    try {
+      const { productId } = req.params;
+      const userId = req.session.userId!;
+
+      // Check if product exists
+      const product = await storage.getProductInternal(productId);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Check if already subscribed
+      const [existing] = await db
+        .select()
+        .from(stockNotifications)
+        .where(and(
+          eq(stockNotifications.userId, userId),
+          eq(stockNotifications.productId, productId)
+        ))
+        .limit(1);
+
+      if (existing && !existing.notifiedAt) {
+        return res.json({ 
+          message: "Already subscribed to notifications",
+          subscribed: true
+        });
+      }
+
+      // If previously notified, reset the notification
+      if (existing && existing.notifiedAt) {
+        await db
+          .update(stockNotifications)
+          .set({ 
+            notifiedAt: null,
+            stockQuantityWhenRequested: product.stockQuantity || 0,
+            createdAt: new Date()
+          })
+          .where(eq(stockNotifications.id, existing.id));
+      } else {
+        // Create new subscription
+        await db.insert(stockNotifications).values({
+          userId,
+          productId,
+          stockQuantityWhenRequested: product.stockQuantity || 0,
+        });
+      }
+
+      console.log(`[StockNotification] User ${userId} subscribed to product ${product.sku}`);
+
+      res.json({ 
+        message: "You will be notified when this item is back in stock",
+        subscribed: true
+      });
+    } catch (error) {
+      console.error("Error subscribing to stock notification:", error);
+      res.status(500).json({ message: "Failed to subscribe to notification" });
+    }
+  });
+
+  // Unsubscribe from stock notification
+  app.delete("/api/stock-notifications/:productId", requireAuth, async (req, res) => {
+    try {
+      const { productId } = req.params;
+      const userId = req.session.userId!;
+
+      await db
+        .delete(stockNotifications)
+        .where(and(
+          eq(stockNotifications.userId, userId),
+          eq(stockNotifications.productId, productId)
+        ));
+
+      res.json({ 
+        message: "Notification subscription removed",
+        subscribed: false
+      });
+    } catch (error) {
+      console.error("Error unsubscribing from stock notification:", error);
+      res.status(500).json({ message: "Failed to unsubscribe from notification" });
+    }
+  });
+
+  // Check if user is subscribed to stock notification for a product
+  app.get("/api/stock-notifications/:productId", requireAuth, async (req, res) => {
+    try {
+      const { productId } = req.params;
+      const userId = req.session.userId!;
+
+      const [subscription] = await db
+        .select()
+        .from(stockNotifications)
+        .where(and(
+          eq(stockNotifications.userId, userId),
+          eq(stockNotifications.productId, productId),
+          isNull(stockNotifications.notifiedAt) // Only active subscriptions
+        ))
+        .limit(1);
+
+      res.json({ 
+        subscribed: !!subscription,
+        createdAt: subscription?.createdAt
+      });
+    } catch (error) {
+      console.error("Error checking stock notification:", error);
+      res.status(500).json({ message: "Failed to check notification status" });
+    }
+  });
+
+  // Get all active stock notifications for current user
+  app.get("/api/stock-notifications", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+
+      const subscriptions = await db
+        .select({
+          id: stockNotifications.id,
+          productId: stockNotifications.productId,
+          createdAt: stockNotifications.createdAt,
+          product: products
+        })
+        .from(stockNotifications)
+        .innerJoin(products, eq(stockNotifications.productId, products.id))
+        .where(and(
+          eq(stockNotifications.userId, userId),
+          isNull(stockNotifications.notifiedAt) // Only active subscriptions
+        ))
+        .orderBy(stockNotifications.createdAt);
+
+      res.json({ 
+        notifications: subscriptions.map(s => ({
+          id: s.id,
+          productId: s.productId,
+          createdAt: s.createdAt,
+          product: {
+            id: s.product.id,
+            sku: s.product.sku,
+            name: s.product.name,
+            stockQuantity: s.product.stockQuantity,
+            basePrice: s.product.basePrice,
+            imageUrl: s.product.imageUrl
+          }
+        }))
+      });
+    } catch (error) {
+      console.error("Error fetching stock notifications:", error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
     }
   });
 

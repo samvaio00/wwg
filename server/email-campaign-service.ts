@@ -9,6 +9,7 @@ import {
   emailCampaignLogs,
   emailCampaignTracking,
   EmailCampaignType,
+  stockNotifications,
   type Product
 } from "@shared/schema";
 import { eq, and, lt, gt, isNull, inArray, desc } from "drizzle-orm";
@@ -854,4 +855,260 @@ export async function generateTemplateForApproval(
   });
   
   return template;
+}
+
+// ================================================================
+// BACK IN STOCK NOTIFICATIONS
+// ================================================================
+
+interface BackInStockEmailData {
+  userId: string;
+  userEmail: string;
+  businessName: string | null;
+  products: Array<{
+    id: string;
+    name: string;
+    sku: string;
+    basePrice: string;
+    stockQuantity: number;
+  }>;
+}
+
+async function generateBackInStockEmailContent(
+  productNames: string[],
+  customerName: string
+): Promise<AIGeneratedEmail> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are an email marketing specialist for Warner Wireless Gears, a B2B wholesale supplier of cellular accessories, sunglasses, and novelty items for gas stations and convenience stores. Generate engaging, professional email content.
+
+Your response must be valid JSON with this exact structure:
+{
+  "subject": "Email subject line (max 60 chars, include urgency)",
+  "headline": "Main headline for the email body (max 80 chars)",
+  "introduction": "Brief paragraph (2-3 sentences) telling them their requested items are back in stock",
+  "callToAction": "Action-oriented button text (max 30 chars)"
+}
+
+Keep the tone professional but friendly. Emphasize that these are items they specifically requested to be notified about.`
+        },
+        {
+          role: "user",
+          content: `Generate a back-in-stock notification email for ${customerName}. They requested to be notified when these products returned to stock: ${productNames.join(", ")}.`
+        }
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (content) {
+      return JSON.parse(content) as AIGeneratedEmail;
+    }
+    throw new Error("No response from AI");
+  } catch (error) {
+    console.error("[Back In Stock] AI generation failed:", error);
+    // Fallback content
+    return {
+      subject: "Your Requested Items Are Back In Stock!",
+      headline: "Good News - Your Items Are Available Again",
+      introduction: `Great news, ${customerName}! The items you've been waiting for are now back in stock at Warner Wireless Gears. We know you've been watching these products, so we wanted to let you know right away before they sell out again.`,
+      callToAction: "Shop Now"
+    };
+  }
+}
+
+export async function sendBackInStockNotifications(): Promise<{ emailsSent: number; notificationsProcessed: number }> {
+  console.log("[Back In Stock] Starting nightly back-in-stock notification check...");
+  
+  let emailsSent = 0;
+  let notificationsProcessed = 0;
+
+  try {
+    // Find all pending notifications (not yet notified) where product is now in stock
+    const pendingNotifications = await db
+      .select({
+        notificationId: stockNotifications.id,
+        userId: stockNotifications.userId,
+        productId: stockNotifications.productId,
+        stockWhenRequested: stockNotifications.stockQuantityWhenRequested,
+        userEmail: users.email,
+        businessName: users.businessName,
+        emailOptIn: users.emailOptIn,
+        productName: products.name,
+        productSku: products.sku,
+        productBasePrice: products.basePrice,
+        productStockQuantity: products.stockQuantity,
+        productIsActive: products.isActive,
+        productIsOnline: products.isOnline,
+      })
+      .from(stockNotifications)
+      .innerJoin(users, eq(stockNotifications.userId, users.id))
+      .innerJoin(products, eq(stockNotifications.productId, products.id))
+      .where(
+        and(
+          isNull(stockNotifications.notifiedAt), // Not yet notified
+          gt(products.stockQuantity, 0), // Product is back in stock
+          eq(products.isActive, true), // Product is active
+          eq(products.isOnline, true), // Product is visible on storefront
+          eq(users.emailOptIn, true) // User opted in to emails
+        )
+      );
+
+    if (pendingNotifications.length === 0) {
+      console.log("[Back In Stock] No pending notifications for restocked items");
+      return { emailsSent: 0, notificationsProcessed: 0 };
+    }
+
+    console.log(`[Back In Stock] Found ${pendingNotifications.length} notifications to process`);
+
+    // Group notifications by user
+    const notificationsByUser = new Map<string, BackInStockEmailData>();
+    const notificationIds: string[] = [];
+
+    for (const notification of pendingNotifications) {
+      notificationIds.push(notification.notificationId);
+      
+      if (!notificationsByUser.has(notification.userId)) {
+        notificationsByUser.set(notification.userId, {
+          userId: notification.userId,
+          userEmail: notification.userEmail,
+          businessName: notification.businessName,
+          products: [],
+        });
+      }
+      
+      notificationsByUser.get(notification.userId)!.products.push({
+        id: notification.productId,
+        name: notification.productName,
+        sku: notification.productSku,
+        basePrice: notification.productBasePrice,
+        stockQuantity: notification.productStockQuantity || 0,
+      });
+    }
+
+    console.log(`[Back In Stock] Sending emails to ${notificationsByUser.size} customers`);
+    const baseUrl = getBaseUrl();
+
+    // Send consolidated email to each user
+    const userEntries = Array.from(notificationsByUser.entries());
+    for (const [userId, data] of userEntries) {
+      try {
+        const customerName = data.businessName || "Valued Customer";
+        const productNames = data.products.map((p: { id: string; name: string; sku: string; basePrice: string; stockQuantity: number }) => p.name);
+        
+        // Generate AI email content
+        const emailContent = await generateBackInStockEmailContent(productNames, customerName);
+
+        // Get unsubscribe token
+        const unsubscribeToken = await getOrCreateUnsubscribeToken(userId);
+        const unsubscribeUrl = `${baseUrl}/api/email/unsubscribe/${unsubscribeToken}`;
+
+        // Build product list HTML
+        const productListHtml = data.products.map((p: { id: string; name: string; sku: string; basePrice: string; stockQuantity: number }) => `
+          <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #eee;">
+              <strong>${p.name}</strong><br>
+              <span style="color: #666; font-size: 12px;">SKU: ${p.sku}</span>
+            </td>
+            <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">
+              <strong>$${p.basePrice}</strong><br>
+              <span style="color: #22c55e; font-size: 12px;">${p.stockQuantity} in stock</span>
+            </td>
+          </tr>
+        `).join("");
+
+        const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .header { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { padding: 30px; background: #ffffff; }
+    .product-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .cta-button { display: inline-block; background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+    .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; background: #f9f9f9; border-radius: 0 0 8px 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 style="margin: 0; font-size: 24px;">${emailContent.headline}</h1>
+    </div>
+    <div class="content">
+      <p>Hi ${customerName},</p>
+      <p>${emailContent.introduction}</p>
+      
+      <h3 style="color: #2563eb;">Your Requested Items:</h3>
+      <table class="product-table">
+        ${productListHtml}
+      </table>
+      
+      <div style="text-align: center;">
+        <a href="${baseUrl}" class="cta-button">${emailContent.callToAction}</a>
+      </div>
+      
+      <p style="color: #666; font-size: 14px; margin-top: 20px;">
+        Don't wait too long - popular items can sell out quickly!
+      </p>
+    </div>
+    <div class="footer">
+      <p>Warner Wireless Gears - Your Wholesale Partner</p>
+      <p><a href="${unsubscribeUrl}" style="color: #666;">Unsubscribe from promotional emails</a></p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+        // Send the email
+        const result = await sendEmail(data.userEmail, emailContent.subject, htmlContent);
+        
+        if (result.success) {
+          emailsSent++;
+          console.log(`[Back In Stock] Sent email to ${data.userEmail} for ${data.products.length} products`);
+          
+          // Log the campaign
+          await db.insert(emailCampaignLogs).values({
+            campaignType: "back_in_stock",
+            userId,
+            subject: emailContent.subject,
+            referenceData: { productIds: data.products.map((p: { id: string; name: string; sku: string; basePrice: string; stockQuantity: number }) => p.id) },
+            success: true,
+          });
+        } else {
+          console.error(`[Back In Stock] Failed to send email to ${data.userEmail}:`, result.error);
+          await db.insert(emailCampaignLogs).values({
+            campaignType: "back_in_stock",
+            userId,
+            subject: emailContent.subject,
+            success: false,
+            errorMessage: result.error,
+          });
+        }
+      } catch (error) {
+        console.error(`[Back In Stock] Error sending email to user ${userId}:`, error);
+      }
+    }
+
+    // Mark all processed notifications as notified
+    if (notificationIds.length > 0) {
+      await db
+        .update(stockNotifications)
+        .set({ notifiedAt: new Date() })
+        .where(inArray(stockNotifications.id, notificationIds));
+      notificationsProcessed = notificationIds.length;
+      console.log(`[Back In Stock] Marked ${notificationIds.length} notifications as processed`);
+    }
+
+    console.log(`[Back In Stock] Complete: ${emailsSent} emails sent, ${notificationsProcessed} notifications processed`);
+    return { emailsSent, notificationsProcessed };
+  } catch (error) {
+    console.error("[Back In Stock] Error in notification job:", error);
+    return { emailsSent, notificationsProcessed };
+  }
 }

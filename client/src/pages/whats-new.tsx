@@ -77,8 +77,8 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
 
   return (
     <Card 
-      className={`overflow-hidden tile-hover ${isGroupOutOfStock ? "opacity-60 cursor-not-allowed" : isOutOfStock ? "opacity-60 cursor-pointer" : "cursor-pointer hover-elevate"}`} 
-      onClick={() => !isGroupOutOfStock && onProductClick(product)}
+      className={`overflow-hidden tile-hover ${isOutOfStock ? "opacity-60 cursor-pointer" : "cursor-pointer hover-elevate"}`} 
+      onClick={() => onProductClick(product)}
       data-testid={`card-product-${product.id}`}
     >
       <div className="h-32 relative bg-muted overflow-hidden">
@@ -122,18 +122,17 @@ function ProductCard({ product, onAddToCart, isAddingToCart, onProductClick }: {
           <Button 
             className="w-full h-7"
             size="sm"
-            variant={isGroupOutOfStock ? "destructive" : "outline"}
-            disabled={isGroupOutOfStock}
+            variant="outline"
             onClick={(e) => {
               e.stopPropagation();
-              if (!isGroupOutOfStock) onProductClick(product);
+              onProductClick(product);
             }}
             data-testid={`button-view-variants-${product.id}`}
           >
             {isGroupOutOfStock ? (
               <>
-                <Package className="h-3 w-3 mr-1" />
-                Out of Stock
+                <Eye className="h-3 w-3 mr-1" />
+                View Options
               </>
             ) : (
               <>

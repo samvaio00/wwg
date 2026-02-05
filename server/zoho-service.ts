@@ -1157,23 +1157,42 @@ function ensureImagesDirExists(): void {
   }
 }
 
-// Get local image path for a Zoho item
-function getLocalImagePath(zohoItemId: string): string {
-  return path.join(PRODUCT_IMAGES_DIR, `${zohoItemId}.jpg`);
+// Supported image extensions and their MIME types
+const IMAGE_EXTENSIONS: { ext: string; contentType: string }[] = [
+  { ext: ".jpg", contentType: "image/jpeg" },
+  { ext: ".png", contentType: "image/png" },
+  { ext: ".gif", contentType: "image/gif" },
+  { ext: ".webp", contentType: "image/webp" },
+];
+
+// Get local image path for a Zoho item (for saving - defaults to .jpg)
+function getLocalImagePath(zohoItemId: string, ext: string = ".jpg"): string {
+  return path.join(PRODUCT_IMAGES_DIR, `${zohoItemId}${ext}`);
 }
 
-// Check if local image exists
+// Find local image with any supported extension
+function findLocalImagePath(zohoItemId: string): { path: string; contentType: string } | null {
+  for (const { ext, contentType } of IMAGE_EXTENSIONS) {
+    const imagePath = path.join(PRODUCT_IMAGES_DIR, `${zohoItemId}${ext}`);
+    if (fs.existsSync(imagePath)) {
+      return { path: imagePath, contentType };
+    }
+  }
+  return null;
+}
+
+// Check if local image exists (any supported extension)
 function hasLocalImage(zohoItemId: string): boolean {
-  return fs.existsSync(getLocalImagePath(zohoItemId));
+  return findLocalImagePath(zohoItemId) !== null;
 }
 
-// Get local image from disk
+// Get local image from disk (checks all supported extensions)
 function getLocalImage(zohoItemId: string): { data: Buffer; contentType: string } | null {
-  const imagePath = getLocalImagePath(zohoItemId);
-  if (fs.existsSync(imagePath)) {
+  const found = findLocalImagePath(zohoItemId);
+  if (found) {
     try {
-      const data = fs.readFileSync(imagePath);
-      return { data, contentType: "image/jpeg" };
+      const data = fs.readFileSync(found.path);
+      return { data, contentType: found.contentType };
     } catch (err) {
       console.error(`[Image Storage] Failed to read local image for ${zohoItemId}:`, err);
       return null;
@@ -1194,14 +1213,17 @@ function saveLocalImage(zohoItemId: string, data: Buffer): void {
   }
 }
 
-// Delete local image (for refresh)
+// Delete local image (for refresh) - removes all supported extensions
 function deleteLocalImage(zohoItemId: string): void {
-  const imagePath = getLocalImagePath(zohoItemId);
-  if (fs.existsSync(imagePath)) {
-    try {
-      fs.unlinkSync(imagePath);
-    } catch (err) {
-      console.error(`[Image Storage] Failed to delete image for ${zohoItemId}:`, err);
+  for (const { ext } of IMAGE_EXTENSIONS) {
+    const imagePath = path.join(PRODUCT_IMAGES_DIR, `${zohoItemId}${ext}`);
+    if (fs.existsSync(imagePath)) {
+      try {
+        fs.unlinkSync(imagePath);
+        console.log(`[Image Storage] Deleted image for ${zohoItemId}${ext}`);
+      } catch (err) {
+        console.error(`[Image Storage] Failed to delete image for ${zohoItemId}:`, err);
+      }
     }
   }
 }
@@ -1318,16 +1340,25 @@ export async function fetchProductImageWithFallback(
   zohoItemId: string, 
   zohoGroupId: string | null
 ): Promise<{ data: Buffer; contentType: string } | null> {
-  // Check for local image first
+  // Check for local item image first (supports all extensions)
   const localImage = getLocalImage(zohoItemId);
   if (localImage) {
     return localImage;
   }
   
-  // Try item-level image first (each variant can have its own image)
+  // Check for locally uploaded group image (stored as group-{groupId}.jpg)
+  if (zohoGroupId) {
+    const localGroupImage = getLocalImage(`group-${zohoGroupId}`);
+    if (localGroupImage) {
+      console.log(`[Image Storage] Using local group image for item ${zohoItemId} from group ${zohoGroupId}`);
+      return localGroupImage;
+    }
+  }
+  
+  // Try item-level image from Zoho (each variant can have its own image)
   let imageData = await fetchZohoItemImageRaw(zohoItemId);
   
-  // If no item image and product is in a group, try group image
+  // If no item image and product is in a group, try group image from Zoho
   if (!imageData && zohoGroupId) {
     imageData = await fetchZohoGroupImageRaw(zohoGroupId);
     if (imageData) {

@@ -2348,22 +2348,9 @@ export async function registerRoutes(
       
       const { force } = req.body || {};
       
-      // If force=true, clear the uploaded flag first so refresh will proceed
-      if (force === true) {
-        await db.update(products)
-          .set({ imageSource: null })
-          .where(eq(products.id, req.params.id));
-        
-        // Also clear group-level imageSource if this product is in a group
-        if (product.zohoGroupId) {
-          await db.update(productGroups)
-            .set({ imageSource: null })
-            .where(eq(productGroups.zohoGroupId, product.zohoGroupId));
-        }
-        console.log(`[Admin] Force refresh requested for product ${product.sku} - cleared uploaded flag`);
-      }
-      
-      const success = await refreshProductImage(product.zohoItemId, product.zohoGroupId);
+      // Pass force parameter to refreshProductImage
+      // force=true will delete existing image and re-fetch from Zoho
+      const success = await refreshProductImage(product.zohoItemId, product.zohoGroupId, force === true);
       res.json({
         success,
         message: success ? "Image refreshed successfully" : "No image available for this product",

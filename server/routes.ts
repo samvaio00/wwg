@@ -2605,8 +2605,8 @@ export async function registerRoutes(
         return res.status(400).json({ success: false, message: "isOnline must be a boolean" });
       }
       
-      // Fetch product to check Zoho active status
-      const product = await storage.getProductById(productId);
+      // Fetch product to check Zoho active status (use getProductInternal to bypass online filter)
+      const product = await storage.getProductInternal(productId);
       if (!product) {
         return res.status(404).json({ success: false, message: "Product not found" });
       }

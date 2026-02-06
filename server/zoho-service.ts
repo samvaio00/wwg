@@ -1355,6 +1355,15 @@ export async function fetchProductImageWithFallback(
     }
   }
   
+  // Check if product has a manually uploaded image in DB
+  const isUploaded = await isImageManuallyUploaded(zohoItemId, zohoGroupId);
+  
+  if (isUploaded) {
+    // File was uploaded but is now missing from disk - warn and try Zoho as temporary fallback
+    // but preserve the 'uploaded' imageSource so admin knows to re-upload
+    console.warn(`[Image Storage] Product ${zohoItemId} has imageSource=uploaded but file is missing from disk - trying Zoho as temporary fallback`);
+  }
+  
   // Try item-level image from Zoho (each variant can have its own image)
   let imageData = await fetchZohoItemImageRaw(zohoItemId);
   
@@ -1369,17 +1378,19 @@ export async function fetchProductImageWithFallback(
   if (imageData) {
     saveLocalImage(zohoItemId, imageData);
     
-    // Mark the product's image source as 'zoho' (if not already 'uploaded')
-    try {
-      await db.update(products)
-        .set({ imageSource: 'zoho' })
-        .where(and(
-          eq(products.zohoItemId, zohoItemId),
-          sql`${products.imageSource} IS NULL OR ${products.imageSource} != 'uploaded'`
-        ));
-    } catch (err) {
-      // Silent fail - image is still saved locally
-      console.error(`[Image Storage] Failed to update imageSource for ${zohoItemId}:`, err);
+    // Only mark imageSource as 'zoho' if the product DOESN'T have an uploaded image
+    // This preserves the 'uploaded' flag so admin knows to re-upload
+    if (!isUploaded) {
+      try {
+        await db.update(products)
+          .set({ imageSource: 'zoho' })
+          .where(and(
+            eq(products.zohoItemId, zohoItemId),
+            sql`${products.imageSource} IS NULL OR ${products.imageSource} != 'uploaded'`
+          ));
+      } catch (err) {
+        console.error(`[Image Storage] Failed to update imageSource for ${zohoItemId}:`, err);
+      }
     }
     
     return { data: imageData, contentType: "image/jpeg" };

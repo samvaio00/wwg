@@ -173,7 +173,7 @@ export async function handleItemWebhook(
       ? createCategorySlug(payload.category_name)
       : "other-items";
 
-    const productData = {
+    const productData: Record<string, any> = {
       sku: payload.sku || `ZOHO-${payload.item_id}`,
       name: payload.name || "Unknown Product",
       description: payload.description || null,
@@ -183,7 +183,6 @@ export async function handleItemWebhook(
       stockQuantity: showInOnlineStore ? Math.floor(payload.stock_on_hand || 0) : 0,
       isActive: true,
       isOnline: showInOnlineStore,
-      imageUrl: payload.image_url || null,
       zohoItemId: payload.item_id,
       zohoGroupId: payload.group_id || null,
       zohoGroupName: payload.group_name || null,
@@ -192,16 +191,31 @@ export async function handleItemWebhook(
     };
 
     if (existingProduct.length > 0) {
+      const existing = existingProduct[0];
+      
+      // Preserve imageUrl and imageSource for products with manually uploaded images
+      // Only update imageUrl if the webhook provides one AND the product doesn't have an uploaded image
+      if (existing.imageSource === 'uploaded') {
+        // Keep existing imageUrl and imageSource - don't overwrite manually uploaded images
+        console.log(`[Zoho Webhook] Preserving uploaded image for ${existing.sku} (imageSource: uploaded)`);
+      } else if (payload.image_url) {
+        // Webhook provides an image URL and product doesn't have an uploaded image - update it
+        productData.imageUrl = payload.image_url;
+      }
+      // If no image_url in payload and not uploaded, don't touch imageUrl at all
+      
       await db
         .update(products)
         .set(productData)
-        .where(eq(products.id, existingProduct[0].id));
+        .where(eq(products.id, existing.id));
 
       console.log(`[Zoho Webhook] Product updated: ${productData.sku}`);
       recordWebhookEvent("items", action, true, `Updated ${productData.sku}`);
       
-      // Queue image download in background (non-blocking)
-      queueImageDownload(payload.item_id, payload.group_id || null, productData.name);
+      // Only queue image download if the product doesn't have a manually uploaded image
+      if (existing.imageSource !== 'uploaded') {
+        queueImageDownload(payload.item_id, payload.group_id || null, productData.name);
+      }
       
       return {
         success: true,

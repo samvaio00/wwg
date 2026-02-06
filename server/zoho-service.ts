@@ -1507,25 +1507,32 @@ export async function isImageManuallyUploaded(zohoItemId: string, zohoGroupId?: 
 }
 
 // Function to refresh a single product image from Zoho
-// Only fetches from Zoho if no local image exists - existing images are permanent
+// Website-uploaded images ALWAYS take precedence - force refresh only applies to Zoho-sourced images
 export async function refreshProductImage(zohoItemId: string, zohoGroupId?: string | null, forceRefresh = false): Promise<boolean> {
+  // Check if product has a manually uploaded image - these are NEVER overwritten
+  const isUploaded = await isImageManuallyUploaded(zohoItemId, zohoGroupId || undefined);
+  if (isUploaded) {
+    console.log(`[Image Refresh] Skipping refresh for ${zohoItemId} - has website-uploaded image (always takes precedence)`);
+    return true;
+  }
+  
   // Check if local image already exists (for item or group)
   const hasItemImage = hasLocalImage(zohoItemId);
   const hasGroupImage = zohoGroupId ? hasLocalImage(`group-${zohoGroupId}`) : false;
   
   if ((hasItemImage || hasGroupImage) && !forceRefresh) {
     console.log(`[Image Refresh] Skipping refresh for ${zohoItemId} - local image already exists`);
-    return true; // Return true since the product has an image
+    return true;
   }
   
-  // Only if force=true, delete existing image to allow re-fetch
+  // Only if force=true and NOT uploaded, delete existing image to allow re-fetch from Zoho
   if (forceRefresh) {
     deleteLocalImage(zohoItemId);
     noImageItems.delete(zohoItemId);
     if (zohoGroupId) {
       noImageGroups.delete(zohoGroupId);
     }
-    console.log(`[Image Refresh] Force refresh - deleted existing image for ${zohoItemId}`);
+    console.log(`[Image Refresh] Force refresh from Zoho - deleted existing image for ${zohoItemId}`);
   }
   
   // Fetch image from Zoho (only runs if no local image or force=true)

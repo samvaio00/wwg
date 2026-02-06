@@ -2431,12 +2431,18 @@ export async function registerRoutes(
       
       const { force } = req.body || {};
       
-      // Pass force parameter to refreshProductImage
-      // force=true will delete existing image and re-fetch from Zoho
+      // Website-uploaded images always take precedence and are never overwritten by Zoho refresh
+      if (product.imageSource === 'uploaded') {
+        return res.json({
+          success: true,
+          message: "This product has a website-uploaded image which takes precedence over Zoho. To change it, upload a new image directly.",
+        });
+      }
+      
       const success = await refreshProductImage(product.zohoItemId, product.zohoGroupId, force === true);
       res.json({
         success,
-        message: success ? "Image refreshed successfully" : "No image available for this product",
+        message: success ? "Image refreshed from Zoho successfully" : "No image available from Zoho for this product",
       });
     } catch (error) {
       console.error("Refresh image error:", error);
